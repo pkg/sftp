@@ -1,8 +1,8 @@
 package sftp
 
 import (
-	//	"reflect"
 	"fmt"
+	"reflect"
 )
 
 func marshalUint32(b []byte, v uint32) []byte {
@@ -26,6 +26,14 @@ func marshal(b []byte, v interface{}) []byte {
 	case string:
 		return marshalString(b, v)
 	default:
-		panic(fmt.Sprintf("marshal(%#v): cannot handle type %T", v, v))
+		switch d := reflect.ValueOf(v); d.Kind() {
+		case reflect.Struct:
+			for i, n := 0, d.NumField(); i < n; i++ {
+				b = append(marshal(b, d.Field(i).Interface()))
+			}
+			return b
+		default:
+			panic(fmt.Sprintf("marshal(%#v): cannot handle type %T", v, v))
+		}
 	}
 }
