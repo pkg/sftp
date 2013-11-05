@@ -329,7 +329,8 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 	var attrs []os.FileInfo
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for {
+	var done = false
+	for !done {
 		type packet struct {
 			Type   byte
 			Id     uint32
@@ -355,9 +356,11 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 			}
 			count, data := unmarshalUint32(data)
 			for i := uint32(0); i < count; i++ {
+				fmt.Println(i, count)
 				filename, data := unmarshalString(data)
-				_, data = unmarshalString(data) // discard longname
+				longname, data := unmarshalString(data) // discard longname
 				attr, data := unmarshalAttrs(data)
+				fmt.Println(filename, longname)
 				attr.name = filename
 				attrs = append(attrs, attr)
 			}
@@ -374,13 +377,13 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 				msg:  msg,
 				lang: lang,
 			}
-			break
+			done = true
 		default:
 			return nil, unimplementedPacketErr(typ)
 		}
 	}
 
-	fmt.Printf("%v\n", attrs)
+	fmt.Printf("%v %v\n", attrs, err)
 	// TODO(dfc) closedir
 	return attrs, err
 }
