@@ -149,7 +149,7 @@ type packet struct {
 }
 
 // New creates a new sftp client on conn.
-func NewClient(conn *ssh.ClientConn) (*ClientConn, error) {
+func NewClient(conn *ssh.ClientConn) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func NewClient(conn *ssh.ClientConn) (*ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	sftp := &ClientConn{
+	sftp := &Client{
 		w: pw,
 		r: pr,
 	}
@@ -175,16 +175,16 @@ func NewClient(conn *ssh.ClientConn) (*ClientConn, error) {
 	return sftp, sftp.recvVersion()
 }
 
-type ClientConn struct {
+type Client struct {
 	w      io.WriteCloser
 	r      io.Reader
 	mu     sync.Mutex // locks mu and seralises commands to the server
 	nextid uint32
 }
 
-func (c *ClientConn) Close() error { return c.w.Close() }
+func (c *Client) Close() error { return c.w.Close() }
 
-func (c *ClientConn) sendInit() error {
+func (c *Client) sendInit() error {
 	type packet struct {
 		Type       byte
 		Version    uint32
@@ -200,7 +200,7 @@ func (c *ClientConn) sendInit() error {
 
 // returns the current value of c.nextid and increments it
 // callers is expected to hold c.mu
-func (c *ClientConn) nextId() uint32 {
+func (c *Client) nextId() uint32 {
 	v := c.nextid
 	c.nextid++
 	return v
@@ -226,7 +226,7 @@ func (u *unexpectedIdErr) Error() string {
 	return fmt.Sprintf("sftp: unexpected id: want %v, got %v", u.want, u.got)
 }
 
-func (c *ClientConn) recvVersion() error {
+func (c *Client) recvVersion() error {
 	typ, _, err := recvPacket(c.r)
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func (c *ClientConn) recvVersion() error {
 }
 
 type Walker struct {
-	c       *ClientConn
+	c       *Client
 	cur     item
 	stack   []item
 	descend bool
@@ -285,7 +285,7 @@ type StatusError struct {
 func (s *StatusError) Error() string { return fmt.Sprintf("sftp: %q (%v)", s.msg, fx(s.Code)) }
 
 // Walk returns a new Walker rooted at root.
-func (c *ClientConn) Walk(root string) *Walker {
+func (c *Client) Walk(root string) *Walker {
 	info, err := c.Lstat(root)
 	return &Walker{c: c, stack: []item{{root, info, err}}}
 }
@@ -320,7 +320,7 @@ func (w *Walker) Step() bool {
 	return true
 }
 
-func (c *ClientConn) readDir(path string) ([]os.FileInfo, error) {
+func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 	handle, err := c.opendir(path)
 	if err != nil {
 		return nil, err
@@ -384,7 +384,7 @@ func (c *ClientConn) readDir(path string) ([]os.FileInfo, error) {
 	// TODO(dfc) closedir
 	return attrs, err
 }
-func (c *ClientConn) opendir(path string) (string, error) {
+func (c *Client) opendir(path string) (string, error) {
 	type packet struct {
 		Type byte
 		Id   uint32
@@ -430,7 +430,7 @@ func (c *ClientConn) opendir(path string) (string, error) {
 	}
 }
 
-func (c *ClientConn) Lstat(path string) (os.FileInfo, error) {
+func (c *Client) Lstat(path string) (os.FileInfo, error) {
 	type packet struct {
 		Type byte
 		Id   uint32
