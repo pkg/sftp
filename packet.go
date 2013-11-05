@@ -37,3 +37,14 @@ func marshal(b []byte, v interface{}) []byte {
 		}
 	}
 }
+
+func unmarshalUint32(b []byte) (uint32, []byte) {
+	v := uint32(b[3]) | uint32(b[2])<<8 | uint32(b[1])<<16 | uint32(b[0])<<24
+	return v, b[4:]
+}
+
+func unmarshalUint64(b []byte) (uint64, []byte) {
+	h, b := unmarshalUint32(b)
+	l, b := unmarshalUint32(b)
+	return uint64(h)<<32 | uint64(l), b
+}

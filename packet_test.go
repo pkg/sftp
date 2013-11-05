@@ -72,6 +72,14 @@ var marshalTests = []struct {
 		V uint32
 		S string
 	}{500, "blah"}, []byte{0x0, 0x0, 0x1, 0xf4, 0x0, 0x0, 0x0, 0x4, 0x62, 0x6c, 0x61, 0x68}},
+	{struct {
+		Q struct{ V uint64 }
+		S string
+		T struct {
+			V  uint32
+			V2 uint32
+		}
+	}{}, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}},
 }
 
 func TestMarshal(t *testing.T) {
@@ -79,6 +87,44 @@ func TestMarshal(t *testing.T) {
 		got := marshal(nil, tt.v)
 		if !bytes.Equal(tt.want, got) {
 			t.Errorf("marshal(%v): want %#v, got %#v", tt.v, tt.want, got)
+		}
+	}
+}
+
+var unmarshalUint32Tests = []struct {
+	b    []byte
+	want uint32
+	rest []byte
+}{
+	{[]byte{0, 0, 0, 0}, 0, nil},
+	{[]byte{0, 0, 1, 0}, 256, nil},
+	{[]byte{255, 0, 0, 255}, 4278190335, nil},
+}
+
+func TestUnmarshalUint32(t *testing.T) {
+	for _, tt := range unmarshalUint32Tests {
+		got, rest := unmarshalUint32(tt.b)
+		if got != tt.want || !bytes.Equal(rest, tt.rest) {
+			t.Errorf("unmarshalUint32(%v): want %v, %#v, got %v, %#v", tt.b, tt.want, tt.rest, got, rest)
+		}
+	}
+}
+
+var unmarshalUint64Tests = []struct {
+	b    []byte
+	want uint64
+	rest []byte
+}{
+	{[]byte{0, 0, 0, 0, 0, 0, 0, 0}, 0, nil},
+	{[]byte{0, 0, 0, 0, 0, 0, 1, 0}, 256, nil},
+	{[]byte{255, 0, 0, 0, 0, 0, 0, 255}, 18374686479671623935, nil},
+}
+
+func TestUnmarshalUint64(t *testing.T) {
+	for _, tt := range unmarshalUint64Tests {
+		got, rest := unmarshalUint64(tt.b)
+		if got != tt.want || !bytes.Equal(rest, tt.rest) {
+			t.Errorf("unmarshalUint64(%v): want %v, %#v, got %v, %#v", tt.b, tt.want, tt.rest, got, rest)
 		}
 	}
 }
