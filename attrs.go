@@ -4,7 +4,6 @@ package sftp
 // see http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-5
 
 import (
-	"fmt"
 	"os"
 	"syscall"
 	"time"
@@ -78,7 +77,6 @@ func unmarshalAttrs(b []byte) (*attr, []byte) {
 
 // toFileMode converts sftp filemode bits to the os.FileMode specification
 func toFileMode(mode uint32) os.FileMode {
-	fmt.Println("toFileMode", mode)
 	var fm = os.FileMode(mode & 0777)
 	switch mode & syscall.S_IFMT {
 	case syscall.S_IFBLK:

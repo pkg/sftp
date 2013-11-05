@@ -325,6 +325,7 @@ func (c *ClientConn) readDir(path string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("opendir: handle %q\n", handle)
 	var attrs []os.FileInfo
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -355,7 +356,6 @@ func (c *ClientConn) readDir(path string) ([]os.FileInfo, error) {
 			count, data := unmarshalUint32(data)
 			for i := uint32(0); i < count; i++ {
 				filename, data := unmarshalString(data)
-				println(filename)
 				_, data = unmarshalString(data) // discard longname
 				attr, data := unmarshalAttrs(data)
 				attr.name = filename
@@ -380,6 +380,7 @@ func (c *ClientConn) readDir(path string) ([]os.FileInfo, error) {
 		}
 	}
 
+	fmt.Printf("%v\n", attrs)
 	// TODO(dfc) closedir
 	return attrs, err
 }
@@ -456,6 +457,7 @@ func (c *ClientConn) Lstat(path string) (os.FileInfo, error) {
 			return nil, &unexpectedIdErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
+		attr.name = path
 		return attr, nil
 	case SSH_FXP_STATUS:
 		sid, data := unmarshalUint32(data)
