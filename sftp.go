@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -177,7 +178,7 @@ func NewClient(conn *ssh.ClientConn) (*ClientConn, error) {
 type ClientConn struct {
 	w      io.WriteCloser
 	r      io.Reader
-	mu     sync.Mutex
+	mu     sync.Mutex // locks mu and seralises commands to the server
 	nextid uint32
 }
 
@@ -243,11 +244,37 @@ type Walker struct {
 	descend bool
 }
 
+// Path returns the path to the most recent file or directory
+// visited by a call to Step. It contains the argument to Walk
+// as a prefix; that is, if Walk is called with "dir", which is
+// a directory containing the file "a", Path will return "dir/a".
+func (w *Walker) Path() string {
+	return w.cur.path
+}
+
+// Stat returns info for the most recent file or directory
+// visited by a call to Step.
+func (w *Walker) Stat() os.FileInfo {
+	return w.cur.info
+}
+
+// Err returns the error, if any, for the most recent attempt
+// by Step to visit a file or directory. If a directory has
+// an error, w will not descend into that directory.
+func (w *Walker) Err() error {
+	return w.cur.err
+}
+
+// SkipDir causes the currently visited directory to be skipped.
+// If w is not on a directory, SkipDir has no effect.
+func (w *Walker) SkipDir() {
+	w.descend = false
+}
+
 type item struct {
-	path   string
-	info   os.FileInfo
-	handle string
-	err    error
+	path string
+	info os.FileInfo
+	err  error
 }
 
 type StatusError struct {
@@ -258,7 +285,105 @@ type StatusError struct {
 func (s *StatusError) Error() string { return fmt.Sprintf("sftp: %q (%v)", s.msg, fx(s.Code)) }
 
 // Walk returns a new Walker rooted at root.
-func (c *ClientConn) Walk(root string) (*Walker, error) {
+func (c *ClientConn) Walk(root string) *Walker {
+	info, err := c.Lstat(root)
+	return &Walker{c: c, stack: []item{{root, info, err}}}
+}
+
+// Step advances the Walker to the next file or directory,
+// which will then be available through the Path, Stat,
+// and Err methods.
+// It returns false when the walk stops at the end of the tree.
+func (w *Walker) Step() bool {
+	fmt.Println("Step:", w.cur.err, len(w.stack))
+	if w.descend && w.cur.err == nil && w.cur.info.IsDir() {
+		list, err := w.c.readDir(w.cur.path)
+		fmt.Println("Step readDir", list, err)
+		if err != nil {
+			w.cur.err = err
+			w.stack = append(w.stack, w.cur)
+		} else {
+			for i := len(list) - 1; i >= 0; i-- {
+				path := filepath.Join(w.cur.path, list[i].Name())
+				w.stack = append(w.stack, item{path, list[i], nil})
+			}
+		}
+	}
+
+	if len(w.stack) == 0 {
+		return false
+	}
+	i := len(w.stack) - 1
+	w.cur = w.stack[i]
+	w.stack = w.stack[:i]
+	w.descend = true
+	return true
+}
+
+func (c *ClientConn) readDir(path string) ([]os.FileInfo, error) {
+	handle, err := c.opendir(path)
+	if err != nil {
+		return nil, err
+	}
+	var attrs []os.FileInfo
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for {
+		type packet struct {
+			Type   byte
+			Id     uint32
+			Handle string
+		}
+		id := c.nextId()
+		if err := sendPacket(c.w, packet{
+			Type:   SSH_FXP_READDIR,
+			Id:     id,
+			Handle: handle,
+		}); err != nil {
+			return nil, err
+		}
+		typ, data, err := recvPacket(c.r)
+		if err != nil {
+			return nil, err
+		}
+		switch typ {
+		case SSH_FXP_NAME:
+			sid, data := unmarshalUint32(data)
+			if sid != id {
+				return nil, &unexpectedIdErr{id, sid}
+			}
+			count, data := unmarshalUint32(data)
+			for i := uint32(0); i < count; i++ {
+				filename, data := unmarshalString(data)
+				println(filename)
+				_, data = unmarshalString(data) // discard longname
+				attr, data := unmarshalAttrs(data)
+				attr.name = filename
+				attrs = append(attrs, attr)
+			}
+		case SSH_FXP_STATUS:
+			sid, data := unmarshalUint32(data)
+			if sid != id {
+				return nil, &unexpectedIdErr{id, sid}
+			}
+			code, data := unmarshalUint32(data)
+			msg, data := unmarshalString(data)
+			lang, _ := unmarshalString(data)
+			err = &StatusError{
+				Code: code,
+				msg:  msg,
+				lang: lang,
+			}
+			break
+		default:
+			return nil, unimplementedPacketErr(typ)
+		}
+	}
+
+	// TODO(dfc) closedir
+	return attrs, err
+}
+func (c *ClientConn) opendir(path string) (string, error) {
 	type packet struct {
 		Type byte
 		Id   uint32
@@ -270,41 +395,37 @@ func (c *ClientConn) Walk(root string) (*Walker, error) {
 	if err := sendPacket(c.w, packet{
 		Type: SSH_FXP_OPENDIR,
 		Id:   id,
-		Path: root,
+		Path: path,
 	}); err != nil {
-		return nil, err
+		return "", err
 	}
 	typ, data, err := recvPacket(c.r)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	switch typ {
 	case SSH_FXP_HANDLE:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
-			return nil, &unexpectedIdErr{id, sid}
+			return "", &unexpectedIdErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
-		return &Walker{
-			c:       c,
-			stack:   []item{{path: root, handle: handle}},
-			descend: false,
-		}, nil
+		return handle, nil
 	case SSH_FXP_STATUS:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
-			return nil, &unexpectedIdErr{id, sid}
+			return "", &unexpectedIdErr{id, sid}
 		}
 		code, data := unmarshalUint32(data)
 		msg, data := unmarshalString(data)
 		lang, _ := unmarshalString(data)
-		return nil, &StatusError{
+		return "", &StatusError{
 			Code: code,
 			msg:  msg,
 			lang: lang,
 		}
 	default:
-		return nil, unimplementedPacketErr(typ)
+		return "", unimplementedPacketErr(typ)
 	}
 }
 
@@ -330,11 +451,12 @@ func (c *ClientConn) Lstat(path string) (os.FileInfo, error) {
 	}
 	switch typ {
 	case SSH_FXP_ATTRS:
-		sid, _ := unmarshalUint32(data)
+		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIdErr{id, sid}
 		}
-		return nil, nil
+		attr, _ := unmarshalAttrs(data)
+		return attr, nil
 	case SSH_FXP_STATUS:
 		sid, data := unmarshalUint32(data)
 		if sid != id {

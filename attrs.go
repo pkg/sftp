@@ -4,7 +4,9 @@ package sftp
 // see http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-5
 
 import (
+	"fmt"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -17,6 +19,7 @@ const (
 )
 
 type attr struct {
+	name  string
 	size  uint64
 	mode  os.FileMode
 	mtime time.Time
@@ -54,7 +57,7 @@ func unmarshalAttrs(b []byte) (*attr, []byte) {
 	if flags&SSH_FILEXFER_ATTR_PERMISSIONS == SSH_FILEXFER_ATTR_PERMISSIONS {
 		var mode uint32
 		mode, b = unmarshalUint32(b)
-		a.mode = os.FileMode(mode)
+		a.mode = toFileMode(mode)
 	}
 	if flags&SSH_FILEXFER_ATTR_ACMODTIME == SSH_FILEXFER_ATTR_ACMODTIME {
 		var mtime uint32
@@ -71,4 +74,36 @@ func unmarshalAttrs(b []byte) (*attr, []byte) {
 		}
 	}
 	return &a, b
+}
+
+// toFileMode converts sftp filemode bits to the os.FileMode specification
+func toFileMode(mode uint32) os.FileMode {
+	fmt.Println("toFileMode", mode)
+	var fm = os.FileMode(mode & 0777)
+	switch mode & syscall.S_IFMT {
+	case syscall.S_IFBLK:
+		fm |= os.ModeDevice
+	case syscall.S_IFCHR:
+		fm |= os.ModeDevice | os.ModeCharDevice
+	case syscall.S_IFDIR:
+		fm |= os.ModeDir
+	case syscall.S_IFIFO:
+		fm |= os.ModeNamedPipe
+	case syscall.S_IFLNK:
+		fm |= os.ModeSymlink
+	case syscall.S_IFREG:
+		// nothing to do
+	case syscall.S_IFSOCK:
+		fm |= os.ModeSocket
+	}
+	if mode&syscall.S_ISGID != 0 {
+		fm |= os.ModeSetgid
+	}
+	if mode&syscall.S_ISUID != 0 {
+		fm |= os.ModeSetuid
+	}
+	if mode&syscall.S_ISVTX != 0 {
+		fm |= os.ModeSticky
+	}
+	return fm
 }
