@@ -56,3 +56,21 @@ func TestMarshalString(t *testing.T) {
 		}
 	}
 }
+
+var marshalTests = []struct {
+	v    interface{}
+	want []byte
+}{
+	{uint32(1), []byte{0, 0, 0, 1}},
+	{uint64(1), []byte{0, 0, 0, 0, 0, 0, 0, 1}},
+	{"foo", []byte{0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
+}
+
+func TestMarshal(t *testing.T) {
+	for _, tt := range marshalTests {
+		got := marshal(nil, tt.v)
+		if !bytes.Equal(tt.want, got) {
+			t.Errorf("marshal(%v): want %#v, got %#v", tt.v, tt.want, got)
+		}
+	}
+}
