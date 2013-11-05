@@ -48,3 +48,8 @@ func unmarshalUint64(b []byte) (uint64, []byte) {
 	l, b := unmarshalUint32(b)
 	return uint64(h)<<32 | uint64(l), b
 }
+
+func unmarshalString(b []byte) (string, []byte) {
+	n, b := unmarshalUint32(b)
+	return string(b[:n]), b[n:]
+}

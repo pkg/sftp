@@ -128,3 +128,21 @@ func TestUnmarshalUint64(t *testing.T) {
 		}
 	}
 }
+
+var unmarshalStringTests = []struct {
+	b    []byte
+	want string
+	rest []byte
+}{
+	{marshalString(nil, ""), "", nil},
+	{marshalString(nil, "blah"), "blah", nil},
+}
+
+func TestUnmarshalString(t *testing.T) {
+	for _, tt := range unmarshalStringTests {
+		got, rest := unmarshalString(tt.b)
+		if got != tt.want || !bytes.Equal(rest, tt.rest) {
+			t.Errorf("unmarshalUint64(%v): want %q, %#v, got %q, %#v", tt.b, tt.want, tt.rest, got, rest)
+		}
+	}
+}
