@@ -5,6 +5,7 @@ package sftp
 import (
 	"fmt"
 	"io"
+	"os"
 	"sync"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -236,8 +237,17 @@ func (c *ClientConn) recvVersion() error {
 }
 
 type Walker struct {
-	c      *ClientConn
+	c       *ClientConn
+	cur     item
+	stack   []item
+	descend bool
+}
+
+type item struct {
+	path   string
+	info   os.FileInfo
 	handle string
+	err    error
 }
 
 type StatusError struct {
@@ -276,9 +286,55 @@ func (c *ClientConn) Walk(root string) (*Walker, error) {
 		}
 		handle, _ := unmarshalString(data)
 		return &Walker{
-			c:      c,
-			handle: handle,
+			c:       c,
+			stack:   []item{{path: root, handle: handle}},
+			descend: false,
 		}, nil
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		return nil, &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+	default:
+		return nil, unimplementedPacketErr(typ)
+	}
+}
+
+func (c *ClientConn) Lstat(path string) (os.FileInfo, error) {
+	type packet struct {
+		Type byte
+		Id   uint32
+		Path string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type: SSH_FXP_LSTAT,
+		Id:   id,
+		Path: path,
+	}); err != nil {
+		return nil, err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return nil, err
+	}
+	switch typ {
+	case SSH_FXP_ATTRS:
+		sid, _ := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		return nil, nil
 	case SSH_FXP_STATUS:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
