@@ -64,7 +64,6 @@ func unmarshalString(b []byte) (string, []byte) {
 
 // sendPacket marshals p according to RFC 4234.
 func sendPacket(w io.Writer, p interface{}) error {
-	fmt.Printf("sendPacket: %#v\n", p)
 	b := make([]byte, 4) // reserve space for the header
 	b = marshal(b, p)
 	l := uint32(len(b) - 4)

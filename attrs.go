@@ -25,7 +25,7 @@ type attr struct {
 }
 
 // Name returns the base name of the file.
-func (a *attr) Name() string { return "" }
+func (a *attr) Name() string { return a.name }
 
 // Size returns the length in bytes for regular files; system-dependent for others.
 func (a *attr) Size() int64 { return int64(a.size) }

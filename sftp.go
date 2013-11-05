@@ -295,10 +295,8 @@ func (c *Client) Walk(root string) *Walker {
 // and Err methods.
 // It returns false when the walk stops at the end of the tree.
 func (w *Walker) Step() bool {
-	fmt.Println("Step:", w.cur.err, len(w.stack))
 	if w.descend && w.cur.err == nil && w.cur.info.IsDir() {
 		list, err := w.c.readDir(w.cur.path)
-		fmt.Println("Step readDir", list, err)
 		if err != nil {
 			w.cur.err = err
 			w.stack = append(w.stack, w.cur)
@@ -325,7 +323,6 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("opendir: handle %q\n", handle)
 	var attrs []os.FileInfo
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -356,11 +353,14 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 			}
 			count, data := unmarshalUint32(data)
 			for i := uint32(0); i < count; i++ {
-				fmt.Println(i, count)
-				filename, data := unmarshalString(data)
-				longname, data := unmarshalString(data) // discard longname
-				attr, data := unmarshalAttrs(data)
-				fmt.Println(filename, longname)
+				var filename string
+				filename, data = unmarshalString(data)
+				_, data = unmarshalString(data) // discard longname
+				var attr *attr
+				attr, data = unmarshalAttrs(data)
+				if filename == "." || filename == ".." {
+					continue
+				}
 				attr.name = filename
 				attrs = append(attrs, attr)
 			}
@@ -382,8 +382,6 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 			return nil, unimplementedPacketErr(typ)
 		}
 	}
-
-	fmt.Printf("%v %v\n", attrs, err)
 	// TODO(dfc) closedir
 	return attrs, err
 }
