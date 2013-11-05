@@ -3,6 +3,9 @@
 package sftp
 
 import (
+	"fmt"
+	"io"
+
 	"code.google.com/p/go.crypto/ssh"
 )
 
@@ -51,18 +54,57 @@ func NewClient(conn *ssh.ClientConn) (*ClientConn, error) {
 	if err := s.RequestSubsystem("sftp"); err != nil {
 		return nil, err
 	}
-	sftp := &ClientConn{s}
+	pw, err := s.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	pr, err := s.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	sftp := &ClientConn{
+		w: pw,
+		r: pr,
+	}
 	return sftp, sftp.sendInit()
 }
 
 type ClientConn struct {
-	session *ssh.Session
+	w io.WriteCloser
+	r io.Reader
 }
 
-func (c *ClientConn) Close() error { return c.session.Close() }
+func (c *ClientConn) Close() error { return c.w.Close() }
 
 func (c *ClientConn) sendInit() error {
-	var b = []byte{0, 0, 0, 3, 0, 0, 0, 0}
-	_, err := c.session.Stdout.Write(b)
-	return err
+	type packet struct {
+		Type       byte
+		Version    uint32
+		Extensions []struct {
+			Name, Data string
+		}
+	}
+	return sendPacket(c.w, packet{
+		Type:    SSH_FXP_INIT,
+		Version: 3, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
+	})
+}
+
+type unexpectedPacketErr struct {
+	want, got uint8
+}
+
+func (u *unexpectedPacketErr) Error() string {
+	return fmt.Sprintf("sftp: unexpected packet: want %v, got %v", u.want, u.got)
+}
+
+func (c *ClientConn) recvVersion() error {
+	typ, _, err := recvPacket(c.r)
+	if err != nil {
+		return err
+	}
+	if typ != SSH_FXP_VERSION {
+		return &unexpectedPacketErr{SSH_FXP_VERSION, typ}
+	}
+	return nil
 }
