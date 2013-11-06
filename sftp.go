@@ -34,7 +34,9 @@ const (
 	SSH_FXP_ATTRS          = 105
 	SSH_FXP_EXTENDED       = 200
 	SSH_FXP_EXTENDED_REPLY = 201
+)
 
+const (
 	SSH_FX_OK                = 0
 	SSH_FX_EOF               = 1
 	SSH_FX_NO_SUCH_FILE      = 2
@@ -44,6 +46,15 @@ const (
 	SSH_FX_NO_CONNECTION     = 6
 	SSH_FX_CONNECTION_LOST   = 7
 	SSH_FX_OP_UNSUPPORTED    = 8
+)
+
+const (
+	SSH_FXF_READ   = 0x00000001
+	SSH_FXF_WRITE  = 0x00000002
+	SSH_FXF_APPEND = 0x00000004
+	SSH_FXF_CREAT  = 0x00000008
+	SSH_FXF_TRUNC  = 0x00000010
+	SSH_FXF_EXCL   = 0x00000020
 )
 
 type fxp uint8

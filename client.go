@@ -313,3 +313,121 @@ func (c *Client) Lstat(path string) (os.FileInfo, error) {
 		return nil, unimplementedPacketErr(typ)
 	}
 }
+
+// File represents a remote file.
+type File struct {
+	c      *Client
+	handle string
+	offset uint64 // current offset within remote file
+}
+
+func (f *File) Read(buf []byte) (int, error) {
+	n, err := f.c.readAt(f.handle, f.offset, buf)
+	f.offset += uint64(n)
+	return int(n), err
+}
+
+// Open opens the named file for reading. If successful, methods on the
+// returned file can be used for reading; the associated file descriptor
+// has mode O_RDONLY.
+func (c *Client) Open(path string) (*File, error) {
+	type packet struct {
+		Type   byte
+		Id     uint32
+		Path   string
+		Pflags uint32
+		Flags  uint32 // ignored
+		Size   uint64 // ignored
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type:   SSH_FXP_OPEN,
+		Id:     id,
+		Path:   path,
+		Pflags: SSH_FXF_READ,
+	}); err != nil {
+		return nil, err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return nil, err
+	}
+	switch typ {
+	case SSH_FXP_HANDLE:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		handle, _ := unmarshalString(data)
+		return &File{c: c, handle: handle}, nil
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		return nil, &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+	default:
+		return nil, unimplementedPacketErr(typ)
+	}
+}
+
+// readAt reads len(buf) bytes from the remote file indicated by handle starting
+// from offset.
+func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error) {
+	type packet struct {
+		Type   byte
+		Id     uint32
+		Handle string
+		Offset uint64
+		Len    uint32
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type:   SSH_FXP_READ,
+		Id:     id,
+		Handle: handle,
+		Offset: offset,
+		Len:    uint32(len(buf)),
+	}); err != nil {
+		return 0, err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return 0, err
+	}
+	switch typ {
+	case SSH_FXP_DATA:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return 0, &unexpectedIdErr{id, sid}
+		}
+		n := copy(buf, data)
+		return uint32(n), nil
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return 0, &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		return 0, &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+	default:
+		return 0, unimplementedPacketErr(typ)
+	}
+}

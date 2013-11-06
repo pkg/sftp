@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -19,7 +20,12 @@ var (
 	PASS = flag.String("pass", os.Getenv("SOCKSIE_SSH_PASSWORD"), "ssh password")
 )
 
-func init() { flag.Parse() }
+func init() {
+	flag.Parse()
+	if len(flag.Args()) < 1 {
+		log.Fatal("subcommand required")
+	}
+}
 
 func main() {
 	var auths []ssh.ClientAuth
@@ -46,12 +52,31 @@ func main() {
 		log.Fatalf("unable to start sftp subsytem: %v", err)
 	}
 	defer client.Close()
-	walker := client.Walk(flag.Args()[0])
-	for walker.Step() {
-		if err := walker.Err(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			continue
+	switch cmd := flag.Args()[0]; cmd {
+	case "ls":
+		if len(flag.Args()) < 2 {
+			log.Fatalf("%s ls: remote path required", os.Args[0])
 		}
-		fmt.Println(walker.Path())
+		walker := client.Walk(flag.Args()[1])
+		for walker.Step() {
+			if err := walker.Err(); err != nil {
+				log.Println(err)
+				continue
+			}
+			fmt.Println(walker.Path())
+		}
+	case "fetch":
+		if len(flag.Args()) < 2 {
+			log.Fatalf("%s ls: remote path required", os.Args[0])
+		}
+		f, err := client.Open(flag.Args()[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		if _, err := io.Copy(os.Stdout, f); err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatal("unknown subcommand: %v", cmd)
 	}
 }
