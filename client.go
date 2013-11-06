@@ -619,6 +619,13 @@ func okOrErr(err error) error {
 	return err
 }
 
+func eofOrErr(err error) error {
+	if err, ok := err.(*StatusError); ok && err.Code == SSH_FX_EOF {
+		return io.EOF
+	}
+	return err
+}
+
 func unmarshalStatus(id uint32, data []byte) error {
 	sid, data := unmarshalUint32(data)
 	if sid != id {
