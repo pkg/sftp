@@ -10,7 +10,7 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 )
 
-// New creates a new sftp client on conn.
+// New creates a new SFTP client on conn.
 func NewClient(conn *ssh.ClientConn) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
@@ -192,18 +192,7 @@ func (c *Client) opendir(path string) (string, error) {
 		handle, _ := unmarshalString(data)
 		return handle, nil
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return "", &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		return "", &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
+		return "", unmarshalStatus(id, data)
 	default:
 		return "", unimplementedPacketErr(typ)
 	}
@@ -239,18 +228,7 @@ func (c *Client) Lstat(path string) (os.FileInfo, error) {
 		attr.name = path
 		return attr, nil
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		return nil, &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
+		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -296,18 +274,7 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 		handle, _ := unmarshalString(data)
 		return &File{c: c, path: path, handle: handle}, nil
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		return nil, &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
+		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -348,18 +315,7 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 		n := copy(buf, data)
 		return uint32(n), nil
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return 0, &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		return 0, &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
+		return 0, unmarshalStatus(id, data)
 	default:
 		return 0, unimplementedPacketErr(typ)
 	}
@@ -390,22 +346,7 @@ func (c *Client) close(handle string) error {
 	}
 	switch typ {
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		err := &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
-		if err.Code != SSH_FX_OK {
-			return err
-		}
-		return nil
+		return okOrErr(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -440,18 +381,7 @@ func (c *Client) fstat(handle string) (*attr, error) {
 		attr, _ := unmarshalAttrs(data)
 		return attr, nil
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		return nil, &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
+		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -481,19 +411,7 @@ func (c *Client) Remove(path string) error {
 	}
 	switch typ {
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		err := &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
-		return okOrErr(err)
+		return okOrErr(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -558,20 +476,8 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 	}
 	switch typ {
 	case SSH_FXP_STATUS:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return 0, &unexpectedIdErr{id, sid}
-		}
-		code, data := unmarshalUint32(data)
-		msg, data := unmarshalString(data)
-		lang, _ := unmarshalString(data)
-		err := &StatusError{
-			Code: code,
-			msg:  msg,
-			lang: lang,
-		}
-		if err.Code != SSH_FX_OK {
-			return 0, err
+		if err := okOrErr(unmarshalStatus(id, data)); err != nil {
+			return 0, nil
 		}
 		return uint32(len(buf)), nil
 	default:
