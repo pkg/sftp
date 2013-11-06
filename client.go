@@ -327,6 +327,10 @@ func (f *File) Read(buf []byte) (int, error) {
 	return int(n), err
 }
 
+func (f *File) Close() error {
+	return f.c.close(f.handle)
+}
+
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
@@ -429,5 +433,51 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 		}
 	default:
 		return 0, unimplementedPacketErr(typ)
+	}
+}
+
+// close closes a handle handle previously returned in the response
+// to SSH_FXP_OPEN or SSH_FXP_OPENDIR. The handle becomes invalid
+// immediately after this request has been sent.
+func (c *Client) close(handle string) error {
+	type packet struct {
+		Type   byte
+		Id     uint32
+		Handle string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type:   SSH_FXP_CLOSE,
+		Id:     id,
+		Handle: handle,
+	}); err != nil {
+		return err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		err := &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+		if err.Code != SSH_FX_OK {
+			return err
+		}
+		return nil
+	default:
+		return unimplementedPacketErr(typ)
 	}
 }

@@ -73,6 +73,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer f.Close()
 		if _, err := io.Copy(os.Stdout, f); err != nil {
 			log.Fatal(err)
 		}
