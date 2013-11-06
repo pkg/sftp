@@ -54,7 +54,7 @@ func (c *Client) Close() error { return c.w.Close() }
 // it already exists. If successful, methods on the returned File can be
 // used for I/O; the associated file descriptor has mode O_RDWR.
 func (c *Client) Create(path string) (*File, error) {
-	return c.open(path, SSH_FXF_READ|SSH_FXF_WRITE|SSH_FXF_CREAT|SSH_FXF_TRUNC)
+	return c.open(path, ssh_FXF_READ|ssh_FXF_WRITE|ssh_FXF_CREAT|ssh_FXF_TRUNC)
 }
 
 func (c *Client) sendInit() error {
@@ -66,7 +66,7 @@ func (c *Client) sendInit() error {
 		}
 	}
 	return sendPacket(c.w, packet{
-		Type:    SSH_FXP_INIT,
+		Type:    ssh_FXP_INIT,
 		Version: 3, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 	})
 }
@@ -84,8 +84,8 @@ func (c *Client) recvVersion() error {
 	if err != nil {
 		return err
 	}
-	if typ != SSH_FXP_VERSION {
-		return &unexpectedPacketErr{SSH_FXP_VERSION, typ}
+	if typ != ssh_FXP_VERSION {
+		return &unexpectedPacketErr{ssh_FXP_VERSION, typ}
 	}
 	return nil
 }
@@ -113,7 +113,7 @@ func (c *Client) readDir(p string) ([]os.FileInfo, error) {
 		}
 		id := c.nextId()
 		if err := sendPacket(c.w, packet{
-			Type:   SSH_FXP_READDIR,
+			Type:   ssh_FXP_READDIR,
 			Id:     id,
 			Handle: handle,
 		}); err != nil {
@@ -124,7 +124,7 @@ func (c *Client) readDir(p string) ([]os.FileInfo, error) {
 			return nil, err
 		}
 		switch typ {
-		case SSH_FXP_NAME:
+		case ssh_FXP_NAME:
 			sid, data := unmarshalUint32(data)
 			if sid != id {
 				return nil, &unexpectedIdErr{id, sid}
@@ -142,7 +142,7 @@ func (c *Client) readDir(p string) ([]os.FileInfo, error) {
 				attr.name = path.Base(filename)
 				attrs = append(attrs, attr)
 			}
-		case SSH_FXP_STATUS:
+		case ssh_FXP_STATUS:
 			sid, data := unmarshalUint32(data)
 			if sid != id {
 				return nil, &unexpectedIdErr{id, sid}
@@ -173,7 +173,7 @@ func (c *Client) opendir(path string) (string, error) {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type: SSH_FXP_OPENDIR,
+		Type: ssh_FXP_OPENDIR,
 		Id:   id,
 		Path: path,
 	}); err != nil {
@@ -184,14 +184,14 @@ func (c *Client) opendir(path string) (string, error) {
 		return "", err
 	}
 	switch typ {
-	case SSH_FXP_HANDLE:
+	case ssh_FXP_HANDLE:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return "", &unexpectedIdErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
 		return handle, nil
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return "", unmarshalStatus(id, data)
 	default:
 		return "", unimplementedPacketErr(typ)
@@ -208,7 +208,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type: SSH_FXP_LSTAT,
+		Type: ssh_FXP_LSTAT,
 		Id:   id,
 		Path: p,
 	}); err != nil {
@@ -219,7 +219,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 		return nil, err
 	}
 	switch typ {
-	case SSH_FXP_ATTRS:
+	case ssh_FXP_ATTRS:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIdErr{id, sid}
@@ -227,7 +227,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 		attr, _ := unmarshalAttrs(data)
 		attr.name = path.Base(p)
 		return attr, nil
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -238,7 +238,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
 func (c *Client) Open(path string) (*File, error) {
-	return c.open(path, SSH_FXF_READ)
+	return c.open(path, ssh_FXF_READ)
 }
 
 func (c *Client) open(path string, pflags uint32) (*File, error) {
@@ -254,7 +254,7 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:   SSH_FXP_OPEN,
+		Type:   ssh_FXP_OPEN,
 		Id:     id,
 		Path:   path,
 		Pflags: pflags,
@@ -266,14 +266,14 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 		return nil, err
 	}
 	switch typ {
-	case SSH_FXP_HANDLE:
+	case ssh_FXP_HANDLE:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIdErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
 		return &File{c: c, path: path, handle: handle}, nil
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -294,7 +294,7 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:   SSH_FXP_READ,
+		Type:   ssh_FXP_READ,
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
@@ -307,7 +307,7 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 		return 0, err
 	}
 	switch typ {
-	case SSH_FXP_DATA:
+	case ssh_FXP_DATA:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return 0, &unexpectedIdErr{id, sid}
@@ -315,7 +315,7 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 		l, data := unmarshalUint32(data)
 		n := copy(buf, data[:l])
 		return uint32(n), nil
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return 0, eofOrErr(unmarshalStatus(id, data))
 	default:
 		return 0, unimplementedPacketErr(typ)
@@ -335,7 +335,7 @@ func (c *Client) close(handle string) error {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:   SSH_FXP_CLOSE,
+		Type:   ssh_FXP_CLOSE,
 		Id:     id,
 		Handle: handle,
 	}); err != nil {
@@ -346,7 +346,7 @@ func (c *Client) close(handle string) error {
 		return err
 	}
 	switch typ {
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return okOrErr(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -363,7 +363,7 @@ func (c *Client) fstat(handle string) (*attr, error) {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:   SSH_FXP_FSTAT,
+		Type:   ssh_FXP_FSTAT,
 		Id:     id,
 		Handle: handle,
 	}); err != nil {
@@ -374,14 +374,14 @@ func (c *Client) fstat(handle string) (*attr, error) {
 		return nil, err
 	}
 	switch typ {
-	case SSH_FXP_ATTRS:
+	case ssh_FXP_ATTRS:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIdErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
 		return attr, nil
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -400,7 +400,7 @@ func (c *Client) Remove(path string) error {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:     SSH_FXP_REMOVE,
+		Type:     ssh_FXP_REMOVE,
 		Id:       id,
 		Filename: path,
 	}); err != nil {
@@ -411,7 +411,7 @@ func (c *Client) Remove(path string) error {
 		return err
 	}
 	switch typ {
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return okOrErr(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -429,7 +429,7 @@ func (c *Client) Rename(oldname, newname string) error {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:    SSH_FXP_RENAME,
+		Type:    ssh_FXP_RENAME,
 		Id:      id,
 		Oldpath: oldname,
 		Newpath: newname,
@@ -441,7 +441,7 @@ func (c *Client) Rename(oldname, newname string) error {
 		return err
 	}
 	switch typ {
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		return okOrErr(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -463,7 +463,7 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 	defer c.mu.Unlock()
 	id := c.nextId()
 	if err := sendPacket(c.w, packet{
-		Type:   SSH_FXP_WRITE,
+		Type:   ssh_FXP_WRITE,
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
@@ -477,7 +477,7 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 		return 0, err
 	}
 	switch typ {
-	case SSH_FXP_STATUS:
+	case ssh_FXP_STATUS:
 		if err := okOrErr(unmarshalStatus(id, data)); err != nil {
 			return 0, nil
 		}
@@ -615,14 +615,14 @@ type item struct {
 
 // okOrErr returns nil if Err.Code is SSH_FX_OK, otherwise it returns the error.
 func okOrErr(err error) error {
-	if err, ok := err.(*StatusError); ok && err.Code == SSH_FX_OK {
+	if err, ok := err.(*StatusError); ok && err.Code == ssh_FX_OK {
 		return nil
 	}
 	return err
 }
 
 func eofOrErr(err error) error {
-	if err, ok := err.(*StatusError); ok && err.Code == SSH_FX_EOF {
+	if err, ok := err.(*StatusError); ok && err.Code == ssh_FX_EOF {
 		return io.EOF
 	}
 	return err

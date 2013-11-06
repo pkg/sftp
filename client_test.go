@@ -3,9 +3,9 @@ package sftp
 import "io"
 import "testing"
 
-var ok = &StatusError{Code: SSH_FX_OK}
-var eof = &StatusError{Code: SSH_FX_EOF}
-var fail = &StatusError{Code: SSH_FX_FAILURE}
+var ok = &StatusError{Code: ssh_FX_OK}
+var eof = &StatusError{Code: ssh_FX_EOF}
+var fail = &StatusError{Code: ssh_FX_FAILURE}
 
 var eofOrErrTests = []struct {
 	err, want error
