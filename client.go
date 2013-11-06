@@ -456,6 +456,7 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 		Id     uint32
 		Handle string
 		Offset uint64
+		Length uint32
 		Data   []byte
 	}
 	c.mu.Lock()
@@ -466,6 +467,7 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
+		Length: uint32(len(buf)),
 		Data:   buf,
 	}); err != nil {
 		return 0, err
