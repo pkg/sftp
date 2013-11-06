@@ -79,6 +79,60 @@ func TestClientLstat(t *testing.T) {
 	}
 }
 
+func TestClientOpen(t *testing.T) {
+	sftp, cmd := testClient(t)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	got, err := sftp.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := got.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRead(t *testing.T) {
+	sftp, cmd := testClient(t)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	if _, err := f.WriteString("Hello world!"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := sftp.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer got.Close()
+
+	b, err := ioutil.ReadAll(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want, got := "Hello world!", string(b); got != want {
+		t.Fatalf("Read(): want %q, got %q", want, got)
+	}
+}
+
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
 		want.Size() == got.Size()

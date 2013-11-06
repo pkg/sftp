@@ -312,10 +312,11 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 		if sid != id {
 			return 0, &unexpectedIdErr{id, sid}
 		}
-		n := copy(buf, data)
+		l, data := unmarshalUint32(data)
+		n := copy(buf, data[:l])
 		return uint32(n), nil
 	case SSH_FXP_STATUS:
-		return 0, unmarshalStatus(id, data)
+		return 0, eofOrErr(unmarshalStatus(id, data))
 	default:
 		return 0, unimplementedPacketErr(typ)
 	}
