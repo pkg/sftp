@@ -110,6 +110,13 @@ func main() {
 		if err := client.Remove(flag.Args()[1]); err != nil {
 			log.Fatalf("unable to remove file: %v", err)
 		}
+	case "mv":
+		if len(flag.Args()) < 3 {
+			log.Fatalf("%s %s: old and new name required", cmd, os.Args[0])
+		}
+		if err := client.Rename(flag.Args()[1], flag.Args()[2]); err != nil {
+			log.Fatalf("unable to rename file: %v", err)
+		}
 	default:
 		log.Fatal("unknown subcommand: %v", cmd)
 	}
