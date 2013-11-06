@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/sftp"
 )
 
-func ExampleNewClient(conn *ssh.ClientConn) {
+func Example(conn *ssh.ClientConn) {
 	// open an SFTP sesison over an existing ssh connection.
 	sftp, err := sftp.NewClient(conn)
 	if err != nil {
