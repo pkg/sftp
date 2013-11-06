@@ -19,17 +19,17 @@ var unmarshalAttrsTests = []struct {
 	{marshal(nil, struct {
 		Flags uint32
 		Size  uint64
-	}{SSH_FILEXFER_ATTR_SIZE, 20}), attr{size: 20}, nil},
+	}{ssh_FILEXFER_ATTR_SIZE, 20}), attr{size: 20}, nil},
 	{marshal(nil, struct {
 		Flags       uint32
 		Size        uint64
 		Permissions uint32
-	}{SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_PERMISSIONS, 20, 0644}), attr{size: 20, mode: os.FileMode(0644)}, nil},
+	}{ssh_FILEXFER_ATTR_SIZE | ssh_FILEXFER_ATTR_PERMISSIONS, 20, 0644}), attr{size: 20, mode: os.FileMode(0644)}, nil},
 	{marshal(nil, struct {
 		Flags                 uint32
 		Size                  uint64
 		Uid, Gid, Permissions uint32
-	}{SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS, 20, 1000, 1000, 0644}), attr{size: 20, mode: os.FileMode(0644)}, nil},
+	}{ssh_FILEXFER_ATTR_SIZE | ssh_FILEXFER_ATTR_UIDGID | ssh_FILEXFER_ATTR_UIDGID | ssh_FILEXFER_ATTR_PERMISSIONS, 20, 1000, 1000, 0644}), attr{size: 20, mode: os.FileMode(0644)}, nil},
 }
 
 func TestUnmarshalAttrs(t *testing.T) {
