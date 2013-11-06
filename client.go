@@ -1,9 +1,9 @@
 package sftp
 
 import (
-	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 
@@ -96,8 +96,8 @@ func (c *Client) Walk(root string) *Walker {
 	return &Walker{c: c, stack: []item{{root, info, err}}}
 }
 
-func (c *Client) readDir(path string) ([]os.FileInfo, error) {
-	handle, err := c.opendir(path)
+func (c *Client) readDir(p string) ([]os.FileInfo, error) {
+	handle, err := c.opendir(p)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (c *Client) readDir(path string) ([]os.FileInfo, error) {
 				if filename == "." || filename == ".." {
 					continue
 				}
-				attr.name = filename
+				attr.name = path.Base(filename)
 				attrs = append(attrs, attr)
 			}
 		case SSH_FXP_STATUS:
@@ -198,7 +198,7 @@ func (c *Client) opendir(path string) (string, error) {
 	}
 }
 
-func (c *Client) Lstat(path string) (os.FileInfo, error) {
+func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	type packet struct {
 		Type byte
 		Id   uint32
@@ -210,7 +210,7 @@ func (c *Client) Lstat(path string) (os.FileInfo, error) {
 	if err := sendPacket(c.w, packet{
 		Type: SSH_FXP_LSTAT,
 		Id:   id,
-		Path: path,
+		Path: p,
 	}); err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (c *Client) Lstat(path string) (os.FileInfo, error) {
 			return nil, &unexpectedIdErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
-		attr.name = path
+		attr.name = path.Base(p)
 		return attr, nil
 	case SSH_FXP_STATUS:
 		return nil, unmarshalStatus(id, data)
@@ -450,7 +450,6 @@ func (c *Client) Rename(oldname, newname string) error {
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
 // from offset.
 func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, error) {
-	fmt.Fprintf(os.Stderr, "handle: %q, offset: %v, len: %v\n", handle, offset, len(buf))
 	type packet struct {
 		Type   byte
 		Id     uint32
