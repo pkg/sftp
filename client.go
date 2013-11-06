@@ -250,6 +250,10 @@ func (c *Client) Lstat(path string) (os.FileInfo, error) {
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
 func (c *Client) Open(path string) (*File, error) {
+	return c.open(path, SSH_FXF_READ)
+}
+
+func (c *Client) open(path string, pflags uint32) (*File, error) {
 	type packet struct {
 		Type   byte
 		Id     uint32
@@ -265,7 +269,7 @@ func (c *Client) Open(path string) (*File, error) {
 		Type:   SSH_FXP_OPEN,
 		Id:     id,
 		Path:   path,
-		Pflags: SSH_FXF_READ,
+		Pflags: pflags,
 	}); err != nil {
 		return nil, err
 	}
@@ -445,25 +449,25 @@ func (c *Client) fstat(handle string) (*attr, error) {
 
 // File represents a remote file.
 type File struct {
-        c      *Client
-        path   string
-        handle string
-        offset uint64 // current offset within remote file
+	c      *Client
+	path   string
+	handle string
+	offset uint64 // current offset within remote file
 }
 
 // Close closes the File, rendering it unusable for I/O. It returns an
 // error, if any.
 func (f *File) Close() error {
-        return f.c.close(f.handle)
+	return f.c.close(f.handle)
 }
 
 // Read reads up to len(b) bytes from the File. It returns the number of
 // bytes read and an error, if any. EOF is signaled by a zero count with
 // err set to io.EOF.
 func (f *File) Read(b []byte) (int, error) {
-        n, err := f.c.readAt(f.handle, f.offset, b)
-        f.offset += uint64(n)
-        return int(n), err
+	n, err := f.c.readAt(f.handle, f.offset, b)
+	f.offset += uint64(n)
+	return int(n), err
 }
 
 // ReadAt reads len(b) bytes from the File starting at byte offset off. It
@@ -471,18 +475,18 @@ func (f *File) Read(b []byte) (int, error) {
 // returns a non-nil error when n < len(b). At end of file, that error is
 // io.EOF.
 func (f *File) ReadAt(b []byte, off int64) (int, error) {
-        n, err := f.c.readAt(f.handle, uint64(off), b)
-        return int(n), err
+	n, err := f.c.readAt(f.handle, uint64(off), b)
+	return int(n), err
 }
 
 // Stat returns the FileInfo structure describing file. If there is an
 // error, it will be of type *PathError.
 func (f *File) Stat() (os.FileInfo, error) {
-        fi, err := f.c.fstat(f.handle)
-        if err == nil {
-                fi.name = f.path
-        }
-        return fi, err
+	fi, err := f.c.fstat(f.handle)
+	if err == nil {
+		fi.name = f.path
+	}
+	return fi, err
 }
 
 // Walker provides a convenient interface for iterating over the
@@ -493,17 +497,17 @@ func (f *File) Stat() (os.FileInfo, error) {
 // but means that for very large directories Walker can be inefficient.
 // Walker does not follow symbolic links.
 type Walker struct {
-        c       *Client
-        cur     item
-        stack   []item
-        descend bool
+	c       *Client
+	cur     item
+	stack   []item
+	descend bool
 }
 
 // Err returns the error, if any, for the most recent attempt
 // by Step to visit a file or directory. If a directory has
 // an error, w will not descend into that directory.
 func (w *Walker) Err() error {
-        return w.cur.err
+	return w.cur.err
 }
 
 // Path returns the path to the most recent file or directory
@@ -511,13 +515,13 @@ func (w *Walker) Err() error {
 // as a prefix; that is, if Walk is called with "dir", which is
 // a directory containing the file "a", Path will return "dir/a".
 func (w *Walker) Path() string {
-        return w.cur.path
+	return w.cur.path
 }
 
 // Stat returns info for the most recent file or directory
 // visited by a call to Step.
 func (w *Walker) Stat() os.FileInfo {
-        return w.cur.info
+	return w.cur.info
 }
 
 // Step advances the Walker to the next file or directory,
@@ -525,37 +529,37 @@ func (w *Walker) Stat() os.FileInfo {
 // and Err methods.
 // It returns false when the walk stops at the end of the tree.
 func (w *Walker) Step() bool {
-        if w.descend && w.cur.err == nil && w.cur.info.IsDir() {
-                list, err := w.c.readDir(w.cur.path)
-                if err != nil {
-                        w.cur.err = err
-                        w.stack = append(w.stack, w.cur)
-                } else {
-                        for i := len(list) - 1; i >= 0; i-- {
-                                path := filepath.Join(w.cur.path, list[i].Name())
-                                w.stack = append(w.stack, item{path, list[i], nil})
-                        }
-                }
-        }
+	if w.descend && w.cur.err == nil && w.cur.info.IsDir() {
+		list, err := w.c.readDir(w.cur.path)
+		if err != nil {
+			w.cur.err = err
+			w.stack = append(w.stack, w.cur)
+		} else {
+			for i := len(list) - 1; i >= 0; i-- {
+				path := filepath.Join(w.cur.path, list[i].Name())
+				w.stack = append(w.stack, item{path, list[i], nil})
+			}
+		}
+	}
 
-        if len(w.stack) == 0 {
-                return false
-        }
-        i := len(w.stack) - 1
-        w.cur = w.stack[i]
-        w.stack = w.stack[:i]
-        w.descend = true
-        return true
+	if len(w.stack) == 0 {
+		return false
+	}
+	i := len(w.stack) - 1
+	w.cur = w.stack[i]
+	w.stack = w.stack[:i]
+	w.descend = true
+	return true
 }
 
 // SkipDir causes the currently visited directory to be skipped.
 // If w is not on a directory, SkipDir has no effect.
 func (w *Walker) SkipDir() {
-        w.descend = false
+	w.descend = false
 }
 
 type item struct {
-        path string
-        info os.FileInfo
-        err  error
+	path string
+	info os.FileInfo
+	err  error
 }
