@@ -1,3 +1,25 @@
+// gsftp implements a simple sftp client.
+//
+// gsftp understands the following commands:
+//
+// List a directory (and its subdirectories)
+//      gsftp ls DIR
+//
+// Fetch a remote file
+//      gsftp fetch FILE
+//
+// Put the contents of stdin to a remote file
+//      cat LOCALFILE | gsftp put REMOTEFILE
+//
+// Print the details of a remote file
+//      gsftp stat FILE
+//
+// Remove a remote file
+//      gsftp rm FILE
+//
+// Rename a file
+//      gsftp mv OLD NEW
+//
 package main
 
 import (

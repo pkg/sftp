@@ -520,7 +520,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 }
 
 // Stat returns the FileInfo structure describing file. If there is an
-// error, it will be of type *PathError.
+// error.
 func (f *File) Stat() (os.FileInfo, error) {
 	fi, err := f.c.fstat(f.handle)
 	if err == nil {

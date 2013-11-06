@@ -34,7 +34,7 @@ func ExampleNewClient(conn *ssh.ClientConn) {
 		log.Fatal(err)
 	}
 
-	// check its there
+	// check it's there
 	fi, err := sftp.Lstat("hello.txt")
 	if err != nil {
 		log.Fatal(err)
