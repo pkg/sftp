@@ -38,6 +38,9 @@ func NewClient(conn *ssh.ClientConn) (*Client, error) {
 	return sftp, sftp.recvVersion()
 }
 
+// Client represents an SFTP session on a *ssh.ClientConn SSH connection.
+// Multiple Clients can be active on a single SSH connection, and a Client
+// may be called concurrently from multiple Goroutines.
 type Client struct {
 	w      io.WriteCloser
 	r      io.Reader
@@ -45,7 +48,15 @@ type Client struct {
 	nextid uint32
 }
 
+// Close closes the SFTP session.
 func (c *Client) Close() error { return c.w.Close() }
+
+// Create creates the named file mode 0666 (before umask), truncating it if
+// it already exists. If successful, methods on the returned File can be
+// used for I/O; the associated file descriptor has mode O_RDWR.
+func (c *Client) Create(path string) (*File, error) {
+	return c.open(path, SSH_FXF_READ|SSH_FXF_WRITE|SSH_FXF_CREAT|SSH_FXF_TRUNC)
+}
 
 func (c *Client) sendInit() error {
 	type packet struct {
@@ -447,6 +458,55 @@ func (c *Client) fstat(handle string) (*attr, error) {
 	}
 }
 
+// writeAt writes len(buf) bytes from the remote file indicated by handle starting
+// from offset.
+func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, error) {
+	type packet struct {
+		Type   byte
+		Id     uint32
+		Handle string
+		Offset uint64
+		Data   []byte
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type:   SSH_FXP_WRITE,
+		Id:     id,
+		Handle: handle,
+		Offset: offset,
+		Data:   buf,
+	}); err != nil {
+		return 0, err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return 0, err
+	}
+	switch typ {
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return 0, &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		err := &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+		if err.Code != SSH_FX_OK {
+			return 0, err
+		}
+		return uint32(len(buf)), nil
+	default:
+		return 0, unimplementedPacketErr(typ)
+	}
+}
+
 // File represents a remote file.
 type File struct {
 	c      *Client
@@ -487,6 +547,15 @@ func (f *File) Stat() (os.FileInfo, error) {
 		fi.name = f.path
 	}
 	return fi, err
+}
+
+// Write writes len(b) bytes to the File. It returns the number of bytes
+// written and an error, if any. Write returns a non-nil error when n !=
+// len(b).
+func (f *File) Write(b []byte) (int, error) {
+	n, err := f.c.writeAt(f.handle, f.offset, b)
+	f.offset += uint64(n)
+	return int(n), err
 }
 
 // Walker provides a convenient interface for iterating over the

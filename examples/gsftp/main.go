@@ -77,6 +77,18 @@ func main() {
 		if _, err := io.Copy(os.Stdout, f); err != nil {
 			log.Fatal(err)
 		}
+	case "put":
+		if len(flag.Args()) < 2 {
+                        log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
+                }
+                f, err := client.Open(flag.Args()[1])
+                if err != nil {
+                        log.Fatal(err)
+                }
+                defer f.Close()
+                if _, err := io.Copy(f, os.Stdin); err != nil {
+                        log.Fatal(err)
+                }
 	case "stat":
 		if len(flag.Args()) < 2 {
 			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
