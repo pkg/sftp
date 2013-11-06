@@ -3,6 +3,8 @@ sftp
 
 The `sftp` package provides support for file system operations on remote ssh servers using the SFTP subsystem.
 
+[![Build Status](https://drone.io/github.com/pkg/sftp/status.png)](https://drone.io/github.com/pkg/sftp/latest)
+
 usage and examples
 ------------------
 
