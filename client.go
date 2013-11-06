@@ -522,7 +522,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 func (f *File) Stat() (os.FileInfo, error) {
 	fi, err := f.c.fstat(f.handle)
 	if err == nil {
-		fi.name = f.path
+		fi.name = path.Base(f.path)
 	}
 	return fi, err
 }

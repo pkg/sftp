@@ -133,6 +133,37 @@ func TestClientRead(t *testing.T) {
 	}
 }
 
+func TestClientFileStat(t *testing.T) {
+	sftp, cmd := testClient(t)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	want, err := os.Lstat(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f2, err := sftp.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f2.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !sameFile(want, got) {
+		t.Fatalf("Lstat(%q): want %#v, got %#v", f.Name(), want, got)
+	}
+}
+
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
 		want.Size() == got.Size()
