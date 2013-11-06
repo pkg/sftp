@@ -11,12 +11,20 @@ import (
 	"testing"
 )
 
+const (
+	READONLY  = true
+	READWRITE = false
+)
+
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
 
 // testClient returns a *Client connected to a localy running sftp-server
 // the *exec.Cmd returned must be defer Wait'd.
-func testClient(t *testing.T) (*Client, *exec.Cmd) {
+func testClient(t *testing.T, readonly bool) (*Client, *exec.Cmd) {
 	cmd := exec.Command("/usr/lib/openssh/sftp-server", "-e", "-R") // log to stderr, read only
+	if !readonly {
+		cmd = exec.Command("/usr/lib/openssh/sftp-server", "-e") // log to stderr
+	}
 	cmd.Stderr = os.Stdout
 	pw, err := cmd.StdinPipe()
 	if err != nil {
@@ -45,7 +53,7 @@ func testClient(t *testing.T) (*Client, *exec.Cmd) {
 }
 
 func TestNewClient(t *testing.T) {
-	sftp, cmd := testClient(t)
+	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 
 	if err := sftp.Close(); err != nil {
@@ -54,7 +62,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClientLstat(t *testing.T) {
-	sftp, cmd := testClient(t)
+	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -79,8 +87,25 @@ func TestClientLstat(t *testing.T) {
 	}
 }
 
+func TestClientLstatiMissing(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(f.Name())
+
+	_, err = sftp.Lstat(f.Name())
+	if err1, ok := err.(*StatusError); !ok || err1.Code != ssh_FX_NO_SUCH_FILE {
+		t.Fatalf("Lstat: want: %v, got %#v", ssh_FX_NO_SUCH_FILE, err)
+	}
+}
+
 func TestClientOpen(t *testing.T) {
-	sftp, cmd := testClient(t)
+	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -100,7 +125,7 @@ func TestClientOpen(t *testing.T) {
 }
 
 func TestClientRead(t *testing.T) {
-	sftp, cmd := testClient(t)
+	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -133,8 +158,48 @@ func TestClientRead(t *testing.T) {
 	}
 }
 
+func TestClientCreate(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	defer os.Remove(f.Name())
+
+	f2, err := sftp.Create(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+}
+
+func TestClientCreateFailed(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	defer os.Remove(f.Name())
+
+	f2, err := sftp.Create(f.Name())
+	if err1, ok := err.(*StatusError); !ok || err1.Code != ssh_FX_PERMISSION_DENIED {
+		t.Fatalf("Create: want: %v, got %#v", ssh_FX_PERMISSION_DENIED, err)
+	}
+	if err == nil {
+		f2.Close()
+	}
+}
+
 func TestClientFileStat(t *testing.T) {
-	sftp, cmd := testClient(t)
+	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -161,6 +226,27 @@ func TestClientFileStat(t *testing.T) {
 
 	if !sameFile(want, got) {
 		t.Fatalf("Lstat(%q): want %#v, got %#v", f.Name(), want, got)
+	}
+}
+
+func TestClientWalkdir(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(d)
+
+	w := sftp.Walk(d)
+	for w.Step() {
+		if err := w.Err(); err != nil {
+			t.Error(err)
+			continue
+		}
+		t.Log(w.Path())
 	}
 }
 
