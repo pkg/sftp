@@ -317,18 +317,43 @@ func (c *Client) Lstat(path string) (os.FileInfo, error) {
 // File represents a remote file.
 type File struct {
 	c      *Client
+	path   string
 	handle string
 	offset uint64 // current offset within remote file
 }
 
-func (f *File) Read(buf []byte) (int, error) {
-	n, err := f.c.readAt(f.handle, f.offset, buf)
+// Close closes the File, rendering it unusable for I/O. It returns an
+// error, if any.
+func (f *File) Close() error {
+	return f.c.close(f.handle)
+}
+
+// Read reads up to len(b) bytes from the File. It returns the number of
+// bytes read and an error, if any. EOF is signaled by a zero count with
+// err set to io.EOF.
+func (f *File) Read(b []byte) (int, error) {
+	n, err := f.c.readAt(f.handle, f.offset, b)
 	f.offset += uint64(n)
 	return int(n), err
 }
 
-func (f *File) Close() error {
-	return f.c.close(f.handle)
+// ReadAt reads len(b) bytes from the File starting at byte offset off. It
+// returns the number of bytes read and the error, if any. ReadAt always
+// returns a non-nil error when n < len(b). At end of file, that error is
+// io.EOF.
+func (f *File) ReadAt(b []byte, off int64) (int, error) {
+	n, err := f.c.readAt(f.handle, uint64(off), b)
+	return int(n), err
+}
+
+// Stat returns the FileInfo structure describing file. If there is an
+// error, it will be of type *PathError.
+func (f *File) Stat() (os.FileInfo, error) {
+	fi, err := f.c.fstat(f.handle)
+	if err == nil {
+		fi.name = f.path
+	}
+	return fi, err
 }
 
 // Open opens the named file for reading. If successful, methods on the
@@ -365,7 +390,7 @@ func (c *Client) Open(path string) (*File, error) {
 			return nil, &unexpectedIdErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
-		return &File{c: c, handle: handle}, nil
+		return &File{c: c, path: path, handle: handle}, nil
 	case SSH_FXP_STATUS:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
@@ -479,5 +504,51 @@ func (c *Client) close(handle string) error {
 		return nil
 	default:
 		return unimplementedPacketErr(typ)
+	}
+}
+
+func (c *Client) fstat(handle string) (*attr, error) {
+	type packet struct {
+		Type   byte
+		Id     uint32
+		Handle string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type:   SSH_FXP_FSTAT,
+		Id:     id,
+		Handle: handle,
+	}); err != nil {
+		return nil, err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return nil, err
+	}
+	switch typ {
+	case SSH_FXP_ATTRS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		attr, _ := unmarshalAttrs(data)
+		return attr, nil
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		return nil, &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+	default:
+		return nil, unimplementedPacketErr(typ)
 	}
 }

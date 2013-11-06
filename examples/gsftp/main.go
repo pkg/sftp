@@ -55,7 +55,7 @@ func main() {
 	switch cmd := flag.Args()[0]; cmd {
 	case "ls":
 		if len(flag.Args()) < 2 {
-			log.Fatalf("%s ls: remote path required", os.Args[0])
+			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
 		}
 		walker := client.Walk(flag.Args()[1])
 		for walker.Step() {
@@ -67,7 +67,7 @@ func main() {
 		}
 	case "fetch":
 		if len(flag.Args()) < 2 {
-			log.Fatalf("%s ls: remote path required", os.Args[0])
+			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
 		}
 		f, err := client.Open(flag.Args()[1])
 		if err != nil {
@@ -77,6 +77,20 @@ func main() {
 		if _, err := io.Copy(os.Stdout, f); err != nil {
 			log.Fatal(err)
 		}
+	case "stat":
+		if len(flag.Args()) < 2 {
+			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
+		}
+		f, err := client.Open(flag.Args()[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		fi, err := f.Stat()
+		if err != nil {
+			log.Fatal("unable to stat file: %v", err)
+		}
+		fmt.Printf("%s %d %v\n", fi.Name(), fi.Size(), fi.Mode())
 	default:
 		log.Fatal("unknown subcommand: %v", cmd)
 	}
