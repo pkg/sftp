@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -456,9 +457,52 @@ func (c *Client) fstat(handle string) (*attr, error) {
 	}
 }
 
+// Remove removes the named file or directory.
+func (c *Client) Remove(path string) error {
+	// TODO(dfc) can't handle directories, yet
+	type packet struct {
+		Type     byte
+		Id       uint32
+		Filename string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	if err := sendPacket(c.w, packet{
+		Type:     SSH_FXP_REMOVE,
+		Id:       id,
+		Filename: path,
+	}); err != nil {
+		return err
+	}
+	typ, data, err := recvPacket(c.r)
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case SSH_FXP_STATUS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return &unexpectedIdErr{id, sid}
+		}
+		code, data := unmarshalUint32(data)
+		msg, data := unmarshalString(data)
+		lang, _ := unmarshalString(data)
+		err := &StatusError{
+			Code: code,
+			msg:  msg,
+			lang: lang,
+		}
+		return okOrErr(err)
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
 // from offset.
 func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, error) {
+	fmt.Fprintf(os.Stderr, "handle: %q, offset: %v, len: %v\n", handle, offset, len(buf))
 	type packet struct {
 		Type   byte
 		Id     uint32
@@ -629,4 +673,12 @@ type item struct {
 	path string
 	info os.FileInfo
 	err  error
+}
+
+// okOrErr returns nil if Err.Code is SSH_FX_OK, otherwise it returns the error.
+func okOrErr(err *StatusError) error {
+	if err.Code == SSH_FX_OK {
+		return nil
+	}
+	return err
 }

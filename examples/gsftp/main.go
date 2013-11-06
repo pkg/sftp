@@ -79,16 +79,16 @@ func main() {
 		}
 	case "put":
 		if len(flag.Args()) < 2 {
-                        log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
-                }
-                f, err := client.Open(flag.Args()[1])
-                if err != nil {
-                        log.Fatal(err)
-                }
-                defer f.Close()
-                if _, err := io.Copy(f, os.Stdin); err != nil {
-                        log.Fatal(err)
-                }
+			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
+		}
+		f, err := client.Create(flag.Args()[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		if _, err := io.Copy(f, os.Stdin); err != nil {
+			log.Fatal(err)
+		}
 	case "stat":
 		if len(flag.Args()) < 2 {
 			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
@@ -100,9 +100,16 @@ func main() {
 		defer f.Close()
 		fi, err := f.Stat()
 		if err != nil {
-			log.Fatal("unable to stat file: %v", err)
+			log.Fatalf("unable to stat file: %v", err)
 		}
 		fmt.Printf("%s %d %v\n", fi.Name(), fi.Size(), fi.Mode())
+	case "rm":
+		if len(flag.Args()) < 2 {
+			log.Fatalf("%s %s: remote path required", cmd, os.Args[0])
+		}
+		if err := client.Remove(flag.Args()[1]); err != nil {
+			log.Fatalf("unable to remove file: %v", err)
+		}
 	default:
 		log.Fatal("unknown subcommand: %v", cmd)
 	}
