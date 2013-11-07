@@ -41,6 +41,8 @@ func NewClient(conn *ssh.ClientConn) (*Client, error) {
 // Client represents an SFTP session on a *ssh.ClientConn SSH connection.
 // Multiple Clients can be active on a single SSH connection, and a Client
 // may be called concurrently from multiple Goroutines.
+//
+// Client implements the github.com/kr/fs.FileSystem interface.
 type Client struct {
 	w      io.WriteCloser
 	r      io.Reader

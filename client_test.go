@@ -1,7 +1,14 @@
 package sftp
 
-import "io"
-import "testing"
+import (
+	"io"
+	"testing"
+
+	"github.com/davecheney/fs"
+)
+
+// assert that *Client implements fs.FileSystem
+var _ fs.FileSystem = new(Client)
 
 var ok = &StatusError{Code: ssh_FX_OK}
 var eof = &StatusError{Code: ssh_FX_EOF}
