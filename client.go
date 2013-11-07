@@ -93,7 +93,7 @@ func (c *Client) recvVersion() error {
 
 // Walk returns a new Walker rooted at root.
 func (c *Client) Walk(root string) *fs.Walker {
-	return fs.WalkFunc(root, c.Lstat, c.readDir)
+	return fs.WalkFunc(root, c.Lstat, c.readDir, path.Join)
 }
 
 func (c *Client) readDir(p string) ([]os.FileInfo, error) {
