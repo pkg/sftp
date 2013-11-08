@@ -5,6 +5,7 @@ package sftp
 
 import (
 	"flag"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -96,7 +97,7 @@ func TestClientLstat(t *testing.T) {
 	}
 }
 
-func TestClientLstatiMissing(t *testing.T) {
+func TestClientLstatMissing(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -164,6 +165,52 @@ func TestClientRead(t *testing.T) {
 
 	if want, got := "Hello world!", string(b); got != want {
 		t.Fatalf("Read(): want %q, got %q", want, got)
+	}
+}
+
+var readAtTests = []struct {
+	s    string
+	at   int64
+	want string
+	err  error
+}{
+	{"Hello world!", 6, "world!", nil},
+	{"Hello world!", 0, "Hello world!", nil},
+	{"Hello world!", 12, "", io.EOF},
+}
+
+func TestClientReadAt(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	for _, tt := range readAtTests {
+		f, err := ioutil.TempFile("", "sftptest")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(f.Name())
+
+		if _, err := f.WriteString(tt.s); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := sftp.Open(f.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer got.Close()
+
+		var b = make([]byte, 100)
+		n, err := got.ReadAt(b, tt.at)
+		b = b[:n]
+
+		if want, got := tt.want, string(b); got != want || tt.err != err {
+			t.Fatalf("Read(): want %q %v, got %q %v", want, tt.err, got, err)
+		}
 	}
 }
 
@@ -268,6 +315,27 @@ func TestClientRemoveFailed(t *testing.T) {
 		t.Fatalf("Remove(%v): want: permission denied, got %v", f.Name(), err)
 	}
 	if _, err := os.Lstat(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRename(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2 := f.Name() + ".new"
+	if err := sftp.Rename(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f.Name()); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f2); err != nil {
 		t.Fatal(err)
 	}
 }
