@@ -105,6 +105,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer c.close(handle) // this has to defer earlier than the lock below
 	var attrs []os.FileInfo
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -164,7 +165,6 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 			return nil, unimplementedPacketErr(typ)
 		}
 	}
-	// TODO(dfc) closedir
 	return attrs, err
 }
 func (c *Client) opendir(path string) (string, error) {
@@ -538,13 +538,31 @@ func (f *File) Stat() (os.FileInfo, error) {
 	return fi, err
 }
 
+// clamp writes to less than 32k
+const maxWritePacket = 1 << 15
+
 // Write writes len(b) bytes to the File. It returns the number of bytes
 // written and an error, if any. Write returns a non-nil error when n !=
 // len(b).
 func (f *File) Write(b []byte) (int, error) {
-	n, err := f.c.writeAt(f.handle, f.offset, b)
-	f.offset += uint64(n)
-	return int(n), err
+	var written int
+	for len(b) > 0 {
+		n, err := f.c.writeAt(f.handle, f.offset, b[:min(len(b), maxWritePacket)])
+		f.offset += uint64(n)
+		written += int(n)
+		if err != nil {
+			return written, err
+		}
+		b = b[n:]
+	}
+	return written, nil
+}
+
+func min(a, b int) int {
+	if a > b {
+		return b
+	}
+	return a
 }
 
 // okOrErr returns nil if Err.Code is SSH_FX_OK, otherwise it returns the error.
