@@ -117,16 +117,15 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 			Handle string
 		}
 		id := c.nextId()
-		if err := sendPacket(c.w, packet{
+		typ, data, err1 := c.sendRequest(packet{
 			Type:   ssh_FXP_READDIR,
 			Id:     id,
 			Handle: handle,
-		}); err != nil {
-			return nil, err
-		}
-		typ, data, err := recvPacket(c.r)
-		if err != nil {
-			return nil, err
+		})
+		if err1 != nil {
+			err = err1
+			done = true
+			break
 		}
 		switch typ {
 		case ssh_FXP_NAME:
@@ -148,22 +147,15 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 				attrs = append(attrs, attr)
 			}
 		case ssh_FXP_STATUS:
-			sid, data := unmarshalUint32(data)
-			if sid != id {
-				return nil, &unexpectedIdErr{id, sid}
-			}
-			code, data := unmarshalUint32(data)
-			msg, data := unmarshalString(data)
-			lang, _ := unmarshalString(data)
-			err = &StatusError{
-				Code: code,
-				msg:  msg,
-				lang: lang,
-			}
+			// TODO(dfc) scope warning!
+			err = eofOrErr(unmarshalStatus(id, data))
 			done = true
 		default:
 			return nil, unimplementedPacketErr(typ)
 		}
+	}
+	if err == io.EOF {
+		err = nil
 	}
 	return attrs, err
 }
@@ -176,14 +168,11 @@ func (c *Client) opendir(path string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type: ssh_FXP_OPENDIR,
 		Id:   id,
 		Path: path,
-	}); err != nil {
-		return "", err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -211,14 +200,11 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type: ssh_FXP_LSTAT,
 		Id:   id,
 		Path: p,
-	}); err != nil {
-		return nil, err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -257,15 +243,12 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:   ssh_FXP_OPEN,
 		Id:     id,
 		Path:   path,
 		Pflags: pflags,
-	}); err != nil {
-		return nil, err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -297,16 +280,13 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:   ssh_FXP_READ,
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
 		Len:    uint32(len(buf)),
-	}); err != nil {
-		return 0, err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -338,14 +318,11 @@ func (c *Client) close(handle string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:   ssh_FXP_CLOSE,
 		Id:     id,
 		Handle: handle,
-	}); err != nil {
-		return err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return err
 	}
@@ -366,14 +343,11 @@ func (c *Client) fstat(handle string) (*attr, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:   ssh_FXP_FSTAT,
 		Id:     id,
 		Handle: handle,
-	}); err != nil {
-		return nil, err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -408,14 +382,11 @@ func (c *Client) Remove(path string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:     ssh_FXP_REMOVE,
 		Id:       id,
 		Filename: path,
-	}); err != nil {
-		return err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return err
 	}
@@ -437,15 +408,12 @@ func (c *Client) Rename(oldname, newname string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:    ssh_FXP_RENAME,
 		Id:      id,
 		Oldpath: oldname,
 		Newpath: newname,
-	}); err != nil {
-		return err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return err
 	}
@@ -455,6 +423,13 @@ func (c *Client) Rename(oldname, newname string) error {
 	default:
 		return unimplementedPacketErr(typ)
 	}
+}
+
+func (c *Client) sendRequest(p interface{}) (byte, []byte, error) {
+	if err := sendPacket(c.w, p); err != nil {
+		return 0, nil, err
+	}
+	return recvPacket(c.r)
 }
 
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
@@ -471,17 +446,14 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	if err := sendPacket(c.w, packet{
+	typ, data, err := c.sendRequest(packet{
 		Type:   ssh_FXP_WRITE,
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
 		Length: uint32(len(buf)),
 		Data:   buf,
-	}); err != nil {
-		return 0, err
-	}
-	typ, data, err := recvPacket(c.r)
+	})
 	if err != nil {
 		return 0, err
 	}

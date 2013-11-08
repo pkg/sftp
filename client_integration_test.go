@@ -238,6 +238,40 @@ func TestClientFileStat(t *testing.T) {
 	}
 }
 
+func TestClientRemove(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Remove(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f.Name()); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRemoveFailed(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Remove(f.Name()); err == nil {
+		t.Fatalf("Remove(%v): want: permission denied, got %v", f.Name(), err)
+	}
+	if _, err := os.Lstat(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
 		want.Size() == got.Size()
