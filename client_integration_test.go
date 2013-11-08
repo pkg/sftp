@@ -8,12 +8,15 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"testing"
 )
 
 const (
 	READONLY  = true
 	READWRITE = false
+
+	debuglevel = "DEBUG"
 )
 
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
@@ -21,9 +24,12 @@ var testIntegration = flag.Bool("integration", false, "perform integration tests
 // testClient returns a *Client connected to a localy running sftp-server
 // the *exec.Cmd returned must be defer Wait'd.
 func testClient(t *testing.T, readonly bool) (*Client, *exec.Cmd) {
-	cmd := exec.Command("/usr/lib/openssh/sftp-server", "-e", "-R") // log to stderr, read only
+	if !*testIntegration {
+		t.Skip("skipping intergration test")
+	}
+	cmd := exec.Command("/usr/lib/openssh/sftp-server", "-e", "-R", "-l", debuglevel) // log to stderr, read only
 	if !readonly {
-		cmd = exec.Command("/usr/lib/openssh/sftp-server", "-e") // log to stderr
+		cmd = exec.Command("/usr/lib/openssh/sftp-server", "-e", "-l", debuglevel) // log to stderr
 	}
 	cmd.Stderr = os.Stdout
 	pw, err := cmd.StdinPipe()
@@ -253,4 +259,61 @@ func TestClientWalkdir(t *testing.T) {
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
 		want.Size() == got.Size()
+}
+
+var clientWriteTests = []struct {
+	n     int
+	total int64 // cumulative file size
+}{
+	{0, 0},
+	{1, 1},
+	{0, 1},
+	{999, 1000},
+	{24, 1024},
+	{1023, 2047},
+	{2048, 4095},
+	{1 << 12, 8191},
+	{1 << 13, 16383},
+	{1 << 14, 32767},
+	{1 << 15, 65535},
+	{1 << 16, 131071},
+	{1 << 17, 262143},
+	// TODO(dfc) too large
+	// 	{1 << 18, 262143},
+}
+
+func TestClientWrite(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "writeTest")
+	w, err := sftp.Create(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	for _, tt := range clientWriteTests {
+		got, err := w.Write(make([]byte, tt.n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tt.n {
+			t.Errorf("Write(%v): wrote: want: %v, got %v", tt.n, tt.n, got)
+		}
+		fi, err := os.Stat(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total := fi.Size(); total != tt.total {
+			t.Errorf("Write(%v): size: want: %v, got %v", tt.n, tt.total, total)
+		}
+	}
 }
