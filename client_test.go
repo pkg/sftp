@@ -4,7 +4,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/davecheney/fs"
+	"github.com/kr/fs"
 )
 
 // assert that *Client implements fs.FileSystem

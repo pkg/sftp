@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/davecheney/fs"
+	"github.com/kr/fs"
 )
 
 const (

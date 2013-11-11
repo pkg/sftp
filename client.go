@@ -6,7 +6,7 @@ import (
 	"path"
 	"sync"
 
-	"github.com/davecheney/fs"
+	"github.com/kr/fs"
 
 	"code.google.com/p/go.crypto/ssh"
 )
