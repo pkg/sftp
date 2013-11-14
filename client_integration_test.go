@@ -233,6 +233,25 @@ func TestClientCreate(t *testing.T) {
 	defer f2.Close()
 }
 
+func TestClientAppend(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	defer os.Remove(f.Name())
+
+	f2, err := sftp.OpenFile(f.Name(), os.O_RDWR|os.O_APPEND)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+}
+
 func TestClientCreateFailed(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()

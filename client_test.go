@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"io"
+	"os"
 	"testing"
 
 	"github.com/kr/fs"
@@ -9,6 +10,9 @@ import (
 
 // assert that *Client implements fs.FileSystem
 var _ fs.FileSystem = new(Client)
+
+// assert that *File implements io.ReadWriteCloser
+var _ io.ReadWriteCloser = new(File)
 
 var ok = &StatusError{Code: ssh_FX_OK}
 var eof = &StatusError{Code: ssh_FX_EOF}
@@ -46,6 +50,26 @@ func TestOkOrErr(t *testing.T) {
 		got := okOrErr(tt.err)
 		if got != tt.want {
 			t.Errorf("okOrErr(%#v): want: %#v, got: %#v", tt.err, tt.want, got)
+		}
+	}
+}
+
+var flagsTests = []struct {
+	flags int
+	want  uint32
+}{
+	{os.O_RDONLY, ssh_FXF_READ},
+	{os.O_WRONLY, ssh_FXF_WRITE},
+	{os.O_RDWR, ssh_FXF_READ | ssh_FXF_WRITE},
+	{os.O_RDWR | os.O_CREATE | os.O_TRUNC, ssh_FXF_READ | ssh_FXF_WRITE | ssh_FXF_CREAT | ssh_FXF_TRUNC},
+	{os.O_WRONLY | os.O_APPEND, ssh_FXF_WRITE | ssh_FXF_APPEND},
+}
+
+func TestFlags(t *testing.T) {
+	for i, tt := range flagsTests {
+		got := flags(tt.flags)
+		if got != tt.want {
+			t.Errorf("test %v: flags(%x): want: %x, got: %x", i, tt.flags, tt.want, got)
 		}
 	}
 }

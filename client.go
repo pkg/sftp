@@ -57,7 +57,7 @@ func (c *Client) Close() error { return c.w.Close() }
 // it already exists. If successful, methods on the returned File can be
 // used for I/O; the associated file descriptor has mode O_RDWR.
 func (c *Client) Create(path string) (*File, error) {
-	return c.open(path, ssh_FXF_READ|ssh_FXF_WRITE|ssh_FXF_CREAT|ssh_FXF_TRUNC)
+	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
 }
 
 func (c *Client) sendInit() error {
@@ -228,7 +228,14 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
 func (c *Client) Open(path string) (*File, error) {
-	return c.open(path, ssh_FXF_READ)
+	return c.open(path, flags(os.O_RDONLY))
+}
+
+// OpenFile is the generalized open call; most users will use Open or
+// Create instead. It opens the named file with specified flag (O_RDONLY
+// etc.). If successful, methods on the returned File can be used for I/O.
+func (c *Client) OpenFile(path string, f int) (*File, error) {
+	return c.open(path, flags(f))
 }
 
 func (c *Client) open(path string, pflags uint32) (*File, error) {
@@ -565,4 +572,32 @@ func unmarshalStatus(id uint32, data []byte) error {
 		msg:  msg,
 		lang: lang,
 	}
+}
+
+// flags converts the flags passed to OpenFile into ssh flags.
+// Unsupported flags are ignored.
+func flags(f int) uint32 {
+	var out uint32
+	switch f & os.O_WRONLY {
+	case os.O_WRONLY:
+		out |= ssh_FXF_WRITE
+	case os.O_RDONLY:
+		out |= ssh_FXF_READ
+	}
+	if f&os.O_RDWR == os.O_RDWR {
+		out |= ssh_FXF_READ | ssh_FXF_WRITE
+	}
+	if f&os.O_APPEND == os.O_APPEND {
+		out |= ssh_FXF_APPEND
+	}
+	if f&os.O_CREATE == os.O_CREATE {
+		out |= ssh_FXF_CREAT
+	}
+	if f&os.O_TRUNC == os.O_TRUNC {
+		out |= ssh_FXF_TRUNC
+	}
+	if f&os.O_EXCL == os.O_EXCL {
+		out |= ssh_FXF_EXCL
+	}
+	return out
 }
