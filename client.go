@@ -493,18 +493,17 @@ func (f *File) Close() error {
 // bytes read and an error, if any. EOF is signaled by a zero count with
 // err set to io.EOF.
 func (f *File) Read(b []byte) (int, error) {
-	n, err := f.c.readAt(f.handle, f.offset, b)
-	f.offset += uint64(n)
-	return int(n), err
-}
-
-// ReadAt reads len(b) bytes from the File starting at byte offset off. It
-// returns the number of bytes read and the error, if any. ReadAt always
-// returns a non-nil error when n < len(b). At end of file, that error is
-// io.EOF.
-func (f *File) ReadAt(b []byte, off int64) (int, error) {
-	n, err := f.c.readAt(f.handle, uint64(off), b)
-	return int(n), err
+	var read int
+	for len(b) > 0 {
+		n, err := f.c.readAt(f.handle, f.offset, b[:min(len(b), maxWritePacket)])
+		f.offset += uint64(n)
+		read += int(n)
+		if err != nil {
+			return read, err
+		}
+		b = b[n:]
+	}
+	return read, nil
 }
 
 // Stat returns the FileInfo structure describing file. If there is an

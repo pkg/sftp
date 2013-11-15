@@ -146,41 +146,6 @@ var readAtTests = []struct {
 	{"Hello world!", 12, "", io.EOF},
 }
 
-func TestClientReadAt(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY)
-	defer cmd.Wait()
-	defer sftp.Close()
-
-	for _, tt := range readAtTests {
-		f, err := ioutil.TempFile("", "sftptest")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.Remove(f.Name())
-
-		if _, err := f.WriteString(tt.s); err != nil {
-			t.Fatal(err)
-		}
-		if err := f.Close(); err != nil {
-			t.Fatal(err)
-		}
-
-		got, err := sftp.Open(f.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer got.Close()
-
-		var b = make([]byte, 100)
-		n, err := got.ReadAt(b, tt.at)
-		b = b[:n]
-
-		if want, got := tt.want, string(b); got != want || tt.err != err {
-			t.Fatalf("Read(): want %q %v, got %q %v", want, tt.err, got, err)
-		}
-	}
-}
-
 func TestClientCreate(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE)
 	defer cmd.Wait()
