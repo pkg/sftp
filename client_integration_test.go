@@ -134,40 +134,6 @@ func TestClientOpen(t *testing.T) {
 	}
 }
 
-func TestClientRead(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY)
-	defer cmd.Wait()
-	defer sftp.Close()
-
-	f, err := ioutil.TempFile("", "sftptest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	if _, err := f.WriteString("Hello world!"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := sftp.Open(f.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer got.Close()
-
-	b, err := ioutil.ReadAll(got)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want, got := "Hello world!", string(b); got != want {
-		t.Fatalf("Read(): want %q, got %q", want, got)
-	}
-}
-
 var readAtTests = []struct {
 	s    string
 	at   int64
@@ -362,6 +328,69 @@ func TestClientRename(t *testing.T) {
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
 		want.Size() == got.Size()
+}
+
+var clientReadTests = []struct {
+	n int64
+}{
+	{0},
+	{1},
+	{1000},
+	{1024},
+	{1025},
+	{2048},
+	{4096},
+	{1 << 12},
+	{1 << 13},
+	{1 << 14},
+	{1 << 15},
+	{1 << 16},
+	{1 << 17},
+	{1 << 18},
+	{1 << 19},
+	{1 << 20},
+}
+
+func TestClientRead(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	rand, err := os.Open("/dev/urandom")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rand.Close()
+
+	for _, tt := range clientReadTests {
+		f, err := ioutil.TempFile(d, "read-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		written, err := io.CopyN(f, rand, tt.n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if written != tt.n {
+			t.Fatalf("CopyN(%v): wrote: %v", tt.n, written)
+		}
+		f2, err := sftp.Open(f.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f2.Close()
+		read, err := io.Copy(ioutil.Discard, f2)
+		if err != nil || read != tt.n {
+			t.Errorf("Copy(): read: %v, expected %v", read, tt.n)
+		}
+	}
 }
 
 var clientWriteTests = []struct {
