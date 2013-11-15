@@ -4,6 +4,7 @@ package sftp
 // enable with -integration
 
 import (
+	"crypto/sha1"
 	"flag"
 	"io"
 	"io/ioutil"
@@ -362,35 +363,58 @@ func TestClientRead(t *testing.T) {
 	}
 	defer os.RemoveAll(d)
 
-	rand, err := os.Open("/dev/urandom")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rand.Close()
-
 	for _, tt := range clientReadTests {
 		f, err := ioutil.TempFile(d, "read-test")
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer f.Close()
-		written, err := io.CopyN(f, rand, tt.n)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if written != tt.n {
-			t.Fatalf("CopyN(%v): wrote: %v", tt.n, written)
-		}
+		hash := writeN(t, f, tt.n)
 		f2, err := sftp.Open(f.Name())
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer f2.Close()
-		read, err := io.Copy(ioutil.Discard, f2)
-		if err != nil || read != tt.n {
-			t.Errorf("Copy(): read: %v, expected %v", read, tt.n)
+		hash2, n := readHash(t, f2)
+		if hash != hash2 || tt.n != n {
+			t.Errorf("Read: hash: want: %q, got %q, read: want: %v, got %v", hash, hash2, tt.n, n)
 		}
 	}
+}
+
+// readHash reads r until EOF returning the number of bytes read
+// and the hash of the contents.
+func readHash(t *testing.T, r io.Reader) (string, int64) {
+	h := sha1.New()
+	tr := io.TeeReader(r, h)
+	read, err := io.Copy(ioutil.Discard, tr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(h.Sum(nil)), read
+}
+
+// writeN writes n bytes of random data to w and returns the
+// hash of that data.
+func writeN(t *testing.T, w io.Writer, n int64) string {
+	rand, err := os.Open("/dev/urandom")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rand.Close()
+
+	h := sha1.New()
+
+	mw := io.MultiWriter(w, h)
+
+	written, err := io.CopyN(mw, rand, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != n {
+		t.Fatalf("CopyN(%v): wrote: %v", n, written)
+	}
+	return string(h.Sum(nil))
 }
 
 var clientWriteTests = []struct {
