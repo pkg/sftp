@@ -378,9 +378,8 @@ func (c *Client) fstat(handle string) (*attr, error) {
 // empty strings are ignored.
 func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 
-// Remove removes the named file or directory.
+// Remove removes the named file.
 func (c *Client) Remove(path string) error {
-	// TODO(dfc) can't handle directories, yet
 	type packet struct {
 		Type     byte
 		Id       uint32
@@ -472,6 +471,65 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 		return uint32(len(buf)), nil
 	default:
 		return 0, unimplementedPacketErr(typ)
+	}
+}
+
+// Creates the specified directory. An error will be returned if a file or
+// directory with the specified path already exists, or if the directory's
+// parent folder does not exist (the method cannot create complete paths).
+func (c *Client) CreateDirectory(path string) error {
+	type packet struct {
+		Type byte
+		Id   uint32
+		Path string
+		Flags  uint32 // ignored
+		Size   uint64 // ignored
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type:    ssh_FXP_MKDIR,
+		Id:      id,
+		Path: 	 path,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
+// Removes the specified directory. An error will be returned if no directory
+// with the specified path exists, or if the specified directory is not
+// empty, or if the path specified a file system object other than a
+// directory.
+func (c *Client) RemoveDirectory(path string) error {
+	type packet struct {
+		Type byte
+		Id   uint32
+		Path string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type:    ssh_FXP_RMDIR,
+		Id:      id,
+		Path: 	 path,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
 	}
 }
 
