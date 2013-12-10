@@ -11,7 +11,7 @@ func marshalUint32(b []byte, v uint32) []byte {
 }
 
 func marshalUint64(b []byte, v uint64) []byte {
-	return marshalUint32(marshalUint32(b, uint32(v>>24)), uint32(v))
+	return marshalUint32(marshalUint32(b, uint32(v>>32)), uint32(v))
 }
 
 func marshalString(b []byte, v string) []byte {
