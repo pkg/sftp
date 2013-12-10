@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/kr/fs"
 
@@ -224,6 +225,38 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	}
 }
 
+// Chtimes changes the access and modification times of the named file.
+func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
+	type packet struct {
+		Type  byte
+		Id    uint32
+		Path  string
+		Flags uint32
+		Atime uint32
+		Mtime uint32
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type:  ssh_FXP_SETSTAT,
+		Id:    id,
+		Path:  path,
+		Flags: ssh_FILEXFER_ATTR_ACMODTIME,
+		Atime: uint32(atime.Unix()),
+		Mtime: uint32(mtime.Unix()),
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
@@ -386,7 +419,7 @@ func (c *Client) Remove(path string) error {
 	if status, ok := err.(*StatusError); ok && (status.Code == ssh_FX_FAILURE) {
 		err = c.removeDirectory(path)
 	}
-	return err;
+	return err
 }
 
 func (c *Client) removeFile(path string) error {
@@ -424,9 +457,9 @@ func (c *Client) removeDirectory(path string) error {
 	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(packet{
-		Type:    ssh_FXP_RMDIR,
-		Id:      id,
-		Path: 	 path,
+		Type: ssh_FXP_RMDIR,
+		Id:   id,
+		Path: path,
 	})
 	if err != nil {
 		return err
@@ -514,19 +547,19 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 // parent folder does not exist (the method cannot create complete paths).
 func (c *Client) Mkdir(path string) error {
 	type packet struct {
-		Type byte
-		Id   uint32
-		Path string
-		Flags  uint32 // ignored
-		Size   uint64 // ignored
+		Type  byte
+		Id    uint32
+		Path  string
+		Flags uint32 // ignored
+		Size  uint64 // ignored
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(packet{
-		Type:    ssh_FXP_MKDIR,
-		Id:      id,
-		Path: 	 path,
+		Type: ssh_FXP_MKDIR,
+		Id:   id,
+		Path: path,
 	})
 	if err != nil {
 		return err
