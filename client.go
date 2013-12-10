@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/kr/fs"
 
@@ -221,6 +222,38 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
+	}
+}
+
+// Chtimes changes the access and modification times of the named file.
+func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
+	type packet struct {
+		Type  byte
+		Id    uint32
+		Path  string
+		Flags uint32
+		Atime uint32
+		Mtime uint32
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type:  ssh_FXP_SETSTAT,
+		Id:    id,
+		Path:  path,
+		Flags: ssh_FILEXFER_ATTR_ACMODTIME,
+		Atime: uint32(atime.Unix()),
+		Mtime: uint32(mtime.Unix()),
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
 	}
 }
 
