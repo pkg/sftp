@@ -28,6 +28,7 @@ const (
 )
 
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
+var testSftp = flag.String("sftp", "/usr/lib/openssh/sftp-server", "location of the sftp server binary")
 
 // testClient returns a *Client connected to a localy running sftp-server
 // the *exec.Cmd returned must be defer Wait'd.
@@ -35,9 +36,9 @@ func testClient(t *testing.T, readonly bool) (*Client, *exec.Cmd) {
 	if !*testIntegration {
 		t.Skip("skipping intergration test")
 	}
-	cmd := exec.Command("/usr/lib/openssh/sftp-server", "-e", "-R", "-l", debuglevel) // log to stderr, read only
+	cmd := exec.Command(*testSftp, "-e", "-R", "-l", debuglevel) // log to stderr, read only
 	if !readonly {
-		cmd = exec.Command("/usr/lib/openssh/sftp-server", "-e", "-l", debuglevel) // log to stderr
+		cmd = exec.Command(*testSftp, "-e", "-l", debuglevel) // log to stderr
 	}
 	cmd.Stderr = os.Stdout
 	pw, err := cmd.StdinPipe()
