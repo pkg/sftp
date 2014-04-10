@@ -12,7 +12,7 @@ import (
 )
 
 // New creates a new SFTP client on conn.
-func NewClient(conn *ssh.ClientConn) (*Client, error) {
+func NewClient(conn *ssh.Client) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
 		return nil, err
