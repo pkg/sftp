@@ -31,6 +31,7 @@ import (
 	"os"
 
 	"code.google.com/p/go.crypto/ssh"
+	"code.google.com/p/go.crypto/ssh/agent"
 
 	"github.com/pkg/sftp"
 )
@@ -50,12 +51,13 @@ func init() {
 }
 
 func main() {
-	var auths []ssh.ClientAuth
-	if agent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
-		auths = append(auths, ssh.ClientAuthAgent(ssh.NewAgentClient(agent)))
+	var auths []ssh.AuthMethod
+	if aconn, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
+		auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(aconn).Signers))
+
 	}
 	if *PASS != "" {
-		auths = append(auths, ssh.ClientAuthPassword(password(*PASS)))
+		auths = append(auths, ssh.Password(*PASS))
 	}
 
 	config := ssh.ClientConfig{
