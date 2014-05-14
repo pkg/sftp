@@ -142,6 +142,6 @@ func main() {
 			log.Fatalf("unable to rename file: %v", err)
 		}
 	default:
-		log.Fatal("unknown subcommand: %v", cmd)
+		log.Fatalf("unknown subcommand: %v", cmd)
 	}
 }
