@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/kr/fs"
 
@@ -224,6 +225,38 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	}
 }
 
+// Chtimes changes the access and modification times of the named file.
+func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
+	type packet struct {
+		Type  byte
+		Id    uint32
+		Path  string
+		Flags uint32
+		Atime uint32
+		Mtime uint32
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type:  ssh_FXP_SETSTAT,
+		Id:    id,
+		Path:  path,
+		Flags: ssh_FILEXFER_ATTR_ACMODTIME,
+		Atime: uint32(atime.Unix()),
+		Mtime: uint32(mtime.Unix()),
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
@@ -378,9 +411,18 @@ func (c *Client) fstat(handle string) (*attr, error) {
 // empty strings are ignored.
 func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 
-// Remove removes the named file or directory.
+// Remove removes the specified file or directory. An error will be returned if no
+// file or directory with the specified path exists, or if the specified directory
+// is not empty.
 func (c *Client) Remove(path string) error {
-	// TODO(dfc) can't handle directories, yet
+	err := c.removeFile(path)
+	if status, ok := err.(*StatusError); ok && (status.Code == ssh_FX_FAILURE) {
+		err = c.removeDirectory(path)
+	}
+	return err
+}
+
+func (c *Client) removeFile(path string) error {
 	type packet struct {
 		Type     byte
 		Id       uint32
@@ -393,6 +435,31 @@ func (c *Client) Remove(path string) error {
 		Type:     ssh_FXP_REMOVE,
 		Id:       id,
 		Filename: path,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
+func (c *Client) removeDirectory(path string) error {
+	type packet struct {
+		Type byte
+		Id   uint32
+		Path string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type: ssh_FXP_RMDIR,
+		Id:   id,
+		Path: path,
 	})
 	if err != nil {
 		return err
@@ -472,6 +539,36 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 		return uint32(len(buf)), nil
 	default:
 		return 0, unimplementedPacketErr(typ)
+	}
+}
+
+// Creates the specified directory. An error will be returned if a file or
+// directory with the specified path already exists, or if the directory's
+// parent folder does not exist (the method cannot create complete paths).
+func (c *Client) Mkdir(path string) error {
+	type packet struct {
+		Type  byte
+		Id    uint32
+		Path  string
+		Flags uint32 // ignored
+		Size  uint64 // ignored
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type: ssh_FXP_MKDIR,
+		Id:   id,
+		Path: path,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
 	}
 }
 
