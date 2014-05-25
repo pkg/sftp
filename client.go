@@ -416,7 +416,7 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // is not empty.
 func (c *Client) Remove(path string) error {
 	err := c.removeFile(path)
-	if status, ok := err.(*StatusError); ok && (status.Code == ssh_FX_FAILURE) {
+	if status, ok := err.(*StatusError); ok && status.Code == ssh_FX_FAILURE {
 		err = c.removeDirectory(path)
 	}
 	return err
