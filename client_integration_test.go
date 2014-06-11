@@ -8,11 +8,14 @@ import (
 	"flag"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"testing/quick"
 
 	"github.com/kr/fs"
 )
@@ -135,15 +138,87 @@ func TestClientOpen(t *testing.T) {
 	}
 }
 
-var readAtTests = []struct {
-	s    string
-	at   int64
-	want string
-	err  error
-}{
-	{"Hello world!", 6, "world!", nil},
-	{"Hello world!", 0, "Hello world!", nil},
-	{"Hello world!", 12, "", io.EOF},
+const seekBytes = 128 * 1024
+
+type seek struct {
+	offset int64
+}
+
+func (s seek) Generate(r *rand.Rand, _ int) reflect.Value {
+	s.offset = int64(r.Int31n(seekBytes))
+	return reflect.ValueOf(s)
+}
+
+func (cfg seek) set(t *testing.T, r io.ReadSeeker) {
+	if _, err := r.Seek(cfg.offset, 0); err != nil {
+		t.Fatalf("error while seeking with %+v: %v", cfg, err)
+	}
+}
+
+func (cfg seek) current(t *testing.T, r io.ReadSeeker) {
+	const mid = seekBytes / 2
+
+	skip := cfg.offset / 2
+	if cfg.offset > mid {
+		skip = -skip
+	}
+
+	if _, err := r.Seek(mid, 0); err != nil {
+		t.Fatalf("error seeking to midpoint with %+v: %v", cfg, err)
+	}
+	if _, err := r.Seek(skip, 1); err != nil {
+		t.Fatalf("error seeking from %d with %+v: %v", mid, cfg, err)
+	}
+}
+
+func (cfg seek) end(t *testing.T, r io.ReadSeeker) {
+	if _, err := r.Seek(-cfg.offset, 2); err != nil {
+		t.Fatalf("error seeking from end with %+v: %v", cfg, err)
+	}
+}
+
+func TestClientSeek(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	fOS, err := ioutil.TempFile("", "seek-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fOS.Close()
+
+	fSFTP, err := sftp.Open(fOS.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fSFTP.Close()
+
+	writeN(t, fOS, seekBytes)
+
+	if err := quick.CheckEqual(
+		func(s seek) (string, int64) { s.set(t, fOS); return readHash(t, fOS) },
+		func(s seek) (string, int64) { s.set(t, fSFTP); return readHash(t, fSFTP) },
+		nil,
+	); err != nil {
+		t.Errorf("Seek: expected equal absolute seeks: %v", err)
+	}
+
+	if err := quick.CheckEqual(
+		func(s seek) (string, int64) { s.current(t, fOS); return readHash(t, fOS) },
+		func(s seek) (string, int64) { s.current(t, fSFTP); return readHash(t, fSFTP) },
+		nil,
+	); err != nil {
+		t.Errorf("Seek: expected equal seeks from middle: %v", err)
+	}
+
+	if err := quick.CheckEqual(
+		func(s seek) (string, int64) { s.end(t, fOS); return readHash(t, fOS) },
+		func(s seek) (string, int64) { s.end(t, fSFTP); return readHash(t, fSFTP) },
+		nil,
+	); err != nil {
+		t.Errorf("Seek: expected equal seeks from end: %v", err)
+	}
 }
 
 func TestClientCreate(t *testing.T) {

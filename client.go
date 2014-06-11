@@ -633,6 +633,33 @@ func (f *File) Write(b []byte) (int, error) {
 	return written, nil
 }
 
+// Seek implements io.Seeker by setting the client offset for the next Read or
+// Write.  It returns the next offset read.  Seeking before of after the end of
+// the file is undefined.  Seeking relative to the end calls Stat.
+func (f *File) Seek(offset int64, whence int) (int64, error) {
+	const (
+		SET = 0
+		CUR = 1
+		END = 2
+	)
+
+	switch whence {
+	case SET:
+		f.offset = uint64(offset)
+	case CUR:
+		f.offset = uint64(int64(f.offset) + offset)
+	case END:
+		fi, err := f.Stat()
+		if err != nil {
+			return int64(f.offset), err
+		}
+		f.offset = uint64(fi.Size() + offset)
+	default:
+		return int64(f.offset), unimplementedSeekWhence(whence)
+	}
+	return int64(f.offset), nil
+}
+
 func min(a, b int) int {
 	if a > b {
 		return b
