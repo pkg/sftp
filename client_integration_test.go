@@ -149,31 +149,31 @@ func (s seek) Generate(r *rand.Rand, _ int) reflect.Value {
 	return reflect.ValueOf(s)
 }
 
-func (cfg seek) set(t *testing.T, r io.ReadSeeker) {
-	if _, err := r.Seek(cfg.offset, 0); err != nil {
-		t.Fatalf("error while seeking with %+v: %v", cfg, err)
+func (s seek) set(t *testing.T, r io.ReadSeeker) {
+	if _, err := r.Seek(s.offset, os.SEEK_SET); err != nil {
+		t.Fatalf("error while seeking with %+v: %v", s, err)
 	}
 }
 
-func (cfg seek) current(t *testing.T, r io.ReadSeeker) {
+func (s seek) current(t *testing.T, r io.ReadSeeker) {
 	const mid = seekBytes / 2
 
-	skip := cfg.offset / 2
-	if cfg.offset > mid {
+	skip := s.offset / 2
+	if s.offset > mid {
 		skip = -skip
 	}
 
-	if _, err := r.Seek(mid, 0); err != nil {
-		t.Fatalf("error seeking to midpoint with %+v: %v", cfg, err)
+	if _, err := r.Seek(mid, os.SEEK_SET); err != nil {
+		t.Fatalf("error seeking to midpoint with %+v: %v", s, err)
 	}
-	if _, err := r.Seek(skip, 1); err != nil {
-		t.Fatalf("error seeking from %d with %+v: %v", mid, cfg, err)
+	if _, err := r.Seek(skip, os.SEEK_CUR); err != nil {
+		t.Fatalf("error seeking from %d with %+v: %v", mid, s, err)
 	}
 }
 
-func (cfg seek) end(t *testing.T, r io.ReadSeeker) {
-	if _, err := r.Seek(-cfg.offset, 2); err != nil {
-		t.Fatalf("error seeking from end with %+v: %v", cfg, err)
+func (s seek) end(t *testing.T, r io.ReadSeeker) {
+	if _, err := r.Seek(-s.offset, os.SEEK_END); err != nil {
+		t.Fatalf("error seeking from end with %+v: %v", s, err)
 	}
 }
 
