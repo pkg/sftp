@@ -288,40 +288,6 @@ func (c *Client) Truncate(path string, size int64) error {
 	return c.setstat(path, ssh_FILEXFER_ATTR_SIZE, uint64(size))
 }
 
-
-
-
-// func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
-// 	type packet struct {
-// 		Type  byte
-// 		Id    uint32
-// 		Path  string
-// 		Flags uint32
-// 		Atime uint32
-// 		Mtime uint32
-// 	}
-// 	c.mu.Lock()
-// 	defer c.mu.Unlock()
-// 	id := c.nextId()
-// 	typ, data, err := c.sendRequest(packet{
-// 		Type:  ssh_FXP_SETSTAT,
-// 		Id:    id,
-// 		Path:  path,
-// 		Flags: ssh_FILEXFER_ATTR_ACMODTIME,
-// 		Atime: uint32(atime.Unix()),
-// 		Mtime: uint32(mtime.Unix()),
-// 	})
-// 	if err != nil {
-// 		return err
-// 	}
-// 	switch typ {
-// 	case ssh_FXP_STATUS:
-// 		return okOrErr(unmarshalStatus(id, data))
-// 	default:
-// 		return unimplementedPacketErr(typ)
-// 	}
-// }
-
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
