@@ -261,7 +261,7 @@ func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
 		Atime uint32
 		Mtime uint32
 	}
-	attrs := &times{uint32(atime.Unix()), uint32(mtime.Unix())}
+	attrs := times{uint32(atime.Unix()), uint32(mtime.Unix())}
 	return c.setstat(path, ssh_FILEXFER_ATTR_ACMODTIME, attrs)
 }
 
@@ -271,13 +271,13 @@ func (c *Client) Chown(path string, uid, gid int) error {
 		Uid uint32
 		Gid uint32
 	}
-	attrs := &owner{uint32(uid), uint32(gid)}
+	attrs := owner{uint32(uid), uint32(gid)}
 	return c.setstat(path, ssh_FILEXFER_ATTR_UIDGID, attrs)	
 }
 
 // Chmod changes the permissions of the named file.
 func (c *Client) Chmod(path string, mode os.FileMode) error {
-	return c.setstat(path, ssh_FILEXFER_ATTR_PERMISSIONS, mode)
+	return c.setstat(path, ssh_FILEXFER_ATTR_PERMISSIONS, uint32(mode))
 }
 
 // Truncate sets the size of the named file. Although it may be safely assumed
