@@ -255,17 +255,42 @@ func (c *Client) setstat(path string, flags uint32, attrs interface{} ) error {
 	}
 }
 
+// Chtimes changes the access and modification times of the named file.
 func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
-	var attrs []byte
-	attrs = marshal(attrs, uint32(atime.Unix()))
-	attrs = marshal(attrs, uint32(mtime.Unix()))
-	return c.setstat(path, ssh_FILEXFER_ATTR_ACCESS_TIME | ssh_FILEXFER_ATTR_MODIFY_TIME, attrs)
+	type times struct {
+		Atime uint32
+		Mtime uint32
+	}
+	attrs := &times{uint32(atime.Unix()), uint32(mtime.Unix())}
+	return c.setstat(path, ssh_FILEXFER_ATTR_ACMODTIME, attrs)
+}
+
+// Chown changes the user and group owners of the named file.
+func (c *Client) Chown(path string, uid, gid int) error {
+	type owner struct {
+		Uid uint32
+		Gid uint32
+	}
+	attrs := &owner{uint32(uid), uint32(gid)}
+	return c.setstat(path, ssh_FILEXFER_ATTR_UIDGID, attrs)	
+}
+
+// Chmod changes the permissions of the named file.
+func (c *Client) Chmod(path string, mode os.FileMode) error {
+	return c.setstat(path, ssh_FILEXFER_ATTR_PERMISSIONS, mode)
+}
+
+// Truncate sets the size of the named file. Although it may be safely assumed
+// that if the size is less than its current size it will be truncated to fit, 
+// the SFTP protocol does not specify what behavior the server should do when setting
+// size greater than the current size.
+func (c *Client) Truncate(path string, size int64) error {
+	return c.setstat(path, ssh_FILEXFER_ATTR_SIZE, uint64(size))
 }
 
 
 
 
-// Chtimes changes the access and modification times of the named file.
 // func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
 // 	type packet struct {
 // 		Type  byte
