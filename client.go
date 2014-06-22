@@ -225,15 +225,14 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	}
 }
 
-// Chtimes changes the access and modification times of the named file.
-func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
+// setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
+func (c *Client) setstat(path string, flags uint32, attrs interface{} ) error {
 	type packet struct {
-		Type  byte
-		Id    uint32
-		Path  string
+		Type byte
+		Id uint32
+		Path string
 		Flags uint32
-		Atime uint32
-		Mtime uint32
+		Attrs interface{}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -242,9 +241,8 @@ func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
 		Type:  ssh_FXP_SETSTAT,
 		Id:    id,
 		Path:  path,
-		Flags: ssh_FILEXFER_ATTR_ACMODTIME,
-		Atime: uint32(atime.Unix()),
-		Mtime: uint32(mtime.Unix()),
+		Flags: flags,
+		Attrs: attrs,
 	})
 	if err != nil {
 		return err
@@ -256,6 +254,48 @@ func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
 		return unimplementedPacketErr(typ)
 	}
 }
+
+func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
+	var attrs []byte
+	attrs = marshal(attrs, uint32(atime.Unix()))
+	attrs = marshal(attrs, uint32(mtime.Unix()))
+	return c.setstat(path, ssh_FILEXFER_ATTR_ACCESS_TIME | ssh_FILEXFER_ATTR_MODIFY_TIME, attrs)
+}
+
+
+
+
+// Chtimes changes the access and modification times of the named file.
+// func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
+// 	type packet struct {
+// 		Type  byte
+// 		Id    uint32
+// 		Path  string
+// 		Flags uint32
+// 		Atime uint32
+// 		Mtime uint32
+// 	}
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
+// 	id := c.nextId()
+// 	typ, data, err := c.sendRequest(packet{
+// 		Type:  ssh_FXP_SETSTAT,
+// 		Id:    id,
+// 		Path:  path,
+// 		Flags: ssh_FILEXFER_ATTR_ACMODTIME,
+// 		Atime: uint32(atime.Unix()),
+// 		Mtime: uint32(mtime.Unix()),
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	switch typ {
+// 	case ssh_FXP_STATUS:
+// 		return okOrErr(unmarshalStatus(id, data))
+// 	default:
+// 		return unimplementedPacketErr(typ)
+// 	}
+// }
 
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
