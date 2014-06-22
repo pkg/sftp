@@ -685,6 +685,24 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	return int64(f.offset), nil
 }
 
+// Chown changes the uid/gid of the current file.
+func (f *File) Chown(uid, gid int) error {
+	return f.c.Chown(f.path, uid, gid)
+}
+
+// Chmod changes the permissions of the current file.
+func (f *File) Chmod(mode os.FileMode) error {
+	return f.c.Chmod(f.path, mode)
+}
+
+// Truncate sets the size of the current file. Although it may be safely assumed
+// that if the size is less than its current size it will be truncated to fit, 
+// the SFTP protocol does not specify what behavior the server should do when setting
+// size greater than the current size.
+func (f *File) Truncate(size int64) error {
+	return f.c.Truncate(f.path, size)
+}
+
 func min(a, b int) int {
 	if a > b {
 		return b
