@@ -27,21 +27,21 @@ type fileInfo struct {
 }
 
 // Name returns the base name of the file.
-func (a *fileInfo) Name() string { return a.name }
+func (fi *fileInfo) Name() string { return fi.name }
 
 // Size returns the length in bytes for regular files; system-dependent for others.
-func (a *fileInfo) Size() int64 { return a.size }
+func (fi *fileInfo) Size() int64 { return fi.size }
 
 // Mode returns file mode bits.
-func (a *fileInfo) Mode() os.FileMode { return a.mode }
+func (fi *fileInfo) Mode() os.FileMode { return fi.mode }
 
 // ModTime returns the last modification time of the file.
-func (a *fileInfo) ModTime() time.Time { return a.mtime }
+func (fi *fileInfo) ModTime() time.Time { return fi.mtime }
 
 // IsDir returns true if the file is a directory.
-func (a *fileInfo) IsDir() bool { return a.Mode().IsDir() }
+func (fi *fileInfo) IsDir() bool { return fi.Mode().IsDir() }
 
-func (a *fileInfo) Sys() interface{} { return a.sys }
+func (fi *fileInfo) Sys() interface{} { return fi.sys }
 
 // FileStat holds the original unmarshalled values from a call LSTAT.
 type FileStat struct {
@@ -72,22 +72,22 @@ func fileInfoFromStat(st *FileStat, name string) os.FileInfo {
 
 func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 	flags, b := unmarshalUint32(b)
-	var a FileStat
+	var fs FileStat
 	if flags&ssh_FILEXFER_ATTR_SIZE == ssh_FILEXFER_ATTR_SIZE {
-		a.Size, b = unmarshalUint64(b)
+		fs.Size, b = unmarshalUint64(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_UIDGID == ssh_FILEXFER_ATTR_UIDGID {
-		a.Uid, b = unmarshalUint32(b)
+		fs.Uid, b = unmarshalUint32(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_UIDGID == ssh_FILEXFER_ATTR_UIDGID {
-		a.Gid, b = unmarshalUint32(b)
+		fs.Gid, b = unmarshalUint32(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_PERMISSIONS == ssh_FILEXFER_ATTR_PERMISSIONS {
-		a.Mode, b = unmarshalUint32(b)
+		fs.Mode, b = unmarshalUint32(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_ACMODTIME == ssh_FILEXFER_ATTR_ACMODTIME {
-		a.Atime, b = unmarshalUint32(b)
-		a.Mtime, b = unmarshalUint32(b)
+		fs.Atime, b = unmarshalUint32(b)
+		fs.Mtime, b = unmarshalUint32(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_EXTENDED == ssh_FILEXFER_ATTR_EXTENDED {
 		var count uint32
@@ -100,9 +100,9 @@ func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 			data, b = unmarshalString(b)
 			ext[i] = StatExtended{typ,data}
 		}
-		a.Extended = ext
+		fs.Extended = ext
 	}
-	return &a, b
+	return &fs, b
 }
 
 // toFileMode converts sftp filemode bits to the os.FileMode specification
