@@ -139,13 +139,12 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 				var filename string
 				filename, data = unmarshalString(data)
 				_, data = unmarshalString(data) // discard longname
-				var attr *attr
+				var attr *FileStat
 				attr, data = unmarshalAttrs(data)
 				if filename == "." || filename == ".." {
 					continue
 				}
-				attr.name = path.Base(filename)
-				attrs = append(attrs, attr)
+				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)) )
 			}
 		case ssh_FXP_STATUS:
 			// TODO(dfc) scope warning!
@@ -216,8 +215,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 			return nil, &unexpectedIdErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
-		attr.name = path.Base(p)
-		return attr, nil
+		return fileInfoFromStat(attr, path.Base(p)), nil
 	case ssh_FXP_STATUS:
 		return nil, unmarshalStatus(id, data)
 	default:
@@ -405,7 +403,7 @@ func (c *Client) close(handle string) error {
 	}
 }
 
-func (c *Client) fstat(handle string) (*attr, error) {
+func (c *Client) fstat(handle string) (*FileStat, error) {
 	type packet struct {
 		Type   byte
 		Id     uint32
@@ -638,10 +636,10 @@ func (f *File) Read(b []byte) (int, error) {
 // error.
 func (f *File) Stat() (os.FileInfo, error) {
 	fi, err := f.c.fstat(f.handle)
-	if err == nil {
-		fi.name = path.Base(f.path)
+	if err != nil {
+		return nil, err
 	}
-	return fi, err
+	return fileInfoFromStat(fi, path.Base(f.path)), nil
 }
 
 // clamp writes to less than 32k
