@@ -43,7 +43,8 @@ func (fi *fileInfo) IsDir() bool { return fi.Mode().IsDir() }
 
 func (fi *fileInfo) Sys() interface{} { return fi.sys }
 
-// FileStat holds the original unmarshalled values from a call LSTAT.
+// FileStat holds the original unmarshalled values from a call to READDIR or *STAT.
+// It is exported for the purposes of accessing the raw values via os.FileInfo.Sys()
 type FileStat struct {
 	Size  uint64
 	Mode  uint32
