@@ -635,11 +635,11 @@ func (f *File) Read(b []byte) (int, error) {
 // Stat returns the FileInfo structure describing file. If there is an
 // error.
 func (f *File) Stat() (os.FileInfo, error) {
-	fi, err := f.c.fstat(f.handle)
+	fs, err := f.c.fstat(f.handle)
 	if err != nil {
 		return nil, err
 	}
-	return fileInfoFromStat(fi, path.Base(f.path)), nil
+	return fileInfoFromStat(fs, path.Base(f.path)), nil
 }
 
 // clamp writes to less than 32k
