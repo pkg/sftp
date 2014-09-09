@@ -307,7 +307,6 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 		Path   string
 		Pflags uint32
 		Flags  uint32 // ignored
-		Size   uint64 // ignored
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -580,7 +579,6 @@ func (c *Client) Mkdir(path string) error {
 		Id    uint32
 		Path  string
 		Flags uint32 // ignored
-		Size  uint64 // ignored
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
