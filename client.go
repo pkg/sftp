@@ -223,6 +223,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	}
 }
 
+// ReadLink reads the target of a symbolic link.
 func (c *Client) ReadLink(p string) (string, error) {
 	type packet struct {
 		Type byte
@@ -248,10 +249,9 @@ func (c *Client) ReadLink(p string) (string, error) {
 		}
 		count, data := unmarshalUint32(data)
 		if count != 1 {
-
+			return "", unexpectedCount(1, count)
 		}
-		var filename string
-		filename, _ = unmarshalString(data) // ignore dummy attributes
+		filename, _ := unmarshalString(data) // ignore dummy attributes
 		return filename, nil
 	case ssh_FXP_STATUS:
 		return "", unmarshalStatus(id, data)
