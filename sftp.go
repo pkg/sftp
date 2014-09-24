@@ -169,6 +169,10 @@ func unimplementedSeekWhence(whence int) error {
 	return fmt.Errorf("sftp: unimplemented seek whence %v", whence)
 }
 
+func unexpectedCount(want, got uint32) error {
+	return fmt.Errorf("sftp: unexpected count: want %v, got %v", want, got)
+}
+
 type StatusError struct {
 	Code      uint32
 	msg, lang string

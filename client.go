@@ -223,6 +223,43 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	}
 }
 
+// ReadLink reads the target of a symbolic link.
+func (c *Client) ReadLink(p string) (string, error) {
+	type packet struct {
+		Type byte
+		Id   uint32
+		Path string
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.nextId()
+	typ, data, err := c.sendRequest(packet{
+		Type: ssh_FXP_READLINK,
+		Id:   id,
+		Path: p,
+	})
+	if err != nil {
+		return "", err
+	}
+	switch typ {
+	case ssh_FXP_NAME:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return "", &unexpectedIdErr{id, sid}
+		}
+		count, data := unmarshalUint32(data)
+		if count != 1 {
+			return "", unexpectedCount(1, count)
+		}
+		filename, _ := unmarshalString(data) // ignore dummy attributes
+		return filename, nil
+	case ssh_FXP_STATUS:
+		return "", unmarshalStatus(id, data)
+	default:
+		return "", unimplementedPacketErr(typ)
+	}
+}
+
 // setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
 func (c *Client) setstat(path string, flags uint32, attrs interface{} ) error {
 	type packet struct {
