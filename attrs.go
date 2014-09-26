@@ -19,11 +19,11 @@ const (
 
 // fileInfo is an artificial type designed to satisfy os.FileInfo.
 type fileInfo struct {
-	name string
-	size int64
-	mode os.FileMode
+	name  string
+	size  int64
+	mode  os.FileMode
 	mtime time.Time
-	sys interface{}
+	sys   interface{}
 }
 
 // Name returns the base name of the file.
@@ -46,12 +46,12 @@ func (fi *fileInfo) Sys() interface{} { return fi.sys }
 // FileStat holds the original unmarshalled values from a call to READDIR or *STAT.
 // It is exported for the purposes of accessing the raw values via os.FileInfo.Sys()
 type FileStat struct {
-	Size  uint64
-	Mode  uint32
-	Mtime uint32
-	Atime uint32
-	Uid uint32
-	Gid uint32
+	Size     uint64
+	Mode     uint32
+	Mtime    uint32
+	Atime    uint32
+	Uid      uint32
+	Gid      uint32
 	Extended []StatExtended
 }
 
@@ -62,11 +62,11 @@ type StatExtended struct {
 
 func fileInfoFromStat(st *FileStat, name string) os.FileInfo {
 	fs := &fileInfo{
-		name: name,
-		size: int64(st.Size),
-		mode: toFileMode(st.Mode),
+		name:  name,
+		size:  int64(st.Size),
+		mode:  toFileMode(st.Mode),
 		mtime: time.Unix(int64(st.Mtime), 0),
-		sys: st,
+		sys:   st,
 	}
 	return fs
 }
@@ -93,13 +93,13 @@ func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 	if flags&ssh_FILEXFER_ATTR_EXTENDED == ssh_FILEXFER_ATTR_EXTENDED {
 		var count uint32
 		count, b = unmarshalUint32(b)
-		ext := make([]StatExtended,count,count)
+		ext := make([]StatExtended, count, count)
 		for i := uint32(0); i < count; i++ {
 			var typ string
 			var data string
 			typ, b = unmarshalString(b)
 			data, b = unmarshalString(b)
-			ext[i] = StatExtended{typ,data}
+			ext[i] = StatExtended{typ, data}
 		}
 		fs.Extended = ext
 	}
