@@ -72,6 +72,7 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	}
 	l := uint32(len(bb))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
+	debug("send packet %T, len: %v", m, l)
 	_, err = w.Write(hdr)
 	if err != nil {
 		return err
@@ -125,7 +126,7 @@ func marshalIdString(packetType byte, id uint32, str string) ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(str)
 
-	b := make([]byte, l)
+	b := make([]byte, 0, l)
 	b = append(b, packetType)
 	b = marshalUint32(b, id)
 	b = marshalString(b, str)
@@ -239,7 +240,7 @@ func (p sshFxpReadPacket) MarshalBinary() ([]byte, error) {
 		4 + len(p.Handle) +
 		8 + 4 // uint64 + uint32
 
-	b := make([]byte, l)
+	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_READ)
 	b = marshalUint32(b, p.Id)
 	b = marshalString(b, p.Handle)
@@ -259,7 +260,7 @@ func (p sshFxpRenamePacket) MarshalBinary() ([]byte, error) {
 		4 + len(p.Oldpath) +
 		4 + len(p.Newpath)
 
-	b := make([]byte, l)
+	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_RENAME)
 	b = marshalString(b, p.Oldpath)
 	b = marshalString(b, p.Newpath)
