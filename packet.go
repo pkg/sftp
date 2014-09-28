@@ -256,12 +256,13 @@ type sshFxpRenamePacket struct {
 }
 
 func (p sshFxpRenamePacket) MarshalBinary() ([]byte, error) {
-	l := 1 + // type(byte)
+	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Oldpath) +
 		4 + len(p.Newpath)
 
 	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_RENAME)
+	b = marshalUint32(b, p.Id)
 	b = marshalString(b, p.Oldpath)
 	b = marshalString(b, p.Newpath)
 	return b, nil
