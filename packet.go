@@ -210,13 +210,12 @@ type sshFxpOpenPacket struct {
 	Path   string
 	Pflags uint32
 	Flags  uint32 // ignored
-	Size   uint64 // ignored
 }
 
 func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 +
 		4 + len(p.Path) +
-		4 + 4 + 8
+		4 + 4
 
 	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_OPEN)
@@ -224,7 +223,6 @@ func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Pflags)
 	b = marshalUint32(b, p.Flags)
-	b = marshalUint64(b, p.Size)
 	return b, nil
 }
 
