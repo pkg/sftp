@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"encoding"
 	"io"
 	"os"
 	"path"
@@ -62,15 +63,7 @@ func (c *Client) Create(path string) (*File, error) {
 }
 
 func (c *Client) sendInit() error {
-	type packet struct {
-		Type       byte
-		Version    uint32
-		Extensions []struct {
-			Name, Data string
-		}
-	}
-	return sendPacket(c.w, packet{
-		Type:    ssh_FXP_INIT,
+	return sendPacket(c.w, sshFxInitPacket{
 		Version: 3, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 	})
 }
@@ -112,14 +105,8 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	defer c.mu.Unlock()
 	var done = false
 	for !done {
-		type packet struct {
-			Type   byte
-			Id     uint32
-			Handle string
-		}
 		id := c.nextId()
-		typ, data, err1 := c.sendRequest(packet{
-			Type:   ssh_FXP_READDIR,
+		typ, data, err1 := c.sendRequest(sshFxpReaddirPacket{
 			Id:     id,
 			Handle: handle,
 		})
@@ -144,7 +131,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 				if filename == "." || filename == ".." {
 					continue
 				}
-				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)) )
+				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)))
 			}
 		case ssh_FXP_STATUS:
 			// TODO(dfc) scope warning!
@@ -160,16 +147,10 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	return attrs, err
 }
 func (c *Client) opendir(path string) (string, error) {
-	type packet struct {
-		Type byte
-		Id   uint32
-		Path string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type: ssh_FXP_OPENDIR,
+	typ, data, err := c.sendRequest(sshFxpOpendirPacket{
 		Id:   id,
 		Path: path,
 	})
@@ -192,16 +173,10 @@ func (c *Client) opendir(path string) (string, error) {
 }
 
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
-	type packet struct {
-		Type byte
-		Id   uint32
-		Path string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type: ssh_FXP_LSTAT,
+	typ, data, err := c.sendRequest(sshFxpLstatPacket{
 		Id:   id,
 		Path: p,
 	})
@@ -261,19 +236,11 @@ func (c *Client) ReadLink(p string) (string, error) {
 }
 
 // setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
-func (c *Client) setstat(path string, flags uint32, attrs interface{} ) error {
-	type packet struct {
-		Type byte
-		Id uint32
-		Path string
-		Flags uint32
-		Attrs interface{}
-	}
+func (c *Client) setstat(path string, flags uint32, attrs interface{}) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:  ssh_FXP_SETSTAT,
+	typ, data, err := c.sendRequest(sshFxpSetstatPacket{
 		Id:    id,
 		Path:  path,
 		Flags: flags,
@@ -307,7 +274,7 @@ func (c *Client) Chown(path string, uid, gid int) error {
 		Gid uint32
 	}
 	attrs := owner{uint32(uid), uint32(gid)}
-	return c.setstat(path, ssh_FILEXFER_ATTR_UIDGID, attrs)	
+	return c.setstat(path, ssh_FILEXFER_ATTR_UIDGID, attrs)
 }
 
 // Chmod changes the permissions of the named file.
@@ -316,7 +283,7 @@ func (c *Client) Chmod(path string, mode os.FileMode) error {
 }
 
 // Truncate sets the size of the named file. Although it may be safely assumed
-// that if the size is less than its current size it will be truncated to fit, 
+// that if the size is less than its current size it will be truncated to fit,
 // the SFTP protocol does not specify what behavior the server should do when setting
 // size greater than the current size.
 func (c *Client) Truncate(path string, size int64) error {
@@ -338,19 +305,10 @@ func (c *Client) OpenFile(path string, f int) (*File, error) {
 }
 
 func (c *Client) open(path string, pflags uint32) (*File, error) {
-	type packet struct {
-		Type   byte
-		Id     uint32
-		Path   string
-		Pflags uint32
-		Flags  uint32 // ignored
-		Size   uint64 // ignored
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:   ssh_FXP_OPEN,
+	typ, data, err := c.sendRequest(sshFxpOpenPacket{
 		Id:     id,
 		Path:   path,
 		Pflags: pflags,
@@ -376,18 +334,10 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 // readAt reads len(buf) bytes from the remote file indicated by handle starting
 // from offset.
 func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error) {
-	type packet struct {
-		Type   byte
-		Id     uint32
-		Handle string
-		Offset uint64
-		Len    uint32
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:   ssh_FXP_READ,
+	typ, data, err := c.sendRequest(sshFxpReadPacket{
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
@@ -416,16 +366,10 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 // to SSH_FXP_OPEN or SSH_FXP_OPENDIR. The handle becomes invalid
 // immediately after this request has been sent.
 func (c *Client) close(handle string) error {
-	type packet struct {
-		Type   byte
-		Id     uint32
-		Handle string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:   ssh_FXP_CLOSE,
+	typ, data, err := c.sendRequest(sshFxpClosePacket{
 		Id:     id,
 		Handle: handle,
 	})
@@ -441,16 +385,10 @@ func (c *Client) close(handle string) error {
 }
 
 func (c *Client) fstat(handle string) (*FileStat, error) {
-	type packet struct {
-		Type   byte
-		Id     uint32
-		Handle string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:   ssh_FXP_FSTAT,
+	typ, data, err := c.sendRequest(sshFxpFstatPacket{
 		Id:     id,
 		Handle: handle,
 	})
@@ -489,16 +427,10 @@ func (c *Client) Remove(path string) error {
 }
 
 func (c *Client) removeFile(path string) error {
-	type packet struct {
-		Type     byte
-		Id       uint32
-		Filename string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:     ssh_FXP_REMOVE,
+	typ, data, err := c.sendRequest(sshFxpRemovePacket{
 		Id:       id,
 		Filename: path,
 	})
@@ -514,16 +446,10 @@ func (c *Client) removeFile(path string) error {
 }
 
 func (c *Client) removeDirectory(path string) error {
-	type packet struct {
-		Type byte
-		Id   uint32
-		Path string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type: ssh_FXP_RMDIR,
+	typ, data, err := c.sendRequest(sshFxpRmdirPacket{
 		Id:   id,
 		Path: path,
 	})
@@ -540,16 +466,10 @@ func (c *Client) removeDirectory(path string) error {
 
 // Rename renames a file.
 func (c *Client) Rename(oldname, newname string) error {
-	type packet struct {
-		Type             byte
-		Id               uint32
-		Oldpath, Newpath string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:    ssh_FXP_RENAME,
+	typ, data, err := c.sendRequest(sshFxpRenamePacket{
 		Id:      id,
 		Oldpath: oldname,
 		Newpath: newname,
@@ -565,7 +485,7 @@ func (c *Client) Rename(oldname, newname string) error {
 	}
 }
 
-func (c *Client) sendRequest(p interface{}) (byte, []byte, error) {
+func (c *Client) sendRequest(p encoding.BinaryMarshaler) (byte, []byte, error) {
 	if err := sendPacket(c.w, p); err != nil {
 		return 0, nil, err
 	}
@@ -575,19 +495,10 @@ func (c *Client) sendRequest(p interface{}) (byte, []byte, error) {
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
 // from offset.
 func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, error) {
-	type packet struct {
-		Type   byte
-		Id     uint32
-		Handle string
-		Offset uint64
-		Length uint32
-		Data   []byte
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type:   ssh_FXP_WRITE,
+	typ, data, err := c.sendRequest(sshFxpWritePacket{
 		Id:     id,
 		Handle: handle,
 		Offset: offset,
@@ -612,18 +523,10 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 // directory with the specified path already exists, or if the directory's
 // parent folder does not exist (the method cannot create complete paths).
 func (c *Client) Mkdir(path string) error {
-	type packet struct {
-		Type  byte
-		Id    uint32
-		Path  string
-		Flags uint32 // ignored
-		Size  uint64 // ignored
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type: ssh_FXP_MKDIR,
+	typ, data, err := c.sendRequest(sshFxpMkdirPacket{
 		Id:   id,
 		Path: path,
 	})
@@ -731,7 +634,7 @@ func (f *File) Chmod(mode os.FileMode) error {
 }
 
 // Truncate sets the size of the current file. Although it may be safely assumed
-// that if the size is less than its current size it will be truncated to fit, 
+// that if the size is less than its current size it will be truncated to fit,
 // the SFTP protocol does not specify what behavior the server should do when setting
 // size greater than the current size.
 func (f *File) Truncate(size int64) error {
