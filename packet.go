@@ -195,6 +195,15 @@ func (p sshFxpRmdirPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_RMDIR, p.Id, p.Path)
 }
 
+type sshFxpReadlinkPacket struct {
+	Id   uint32
+	Path string
+}
+
+func (p sshFxpReadlinkPacket) MarshalBinary() ([]byte, error) {
+	return marshalIdString(ssh_FXP_READLINK, p.Id, p.Path)
+}
+
 type sshFxpOpenPacket struct {
 	Id     uint32
 	Path   string

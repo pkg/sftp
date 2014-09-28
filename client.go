@@ -200,16 +200,10 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 
 // ReadLink reads the target of a symbolic link.
 func (c *Client) ReadLink(p string) (string, error) {
-	type packet struct {
-		Type byte
-		Id   uint32
-		Path string
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextId()
-	typ, data, err := c.sendRequest(packet{
-		Type: ssh_FXP_READLINK,
+	typ, data, err := c.sendRequest(sshFxpReadlinkPacket{
 		Id:   id,
 		Path: p,
 	})
