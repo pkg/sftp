@@ -328,6 +328,23 @@ func TestClientRemove(t *testing.T) {
 	}
 }
 
+func TestClientRemoveDir(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	dir, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+}
+
 func TestClientRemoveFailed(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
@@ -362,6 +379,24 @@ func TestClientRename(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(f2); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientReadLine(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2 := f.Name() + ".sym"
+	if err := os.Symlink(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sftp.ReadLink(f2); err != nil {
 		t.Fatal(err)
 	}
 }
