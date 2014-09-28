@@ -294,20 +294,18 @@ type sshFxpMkdirPacket struct {
 	Id    uint32
 	Path  string
 	Flags uint32 // ignored
-	Size  uint64 // ignored
 }
 
 func (p sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Path) +
-		4 + 8 // uint32 + uint64
+		4  // uint32 
 
 	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_MKDIR)
 	b = marshalUint32(b, p.Id)
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Flags)
-	b = marshalUint64(b, p.Size)
 	return b, nil
 }
 
