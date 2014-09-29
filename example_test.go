@@ -9,7 +9,7 @@ import (
 )
 
 func Example(conn *ssh.Client) {
-	// open an SFTP sesison over an existing ssh connection.
+	// open an SFTP session over an existing ssh connection.
 	sftp, err := sftp.NewClient(conn)
 	if err != nil {
 		log.Fatal(err)
