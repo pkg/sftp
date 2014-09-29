@@ -40,6 +40,20 @@ func NewClient(conn *ssh.Client) (*Client, error) {
 	return sftp, sftp.recvVersion()
 }
 
+// NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
+// This can be used for connecting to an SFTP server over TCP/TLS or by using
+// the system's ssh client program (e.g. via exec.Command).
+func NewClientPipe(rd io.Reader, wr io.WriteCloser) (*Client, error) {
+	sftp := &Client{
+		w: wr,
+		r: rd,
+	}
+	if err := sftp.sendInit(); err != nil {
+		return nil, err
+	}
+	return sftp, sftp.recvVersion()
+}
+
 // Client represents an SFTP session on a *ssh.ClientConn SSH connection.
 // Multiple Clients can be active on a single SSH connection, and a Client
 // may be called concurrently from multiple Goroutines.
