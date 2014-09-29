@@ -119,21 +119,21 @@ func TestClientLstatMissing(t *testing.T) {
 }
 
 func TestClientMkdir(t *testing.T) {
-        sftp, cmd := testClient(t, READWRITE)
-        defer cmd.Wait()
-        defer sftp.Close()
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
 
-        dir, err := ioutil.TempDir("", "sftptest")
-        if err != nil {
-                t.Fatal(err)
-        }
+	dir, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sub := path.Join(dir, "mkdir1")
-        if err := sftp.Mkdir(sub); err != nil {
-                t.Fatal(err)
-        }
-        if _, err := os.Lstat(sub); err != nil {
-                t.Fatal(err)
-        }
+	if err := sftp.Mkdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(sub); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestClientOpen(t *testing.T) {
