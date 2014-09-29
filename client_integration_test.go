@@ -52,10 +52,12 @@ func testClient(t *testing.T, readonly bool) (*Client, *exec.Cmd) {
 	if err := cmd.Start(); err != nil {
 		t.Skipf("could not start sftp-server process: %v", err)
 	}
-	sftp := &Client{
-		w: pw,
-		r: pr,
+
+	sftp, err := NewClientPipe(pr, pw)
+	if err != nil {
+		t.Fatal(err)
 	}
+
 	if err := sftp.sendInit(); err != nil {
 		defer cmd.Wait()
 		t.Fatal(err)
