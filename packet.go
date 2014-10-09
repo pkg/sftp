@@ -299,7 +299,7 @@ type sshFxpMkdirPacket struct {
 func (p sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Path) +
-		4  // uint32 
+		4 // uint32
 
 	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_MKDIR)
