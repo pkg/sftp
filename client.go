@@ -30,14 +30,8 @@ func NewClient(conn *ssh.Client) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	sftp := &Client{
-		w: pw,
-		r: pr,
-	}
-	if err := sftp.sendInit(); err != nil {
-		return nil, err
-	}
-	return sftp, sftp.recvVersion()
+
+	return NewClientPipe(pr, pw)
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
