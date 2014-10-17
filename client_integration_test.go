@@ -32,7 +32,7 @@ var testSftp = flag.String("sftp", "/usr/lib/openssh/sftp-server", "location of 
 
 // testClient returns a *Client connected to a localy running sftp-server
 // the *exec.Cmd returned must be defer Wait'd.
-func testClient(t *testing.T, readonly bool) (*Client, *exec.Cmd) {
+func testClient(t testing.TB, readonly bool) (*Client, *exec.Cmd) {
 	if !*testIntegration {
 		t.Skip("skipping intergration test")
 	}
@@ -745,4 +745,154 @@ func TestClientWalk(t *testing.T) {
 	if err := os.RemoveAll(tree.name); err != nil {
 		t.Errorf("removeTree: %v", err)
 	}
+}
+
+func benchmarkRead(b *testing.B, bufsize int) {
+	size := 10*1024*1024 + 123 // ~10MiB
+
+	// open sftp client
+	sftp, cmd := testClient(b, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	buf := make([]byte, bufsize)
+
+	b.ResetTimer()
+	b.SetBytes(int64(size))
+
+	for i := 0; i < b.N; i++ {
+		offset := 0
+
+		f2, err := sftp.Open("/dev/zero")
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer f2.Close()
+
+		for offset < size {
+			n, err := io.ReadFull(f2, buf)
+			offset += n
+			if err == io.ErrUnexpectedEOF && offset != size {
+				b.Fatalf("read too few bytes! want: %d, got: %d", size, n)
+			}
+
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			offset += n
+		}
+	}
+}
+
+func BenchmarkRead1k(b *testing.B) {
+	benchmarkRead(b, 1*1024)
+}
+
+func BenchmarkRead16k(b *testing.B) {
+	benchmarkRead(b, 16*1024)
+}
+
+func BenchmarkRead32k(b *testing.B) {
+	benchmarkRead(b, 32*1024)
+}
+
+func BenchmarkRead128k(b *testing.B) {
+	benchmarkRead(b, 128*1024)
+}
+
+func BenchmarkRead512k(b *testing.B) {
+	benchmarkRead(b, 512*1024)
+}
+
+func BenchmarkRead1MiB(b *testing.B) {
+	benchmarkRead(b, 1024*1024)
+}
+
+func BenchmarkRead4MiB(b *testing.B) {
+	benchmarkRead(b, 4*1024*1024)
+}
+
+func benchmarkWrite(b *testing.B, bufsize int) {
+	size := 10*1024*1024 + 123 // ~10MiB
+
+	// open sftp client
+	sftp, cmd := testClient(b, false)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	data := make([]byte, size)
+
+	b.ResetTimer()
+	b.SetBytes(int64(size))
+
+	for i := 0; i < b.N; i++ {
+		offset := 0
+
+		f, err := ioutil.TempFile("", "sftptest")
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer os.Remove(f.Name())
+
+		f2, err := sftp.Create(f.Name())
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer f2.Close()
+
+		for offset < size {
+			n, err := f2.Write(data[offset:min(len(data), offset+bufsize)])
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			if offset+n < size && n != bufsize {
+				b.Fatalf("wrote too few bytes! want: %d, got: %d", size, n)
+			}
+
+			offset += n
+		}
+
+		f2.Close()
+
+		fi, err := os.Stat(f.Name())
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		if fi.Size() != int64(size) {
+			b.Fatalf("wrong file size: want %d, got %d", size, fi.Size())
+		}
+
+		os.Remove(f.Name())
+	}
+}
+
+func BenchmarkWrite1k(b *testing.B) {
+	benchmarkWrite(b, 1*1024)
+}
+
+func BenchmarkWrite16k(b *testing.B) {
+	benchmarkWrite(b, 16*1024)
+}
+
+func BenchmarkWrite32k(b *testing.B) {
+	benchmarkWrite(b, 32*1024)
+}
+
+func BenchmarkWrite128k(b *testing.B) {
+	benchmarkWrite(b, 128*1024)
+}
+
+func BenchmarkWrite512k(b *testing.B) {
+	benchmarkWrite(b, 512*1024)
+}
+
+func BenchmarkWrite1MiB(b *testing.B) {
+	benchmarkWrite(b, 1024*1024)
+}
+
+func BenchmarkWrite4MiB(b *testing.B) {
+	benchmarkWrite(b, 4*1024*1024)
 }
