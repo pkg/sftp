@@ -30,14 +30,8 @@ func NewClient(conn *ssh.Client) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	sftp := &Client{
-		w: pw,
-		r: pr,
-	}
-	if err := sftp.sendInit(); err != nil {
-		return nil, err
-	}
-	return sftp, sftp.recvVersion()
+
+	return NewClientPipe(pr, pw)
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
@@ -76,9 +70,11 @@ func (c *Client) Create(path string) (*File, error) {
 	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
 }
 
+const sftpProtocolVersion = 3 // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
+
 func (c *Client) sendInit() error {
 	return sendPacket(c.w, sshFxInitPacket{
-		Version: 3, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
+		Version: sftpProtocolVersion, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 	})
 }
 
@@ -91,13 +87,19 @@ func (c *Client) nextId() uint32 {
 }
 
 func (c *Client) recvVersion() error {
-	typ, _, err := recvPacket(c.r)
+	typ, data, err := recvPacket(c.r)
 	if err != nil {
 		return err
 	}
 	if typ != ssh_FXP_VERSION {
 		return &unexpectedPacketErr{ssh_FXP_VERSION, typ}
 	}
+
+	version, _ := unmarshalUint32(data)
+	if version != sftpProtocolVersion {
+		return &unexpectedVersionErr{sftpProtocolVersion, version}
+	}
+
 	return nil
 }
 

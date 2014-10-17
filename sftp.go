@@ -173,6 +173,12 @@ func unexpectedCount(want, got uint32) error {
 	return fmt.Errorf("sftp: unexpected count: want %v, got %v", want, got)
 }
 
+type unexpectedVersionErr struct{ want, got uint32 }
+
+func (u *unexpectedVersionErr) Error() string {
+	return fmt.Sprintf("sftp: unexpected server version: want %v, got %v", u.want, u.got)
+}
+
 type StatusError struct {
 	Code      uint32
 	msg, lang string
