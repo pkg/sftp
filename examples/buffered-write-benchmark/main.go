@@ -1,11 +1,10 @@
-// streaming-write-benchmark benchmarks the peformance of writing
-// from /dev/zero on the client to /dev/null on the server via io.Copy.
+// buffered-write-benchmark benchmarks the peformance of writing
+// a single large []byte on the client to /dev/null on the server via io.Copy.
 package main
 
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -68,11 +67,11 @@ func main() {
 	}
 	defer f.Close()
 
-	const size int64 = 1e9
+	const size = 1e9
 
 	log.Printf("writing %v bytes", size)
 	t1 := time.Now()
-	n, err := io.Copy(w, io.LimitReader(f, size))
+	n, err := w.Write(make([]byte, size))
 	if err != nil {
 		log.Fatal(err)
 	}

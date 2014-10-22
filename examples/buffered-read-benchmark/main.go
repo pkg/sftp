@@ -1,5 +1,5 @@
-// streaming-write-benchmark benchmarks the peformance of writing
-// from /dev/zero on the client to /dev/null on the server via io.Copy.
+// buffered-read-benchmark benchmarks the peformance of reading
+// from /dev/zero on the server to a []byte on the client via io.Copy.
 package main
 
 import (
@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"syscall"
 	"time"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -56,28 +55,22 @@ func main() {
 	}
 	defer c.Close()
 
-	w, err := c.OpenFile("/dev/null", syscall.O_WRONLY)
+	r, err := c.Open("/dev/zero")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer w.Close()
+	defer r.Close()
 
-	f, err := os.Open("/dev/zero")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
+	const size = 1e9
 
-	const size int64 = 1e9
-
-	log.Printf("writing %v bytes", size)
+	log.Printf("reading %v bytes", size)
 	t1 := time.Now()
-	n, err := io.Copy(w, io.LimitReader(f, size))
+	n, err := io.ReadFull(r, make([]byte, size))
 	if err != nil {
 		log.Fatal(err)
 	}
 	if n != size {
 		log.Fatalf("copy: expected %v bytes, got %d", size, n)
 	}
-	log.Printf("wrote %v bytes in %s", size, time.Since(t1))
+	log.Printf("read %v bytes in %s", size, time.Since(t1))
 }
