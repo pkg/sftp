@@ -10,7 +10,7 @@ import (
 
 	"github.com/kr/fs"
 
-	"code.google.com/p/go.crypto/ssh"
+	"golang.org/x/crypto/ssh"
 )
 
 // New creates a new SFTP client on conn.
