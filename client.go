@@ -521,7 +521,7 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 	switch typ {
 	case ssh_FXP_STATUS:
 		if err := okOrErr(unmarshalStatus(id, data)); err != nil {
-			return 0, nil
+			return 0, err
 		}
 		return uint32(len(buf)), nil
 	default:
