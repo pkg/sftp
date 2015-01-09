@@ -10,7 +10,8 @@ import (
 
 	"github.com/kr/fs"
 
-	"golang.org/x/crypto/ssh"
+	//"golang.org/x/crypto/ssh"
+	ssh "github.com/ScriptRock/ssh_block"
 )
 
 // New creates a new SFTP client on conn.

@@ -6,7 +6,8 @@ import (
 	"os"
 	"os/exec"
 
-	"golang.org/x/crypto/ssh"
+	//"golang.org/x/crypto/ssh"
+	ssh "github.com/ScriptRock/ssh_block"
 
 	"github.com/pkg/sftp"
 )
