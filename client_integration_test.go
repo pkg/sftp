@@ -58,14 +58,6 @@ func testClient(t testing.TB, readonly bool) (*Client, *exec.Cmd) {
 		t.Fatal(err)
 	}
 
-	if err := sftp.sendInit(); err != nil {
-		defer cmd.Wait()
-		t.Fatal(err)
-	}
-	if err := sftp.recvVersion(); err != nil {
-		defer cmd.Wait()
-		t.Fatal(err)
-	}
 	return sftp, cmd
 }
 
@@ -73,6 +65,11 @@ func TestNewClient(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY)
 	defer cmd.Wait()
 
+	if err := sftp.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// call Close() a second time, this should not panic
 	if err := sftp.Close(); err != nil {
 		t.Fatal(err)
 	}
