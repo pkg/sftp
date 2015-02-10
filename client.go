@@ -571,7 +571,7 @@ func (f *File) Close() error {
 func (f *File) Read(b []byte) (int, error) {
 	var read int
 	for len(b) > 0 {
-		n, err := f.c.readAt(f.handle, f.offset, b[:min(len(b), maxWritePacket)])
+		n, err := f.c.readAt(f.handle, f.offset, b[:min(len(b), MaxReadPacket)])
 		f.offset += uint64(n)
 		read += int(n)
 		if err != nil {
@@ -592,8 +592,11 @@ func (f *File) Stat() (os.FileInfo, error) {
 	return fileInfoFromStat(fs, path.Base(f.path)), nil
 }
 
-// clamp writes to less than 32k
-const maxWritePacket = 1 << 15
+// MaxReadPacket controls the maximum size in bytes of a single read packet.
+var MaxReadPacket = 32 * 1024
+
+// MaxWritePacket controls the maximum size in bytes of a single write packet.
+var MaxWritePacket = 32 * 1024
 
 // Write writes len(b) bytes to the File. It returns the number of bytes
 // written and an error, if any. Write returns a non-nil error when n !=
@@ -601,7 +604,7 @@ const maxWritePacket = 1 << 15
 func (f *File) Write(b []byte) (int, error) {
 	var written int
 	for len(b) > 0 {
-		n, err := f.c.writeAt(f.handle, f.offset, b[:min(len(b), maxWritePacket)])
+		n, err := f.c.writeAt(f.handle, f.offset, b[:min(len(b), MaxWritePacket)])
 		f.offset += uint64(n)
 		written += int(n)
 		if err != nil {
