@@ -6,10 +6,8 @@ import (
 	"os"
 	"os/exec"
 
-	//"golang.org/x/crypto/ssh"
-	ssh "github.com/ScriptRock/ssh_block"
-
-	"github.com/pkg/sftp"
+	"github.com/ScriptRock/crypto/ssh"
+	"github.com/ScriptRock/sftp"
 )
 
 func Example(conn *ssh.Client) {
