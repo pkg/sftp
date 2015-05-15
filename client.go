@@ -7,6 +7,9 @@ import (
 	"path"
 	"sync"
 	"time"
+	"encoding/binary"
+	"bytes"
+	"errors"
 
 	"github.com/kr/fs"
 
@@ -417,6 +420,43 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 		return nil, unmarshalStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
+	}
+}
+
+// Get vfs stats from remote host.
+// Implementing statvfs@openssh.com SSH_FXP_EXTENDED feature
+// from http://www.opensource.apple.com/source/OpenSSH/OpenSSH-175/openssh/PROTOCOL?txt
+func (c *Client) StatVFS(path string) (*StatVFS, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// send the StatVFS packet to the server
+	id := c.nextId()
+	typ, data, err := c.sendRequest(sshFxpStatvfsPacket{
+		Id:   id,
+		Path: path,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	switch typ {
+		// server responded with valid data
+		case ssh_FXP_EXTENDED_REPLY:
+			var response StatVFS
+			err = binary.Read(bytes.NewReader(data), binary.BigEndian, &response)
+			if err != nil {
+	    		return nil, errors.New("can not parse reply")
+			}
+
+			return &response, nil
+
+		// the resquest failed
+		case ssh_FXP_STATUS:
+			return nil, errors.New("statvfs@openssh.com failure")
+
+		default:
+			return nil, unimplementedPacketErr(typ)
 	}
 }
 
