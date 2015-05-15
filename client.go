@@ -453,7 +453,7 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 
 		// the resquest failed
 		case ssh_FXP_STATUS:
-			return nil, errors.New("statvfs@openssh.com failure")
+			return nil, errors.New(fxp(ssh_FXP_STATUS).String())
 
 		default:
 			return nil, unimplementedPacketErr(typ)
