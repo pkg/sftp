@@ -58,6 +58,11 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		w:         wr,
 		r:         rd,
 		maxPacket: 1 << 15,
+		inflight: make(map[uint32]chan struct {
+			typ  byte
+			data []byte
+			err  error
+		}),
 	}
 	if err := sftp.applyOptions(opts...); err != nil {
 		wr.Close()
@@ -80,9 +85,14 @@ type Client struct {
 	r io.Reader
 
 	maxPacket int // max packet size read or written.
+	nextid    uint32
 
-	mu     sync.Mutex // ensures only on request is in flight to the server at once
-	nextid uint32
+	mu       sync.Mutex // ensures only on request is in flight to the server at once
+	inflight map[uint32]chan struct {
+		typ  byte
+		data []byte
+		err  error
+	} // outstanding requests
 }
 
 // Close closes the SFTP session.
@@ -527,13 +537,62 @@ func (c *Client) Rename(oldname, newname string) error {
 	}
 }
 
-func (c *Client) sendRequest(p encoding.BinaryMarshaler) (byte, []byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := sendPacket(c.w, p); err != nil {
-		return 0, nil, err
-	}
-	return recvPacket(c.r)
+func (c *Client) sendRequest(p interface {
+	id() uint32
+	encoding.BinaryMarshaler
+}) (byte, []byte, error) {
+	id := p.id()
+	ch := make(chan struct {
+		typ  byte
+		data []byte
+		err  error
+	})
+	go func() {
+		c.mu.Lock()
+		c.inflight[id] = ch
+		err := sendPacket(c.w, p)
+		c.mu.Unlock()
+		if err != nil {
+			ch <- struct {
+				typ  byte
+				data []byte
+				err  error
+			}{0, nil, err}
+			return
+		}
+
+		// another goroutine may pick up the lock here
+		c.mu.Lock()
+		typ, data, err := recvPacket(c.r)
+		if err != nil {
+			c.mu.Unlock()
+			ch <- struct {
+				typ  byte
+				data []byte
+				err  error
+			}{0, nil, err}
+			return
+		}
+		sid, _ := unmarshalUint32(data)
+		ch, ok := c.inflight[sid]
+		delete(c.inflight, sid)
+		c.mu.Unlock()
+		if !ok {
+			ch <- struct {
+				typ  byte
+				data []byte
+				err  error
+			}{0, nil, fmt.Errorf("sid: %v not found", sid)}
+			return
+		}
+		ch <- struct {
+			typ  byte
+			data []byte
+			err  error
+		}{typ, data, nil}
+	}()
+	s := <-ch
+	return s.typ, s.data, s.err
 }
 
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
