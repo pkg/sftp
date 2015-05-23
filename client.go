@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -17,8 +18,19 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// MaxPacket sets the maximum size of the payload.
+func MaxPacket(size int) func(*Client) error {
+	return func(c *Client) error {
+		if size < 1<<15 {
+			return fmt.Errorf("size must be greater or equal to 32k")
+		}
+		c.maxPacket = size
+		return nil
+	}
+}
+
 // New creates a new SFTP client on conn.
-func NewClient(conn *ssh.Client) (*Client, error) {
+func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
 		return nil, err
@@ -35,18 +47,24 @@ func NewClient(conn *ssh.Client) (*Client, error) {
 		return nil, err
 	}
 
-	return NewClientPipe(pr, pw)
+	return NewClientPipe(pr, pw, opts...)
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
 // This can be used for connecting to an SFTP server over TCP/TLS or by using
 // the system's ssh client program (e.g. via exec.Command).
-func NewClientPipe(rd io.Reader, wr io.WriteCloser) (*Client, error) {
+func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error) (*Client, error) {
 	sftp := &Client{
-		w: wr,
-		r: rd,
+		w:         wr,
+		r:         rd,
+		maxPacket: 1 << 15,
+	}
+	if err := sftp.applyOptions(opts...); err != nil {
+		wr.Close()
+		return nil, err
 	}
 	if err := sftp.sendInit(); err != nil {
+		wr.Close()
 		return nil, err
 	}
 	return sftp, sftp.recvVersion()
@@ -58,8 +76,11 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser) (*Client, error) {
 //
 // Client implements the github.com/kr/fs.FileSystem interface.
 type Client struct {
-	w      io.WriteCloser
-	r      io.Reader
+	w io.WriteCloser
+	r io.Reader
+
+	maxPacket int // max packet size read or written.
+
 	mu     sync.Mutex // ensures only on request is in flight to the server at once
 	nextid uint32
 }
@@ -560,6 +581,17 @@ func (c *Client) Mkdir(path string) error {
 	}
 }
 
+// applyOptions applies options functions to the Client.
+// If an error is encountered, option processing ceases.
+func (c *Client) applyOptions(opts ...func(*Client) error) error {
+	for _, f := range opts {
+		if err := f(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // File represents a remote file.
 type File struct {
 	c      *Client
@@ -580,7 +612,7 @@ func (f *File) Close() error {
 func (f *File) Read(b []byte) (int, error) {
 	var read int
 	for len(b) > 0 {
-		n, err := f.c.readAt(f.handle, f.offset, b[:min(len(b), maxWritePacket)])
+		n, err := f.c.readAt(f.handle, f.offset, b[:min(len(b), f.c.maxPacket)])
 		f.offset += uint64(n)
 		read += int(n)
 		if err != nil {
@@ -601,16 +633,13 @@ func (f *File) Stat() (os.FileInfo, error) {
 	return fileInfoFromStat(fs, path.Base(f.path)), nil
 }
 
-// clamp writes to less than 32k
-const maxWritePacket = 1 << 15
-
 // Write writes len(b) bytes to the File. It returns the number of bytes
 // written and an error, if any. Write returns a non-nil error when n !=
 // len(b).
 func (f *File) Write(b []byte) (int, error) {
 	var written int
 	for len(b) > 0 {
-		n, err := f.c.writeAt(f.handle, f.offset, b[:min(len(b), maxWritePacket)])
+		n, err := f.c.writeAt(f.handle, f.offset, b[:min(len(b), f.c.maxPacket)])
 		f.offset += uint64(n)
 		written += int(n)
 		if err != nil {
