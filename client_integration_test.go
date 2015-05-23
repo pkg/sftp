@@ -14,9 +14,9 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"syscall"
 	"testing"
 	"testing/quick"
-	"syscall"
 
 	"github.com/kr/fs"
 )
@@ -916,19 +916,19 @@ func TestClientStatVFS(t *testing.T) {
 	}
 
 	// check some stats
-	if (vfs.Frsize != uint64(s.Frsize)) {
+	if vfs.Frsize != uint64(s.Frsize) {
 		t.Fatal("fr_size does not match")
 	}
 
-	if (vfs.Bsize != uint64(s.Bsize)) {
+	if vfs.Bsize != uint64(s.Bsize) {
 		t.Fatal("f_bsize does not match")
 	}
 
-	if (vfs.Namemax != uint64(s.Namelen)) {
+	if vfs.Namemax != uint64(s.Namelen) {
 		t.Fatal("f_namemax does not match")
 	}
 
-	if (vfs.Bavail != s.Bavail) {
+	if vfs.Bavail != s.Bavail {
 		t.Fatal("f_bavail does not match")
 	}
 

@@ -1,15 +1,16 @@
 package sftp
 
 import (
+	"bytes"
 	"encoding"
+	"encoding/binary"
+	"errors"
 	"io"
 	"os"
 	"path"
 	"sync"
+	"sync/atomic"
 	"time"
-	"encoding/binary"
-	"bytes"
-	"errors"
 
 	"github.com/kr/fs"
 
@@ -59,7 +60,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser) (*Client, error) {
 type Client struct {
 	w      io.WriteCloser
 	r      io.Reader
-	mu     sync.Mutex // locks mu and seralises commands to the server
+	mu     sync.Mutex // ensures only on request is in flight to the server at once
 	nextid uint32
 }
 
@@ -81,12 +82,9 @@ func (c *Client) sendInit() error {
 	})
 }
 
-// returns the current value of c.nextid and increments it
-// callers is expected to hold c.mu
+// returns the next value of c.nextid
 func (c *Client) nextId() uint32 {
-	v := c.nextid
-	c.nextid++
-	return v
+	return atomic.AddUint32(&c.nextid, 1)
 }
 
 func (c *Client) recvVersion() error {
@@ -120,8 +118,6 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	}
 	defer c.close(handle) // this has to defer earlier than the lock below
 	var attrs []os.FileInfo
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	var done = false
 	for !done {
 		id := c.nextId()
@@ -166,8 +162,6 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	return attrs, err
 }
 func (c *Client) opendir(path string) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpOpendirPacket{
 		Id:   id,
@@ -192,8 +186,6 @@ func (c *Client) opendir(path string) (string, error) {
 }
 
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpLstatPacket{
 		Id:   id,
@@ -219,8 +211,6 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 
 // ReadLink reads the target of a symbolic link.
 func (c *Client) ReadLink(p string) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpReadlinkPacket{
 		Id:   id,
@@ -250,8 +240,6 @@ func (c *Client) ReadLink(p string) (string, error) {
 
 // setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
 func (c *Client) setstat(path string, flags uint32, attrs interface{}) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpSetstatPacket{
 		Id:    id,
@@ -318,8 +306,6 @@ func (c *Client) OpenFile(path string, f int) (*File, error) {
 }
 
 func (c *Client) open(path string, pflags uint32) (*File, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpOpenPacket{
 		Id:     id,
@@ -347,8 +333,6 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 // readAt reads len(buf) bytes from the remote file indicated by handle starting
 // from offset.
 func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpReadPacket{
 		Id:     id,
@@ -379,8 +363,6 @@ func (c *Client) readAt(handle string, offset uint64, buf []byte) (uint32, error
 // to SSH_FXP_OPEN or SSH_FXP_OPENDIR. The handle becomes invalid
 // immediately after this request has been sent.
 func (c *Client) close(handle string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpClosePacket{
 		Id:     id,
@@ -398,8 +380,6 @@ func (c *Client) close(handle string) error {
 }
 
 func (c *Client) fstat(handle string) (*FileStat, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpFstatPacket{
 		Id:     id,
@@ -427,9 +407,6 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 // Implementing statvfs@openssh.com SSH_FXP_EXTENDED feature
 // from http://www.opensource.apple.com/source/OpenSSH/OpenSSH-175/openssh/PROTOCOL?txt
 func (c *Client) StatVFS(path string) (*StatVFS, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// send the StatVFS packet to the server
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpStatvfsPacket{
@@ -441,22 +418,22 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 	}
 
 	switch typ {
-		// server responded with valid data
-		case ssh_FXP_EXTENDED_REPLY:
-			var response StatVFS
-			err = binary.Read(bytes.NewReader(data), binary.BigEndian, &response)
-			if err != nil {
-	    		return nil, errors.New("can not parse reply")
-			}
+	// server responded with valid data
+	case ssh_FXP_EXTENDED_REPLY:
+		var response StatVFS
+		err = binary.Read(bytes.NewReader(data), binary.BigEndian, &response)
+		if err != nil {
+			return nil, errors.New("can not parse reply")
+		}
 
-			return &response, nil
+		return &response, nil
 
-		// the resquest failed
-		case ssh_FXP_STATUS:
-			return nil, errors.New(fxp(ssh_FXP_STATUS).String())
+	// the resquest failed
+	case ssh_FXP_STATUS:
+		return nil, errors.New(fxp(ssh_FXP_STATUS).String())
 
-		default:
-			return nil, unimplementedPacketErr(typ)
+	default:
+		return nil, unimplementedPacketErr(typ)
 	}
 }
 
@@ -477,8 +454,6 @@ func (c *Client) Remove(path string) error {
 }
 
 func (c *Client) removeFile(path string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpRemovePacket{
 		Id:       id,
@@ -496,8 +471,6 @@ func (c *Client) removeFile(path string) error {
 }
 
 func (c *Client) removeDirectory(path string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpRmdirPacket{
 		Id:   id,
@@ -516,8 +489,6 @@ func (c *Client) removeDirectory(path string) error {
 
 // Rename renames a file.
 func (c *Client) Rename(oldname, newname string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpRenamePacket{
 		Id:      id,
@@ -536,6 +507,8 @@ func (c *Client) Rename(oldname, newname string) error {
 }
 
 func (c *Client) sendRequest(p encoding.BinaryMarshaler) (byte, []byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := sendPacket(c.w, p); err != nil {
 		return 0, nil, err
 	}
@@ -545,8 +518,6 @@ func (c *Client) sendRequest(p encoding.BinaryMarshaler) (byte, []byte, error) {
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
 // from offset.
 func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpWritePacket{
 		Id:     id,
@@ -573,8 +544,6 @@ func (c *Client) writeAt(handle string, offset uint64, buf []byte) (uint32, erro
 // directory with the specified path already exists, or if the directory's
 // parent folder does not exist (the method cannot create complete paths).
 func (c *Client) Mkdir(path string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpMkdirPacket{
 		Id:   id,

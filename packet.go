@@ -331,15 +331,14 @@ func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 }
 
 type sshFxpStatvfsPacket struct {
-	Id uint32
+	Id   uint32
 	Path string
 }
 
 func (p sshFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
-		len(p.Path) + 
+		len(p.Path) +
 		len("statvfs@openssh.com")
-
 
 	b := make([]byte, 0, l)
 	b = append(b, ssh_FXP_EXTENDED)
@@ -350,18 +349,18 @@ func (p sshFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
 }
 
 type StatVFS struct {
-	Id uint32
-	Bsize uint64		/* file system block size */
-	Frsize uint64		/* fundamental fs block size */
-	Blocks uint64		/* number of blocks (unit f_frsize) */
-	Bfree uint64		/* free blocks in file system */
-	Bavail uint64		/* free blocks for non-root */
-	Files uint64		/* total file inodes */
-	Ffree uint64		/* free file inodes */
-	Favail uint64		/* free file inodes for to non-root */
-	Fsid uint64			/* file system id */
-	Flag uint64			/* bit mask of f_flag values */
-	Namemax uint64		/* maximum filename length */
+	Id      uint32
+	Bsize   uint64 /* file system block size */
+	Frsize  uint64 /* fundamental fs block size */
+	Blocks  uint64 /* number of blocks (unit f_frsize) */
+	Bfree   uint64 /* free blocks in file system */
+	Bavail  uint64 /* free blocks for non-root */
+	Files   uint64 /* total file inodes */
+	Ffree   uint64 /* free file inodes */
+	Favail  uint64 /* free file inodes for to non-root */
+	Fsid    uint64 /* file system id */
+	Flag    uint64 /* bit mask of f_flag values */
+	Namemax uint64 /* maximum filename length */
 }
 
 func (p *StatVFS) TotalSpace() uint64 {
