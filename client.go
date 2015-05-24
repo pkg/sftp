@@ -58,6 +58,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		w:         wr,
 		r:         rd,
 		maxPacket: 1 << 15,
+		inflight:  make(map[uint32]chan result),
 	}
 	if err := sftp.applyOptions(opts...); err != nil {
 		wr.Close()
@@ -80,9 +81,10 @@ type Client struct {
 	r io.Reader
 
 	maxPacket int // max packet size read or written.
+	nextid    uint32
 
-	mu     sync.Mutex // ensures only on request is in flight to the server at once
-	nextid uint32
+	mu       sync.Mutex             // ensures only on request is in flight to the server at once
+	inflight map[uint32]chan result // outstanding requests
 }
 
 // Close closes the SFTP session.
@@ -527,13 +529,57 @@ func (c *Client) Rename(oldname, newname string) error {
 	}
 }
 
-func (c *Client) sendRequest(p encoding.BinaryMarshaler) (byte, []byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := sendPacket(c.w, p); err != nil {
-		return 0, nil, err
-	}
-	return recvPacket(c.r)
+// result captures the result of receiving the a packet from the server
+type result struct {
+	typ  byte
+	data []byte
+	err  error
+}
+
+type idmarshaler interface {
+	id() uint32
+	encoding.BinaryMarshaler
+}
+
+func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
+	ch := make(chan result)
+	go func() {
+		c.mu.Lock()
+		c.inflight[p.id()] = ch
+		err := sendPacket(c.w, p)
+		c.mu.Unlock()
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+
+		// another goroutine may pick up the lock here
+		c.mu.Lock()
+		typ, data, err := recvPacket(c.r)
+		if err != nil {
+			c.mu.Unlock()
+			ch <- result{err: err}
+			return
+		}
+
+		// the packet we received may not be the one we sent
+		// look up the channel of the owner and dispatch it to
+		// the sender.
+		sid, _ := unmarshalUint32(data)
+		ch1, ok := c.inflight[sid]
+		delete(c.inflight, sid)
+		c.mu.Unlock()
+		if !ok {
+			// send error back to the caller which started this goroutine
+			// this may not be the caller who issued the request that we
+			// have a response for.
+			ch <- result{err: fmt.Errorf("sid: %v not found", sid)}
+			return
+		}
+		ch1 <- result{typ: typ, data: data}
+	}()
+	s := <-ch
+	return s.typ, s.data, s.err
 }
 
 // writeAt writes len(buf) bytes from the remote file indicated by handle starting
