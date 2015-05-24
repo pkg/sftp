@@ -58,11 +58,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		w:         wr,
 		r:         rd,
 		maxPacket: 1 << 15,
-		inflight: make(map[uint32]chan struct {
-			typ  byte
-			data []byte
-			err  error
-		}),
+		inflight:  make(map[uint32]chan result),
 	}
 	if err := sftp.applyOptions(opts...); err != nil {
 		wr.Close()
@@ -87,12 +83,8 @@ type Client struct {
 	maxPacket int // max packet size read or written.
 	nextid    uint32
 
-	mu       sync.Mutex // ensures only on request is in flight to the server at once
-	inflight map[uint32]chan struct {
-		typ  byte
-		data []byte
-		err  error
-	} // outstanding requests
+	mu       sync.Mutex             // ensures only on request is in flight to the server at once
+	inflight map[uint32]chan result // outstanding requests
 }
 
 // Close closes the SFTP session.
@@ -537,27 +529,26 @@ func (c *Client) Rename(oldname, newname string) error {
 	}
 }
 
+// result captures the result of receiving the a packet from the server
+type result struct {
+	typ  byte
+	data []byte
+	err  error
+}
+
 func (c *Client) sendRequest(p interface {
 	id() uint32
 	encoding.BinaryMarshaler
 }) (byte, []byte, error) {
 	id := p.id()
-	ch := make(chan struct {
-		typ  byte
-		data []byte
-		err  error
-	})
+	ch := make(chan result)
 	go func() {
 		c.mu.Lock()
 		c.inflight[id] = ch
 		err := sendPacket(c.w, p)
 		c.mu.Unlock()
 		if err != nil {
-			ch <- struct {
-				typ  byte
-				data []byte
-				err  error
-			}{0, nil, err}
+			ch <- result{err: err}
 			return
 		}
 
@@ -566,11 +557,7 @@ func (c *Client) sendRequest(p interface {
 		typ, data, err := recvPacket(c.r)
 		if err != nil {
 			c.mu.Unlock()
-			ch <- struct {
-				typ  byte
-				data []byte
-				err  error
-			}{0, nil, err}
+			ch <- result{err: err}
 			return
 		}
 		sid, _ := unmarshalUint32(data)
@@ -578,18 +565,10 @@ func (c *Client) sendRequest(p interface {
 		delete(c.inflight, sid)
 		c.mu.Unlock()
 		if !ok {
-			ch <- struct {
-				typ  byte
-				data []byte
-				err  error
-			}{0, nil, fmt.Errorf("sid: %v not found", sid)}
+			ch <- result{err: fmt.Errorf("sid: %v not found", sid)}
 			return
 		}
-		ch <- struct {
-			typ  byte
-			data []byte
-			err  error
-		}{typ, data, nil}
+		ch <- result{typ: typ, data: data}
 	}()
 	s := <-ch
 	return s.typ, s.data, s.err
