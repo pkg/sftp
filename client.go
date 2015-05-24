@@ -536,15 +536,16 @@ type result struct {
 	err  error
 }
 
-func (c *Client) sendRequest(p interface {
+type idmarshaler interface {
 	id() uint32
 	encoding.BinaryMarshaler
-}) (byte, []byte, error) {
-	id := p.id()
+}
+
+func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
 	ch := make(chan result)
 	go func() {
 		c.mu.Lock()
-		c.inflight[id] = ch
+		c.inflight[p.id()] = ch
 		err := sendPacket(c.w, p)
 		c.mu.Unlock()
 		if err != nil {
@@ -560,15 +561,22 @@ func (c *Client) sendRequest(p interface {
 			ch <- result{err: err}
 			return
 		}
+
+		// the packet we received may not be the one we sent
+		// look up the channel of the owner and dispatch it to
+		// the sender.
 		sid, _ := unmarshalUint32(data)
-		ch, ok := c.inflight[sid]
+		ch1, ok := c.inflight[sid]
 		delete(c.inflight, sid)
 		c.mu.Unlock()
 		if !ok {
+			// send error back to the caller which started this goroutine
+			// this may not be the caller who issued the request that we
+			// have a response for.
 			ch <- result{err: fmt.Errorf("sid: %v not found", sid)}
 			return
 		}
-		ch <- result{typ: typ, data: data}
+		ch1 <- result{typ: typ, data: data}
 	}()
 	s := <-ch
 	return s.typ, s.data, s.err
