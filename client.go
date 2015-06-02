@@ -68,7 +68,12 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		wr.Close()
 		return nil, err
 	}
-	return sftp, sftp.recvVersion()
+	if err := sftp.recvVersion(); err != nil {
+		wr.Close()
+		return nil, err
+	}
+	go sftp.recv()
+	return sftp, nil
 }
 
 // Client represents an SFTP session on a *ssh.ClientConn SSH connection.
@@ -125,6 +130,41 @@ func (c *Client) recvVersion() error {
 	}
 
 	return nil
+}
+
+func (c *Client) recv() {
+	sendAll := func(res result) {
+		c.mu.Lock()
+		listeners := make([]chan<- result, len(c.inflight))
+		for _, ch := range c.inflight {
+			listeners = append(listeners, ch)
+		}
+		c.mu.Unlock()
+		for _, ch := range listeners {
+			ch <- res
+		}
+	}
+	for {
+		typ, data, err := recvPacket(c.r)
+		if err != nil {
+			// Return the error to all listeners.
+			sendAll(result{err: err})
+			return
+		}
+		sid, _ := unmarshalUint32(data)
+		c.mu.Lock()
+		ch, ok := c.inflight[sid]
+		delete(c.inflight, sid)
+		c.mu.Unlock()
+		if !ok {
+			// This is an unexpected occurrence. Send the error
+			// back to all listeners so that they terminate
+			// gracefully.
+			sendAll(result{err: fmt.Errorf("sid: %v not fond", sid)})
+			return
+		}
+		ch <- result{typ: typ, data: data}
+	}
 }
 
 // Walk returns a new Walker rooted at root.
@@ -526,33 +566,9 @@ func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
 	err := sendPacket(c.w, p)
 	if err != nil {
 		go func() { ch <- result{err: err} }()
+		delete(c.inflight, p.id())
 		return
 	}
-	go func() {
-		c.mu.Lock()
-		typ, data, err := recvPacket(c.r)
-		if err != nil {
-			c.mu.Unlock()
-			ch <- result{err: err}
-			return
-		}
-
-		// the packet we received may not be the one we sent
-		// look up the channel of the owner and dispatch it to
-		// the sender.
-		sid, _ := unmarshalUint32(data)
-		ch1, ok := c.inflight[sid]
-		delete(c.inflight, sid)
-		c.mu.Unlock()
-		if !ok {
-			// send error back to the caller which started this goroutine
-			// this may not be the caller who issued the request that we
-			// have a response for.
-			ch <- result{err: fmt.Errorf("sid: %v not found", sid)}
-			return
-		}
-		ch1 <- result{typ: typ, data: data}
-	}()
 }
 
 // Creates the specified directory. An error will be returned if a file or

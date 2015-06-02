@@ -112,14 +112,6 @@ func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exe
 		t.Fatal(err)
 	}
 
-	if err := sftp.sendInit(); err != nil {
-		defer cmd.Wait()
-		t.Fatal(err)
-	}
-	if err := sftp.recvVersion(); err != nil {
-		defer cmd.Wait()
-		t.Fatal(err)
-	}
 	return sftp, cmd
 }
 
