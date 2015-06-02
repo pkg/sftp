@@ -697,6 +697,131 @@ func (f *File) Read(b []byte) (int, error) {
 	return read, firstErr.err
 }
 
+// WriteTo writes the file to w. The return value is the number of bytes
+// written. Any error encountered during the write is also returned.
+func (f *File) WriteTo(w io.Writer) (int64, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	inFlight := 0
+	desiredInFlight := 1
+	offset := f.offset
+	writeOffset := offset
+	fileSize := uint64(fi.Size())
+	ch := make(chan result)
+	type inflightRead struct {
+		b      []byte
+		offset uint64
+	}
+	reqs := map[uint32]inflightRead{}
+	pendingWrites := map[uint64][]byte{}
+	type offsetErr struct {
+		offset uint64
+		err    error
+	}
+	var firstErr offsetErr
+
+	sendReq := func(b []byte, offset uint64) {
+		reqId := f.c.nextId()
+		f.c.dispatchRequest(ch, sshFxpReadPacket{
+			Id:     reqId,
+			Handle: f.handle,
+			Offset: offset,
+			Len:    uint32(len(b)),
+		})
+		inFlight++
+		reqs[reqId] = inflightRead{b: b, offset: offset}
+	}
+
+	var copied int64
+	for firstErr.err == nil || inFlight > 0 {
+		for inFlight < desiredInFlight && firstErr.err == nil {
+			b := make([]byte, f.c.maxPacket)
+			sendReq(b, offset)
+			offset += uint64(f.c.maxPacket)
+			if offset > fileSize {
+				desiredInFlight = 1
+			}
+		}
+
+		if inFlight == 0 {
+			break
+		}
+		select {
+		case res := <-ch:
+			inFlight--
+			if res.err != nil {
+				firstErr = offsetErr{offset: 0, err: res.err}
+				break
+			}
+			reqId, data := unmarshalUint32(res.data)
+			req, ok := reqs[reqId]
+			if !ok {
+				firstErr = offsetErr{offset: 0, err: fmt.Errorf("sid: %v not found", reqId)}
+				break
+			}
+			delete(reqs, reqId)
+			switch res.typ {
+			case ssh_FXP_STATUS:
+				if firstErr.err == nil || req.offset < firstErr.offset {
+					firstErr = offsetErr{offset: req.offset, err: eofOrErr(unmarshalStatus(reqId, res.data))}
+					break
+				}
+			case ssh_FXP_DATA:
+				l, data := unmarshalUint32(data)
+				if req.offset == writeOffset {
+					nbytes, err := w.Write(data)
+					copied += int64(nbytes)
+					if err != nil {
+						firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: err}
+						break
+					}
+					if nbytes < int(l) {
+						firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: io.ErrShortWrite}
+						break
+					}
+					switch {
+					case offset > fileSize:
+						desiredInFlight = 1
+					case desiredInFlight < maxConcurrentRequests:
+						desiredInFlight++
+					}
+					writeOffset += uint64(nbytes)
+					for pendingData, ok := pendingWrites[writeOffset]; ok; pendingData, ok = pendingWrites[writeOffset] {
+						nbytes, err := w.Write(pendingData)
+						if err != nil {
+							firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: err}
+							break
+						}
+						if nbytes < len(pendingData) {
+							firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: io.ErrShortWrite}
+							break
+						}
+						writeOffset += uint64(nbytes)
+						inFlight--
+					}
+				} else {
+					// Don't write the data yet because
+					// this response came in out of order
+					// and we need to wait for responses
+					// for earlier segments of the file.
+					inFlight++ // Pending writes should still be considered inFlight.
+					pendingWrites[req.offset] = data
+				}
+			default:
+				firstErr = offsetErr{offset: 0, err: unimplementedPacketErr(res.typ)}
+				break
+			}
+		}
+	}
+	if firstErr.err != io.EOF {
+		return copied, firstErr.err
+	}
+	return copied, nil
+
+}
+
 // Stat returns the FileInfo structure describing file. If there is an
 // error.
 func (f *File) Stat() (os.FileInfo, error) {
