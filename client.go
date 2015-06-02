@@ -899,6 +899,75 @@ func (f *File) Write(b []byte) (int, error) {
 	return written, firstErr
 }
 
+// ReadFrom reads data from r until EOF and writes it to the file. The return
+// value is the number of bytes read. Any error except io.EOF encountered
+// during the read is also returned.
+func (f *File) ReadFrom(r io.Reader) (int64, error) {
+	inFlight := 0
+	desiredInFlight := 1
+	offset := f.offset
+	ch := make(chan result)
+	var firstErr error
+	read := int64(0)
+	b := make([]byte, f.c.maxPacket)
+	for inFlight > 0 || firstErr == nil {
+		for inFlight < desiredInFlight && firstErr == nil {
+			n, err := r.Read(b)
+			if err != nil {
+				firstErr = err
+			}
+			f.c.dispatchRequest(ch, sshFxpWritePacket{
+				Id:     f.c.nextId(),
+				Handle: f.handle,
+				Offset: offset,
+				Length: uint32(n),
+				Data:   b[:n],
+			})
+			inFlight++
+			offset += uint64(n)
+			read += int64(n)
+		}
+
+		if inFlight == 0 {
+			break
+		}
+		select {
+		case res := <-ch:
+			inFlight--
+			if res.err != nil {
+				firstErr = res.err
+				break
+			}
+			switch res.typ {
+			case ssh_FXP_STATUS:
+				id, _ := unmarshalUint32(res.data)
+				err := okOrErr(unmarshalStatus(id, res.data))
+				if err != nil && firstErr == nil {
+					firstErr = err
+					break
+				}
+				if desiredInFlight < maxConcurrentRequests {
+					desiredInFlight++
+				}
+			default:
+				firstErr = unimplementedPacketErr(res.typ)
+				break
+			}
+		}
+	}
+	if firstErr == io.EOF {
+		firstErr = nil
+	}
+	// If error is non-nil, then there may be gaps in the data written to
+	// the file so it's best to return 0 so the caller can't make any
+	// incorrect assumptions about the state of the file.
+	if firstErr != nil {
+		read = 0
+	}
+	f.offset += uint64(read)
+	return read, firstErr
+}
+
 // Seek implements io.Seeker by setting the client offset for the next Read or
 // Write. It returns the next offset read. Seeking before or after the end of
 // the file is undefined. Seeking relative to the end calls Stat.
