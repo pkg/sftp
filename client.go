@@ -55,10 +55,11 @@ func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 // the system's ssh client program (e.g. via exec.Command).
 func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error) (*Client, error) {
 	sftp := &Client{
-		w:         wr,
-		r:         rd,
-		maxPacket: 1 << 15,
-		inflight:  make(map[uint32]chan<- result),
+		w:          wr,
+		r:          rd,
+		maxPacket:  1 << 15,
+		inflight:   make(map[uint32]chan<- result),
+		recvClosed: make(chan struct{}),
 	}
 	if err := sftp.applyOptions(opts...); err != nil {
 		wr.Close()
@@ -88,12 +89,17 @@ type Client struct {
 	maxPacket int // max packet size read or written.
 	nextid    uint32
 
-	mu       sync.Mutex               // ensures only on request is in flight to the server at once
-	inflight map[uint32]chan<- result // outstanding requests
+	mu         sync.Mutex               // ensures only on request is in flight to the server at once
+	inflight   map[uint32]chan<- result // outstanding requests
+	recvClosed chan struct{}            // remote end has closed the connection
 }
 
 // Close closes the SFTP session.
-func (c *Client) Close() error { return c.w.Close() }
+func (c *Client) Close() error {
+	err := c.w.Close()
+	<-c.recvClosed
+	return err
+}
 
 // Create creates the named file mode 0666 (before umask), truncating it if
 // it already exists. If successful, methods on the returned File can be
@@ -132,23 +138,28 @@ func (c *Client) recvVersion() error {
 	return nil
 }
 
-func (c *Client) recv() {
-	sendAll := func(res result) {
-		c.mu.Lock()
-		listeners := make([]chan<- result, len(c.inflight))
-		for _, ch := range c.inflight {
-			listeners = append(listeners, ch)
-		}
-		c.mu.Unlock()
-		for _, ch := range listeners {
-			ch <- res
-		}
+// broadcastErr sends an error to all goroutines waiting for a response.
+func (c *Client) broadcastErr(err error) {
+	c.mu.Lock()
+	listeners := make([]chan<- result, len(c.inflight))
+	for _, ch := range c.inflight {
+		listeners = append(listeners, ch)
 	}
+	c.mu.Unlock()
+	for _, ch := range listeners {
+		ch <- result{err: err}
+	}
+}
+
+// recv continuously reads from the server and forwards responses to the
+// appropriate channel.
+func (c *Client) recv() {
+	defer close(c.recvClosed)
 	for {
 		typ, data, err := recvPacket(c.r)
 		if err != nil {
 			// Return the error to all listeners.
-			sendAll(result{err: err})
+			c.broadcastErr(err)
 			return
 		}
 		sid, _ := unmarshalUint32(data)
@@ -160,7 +171,7 @@ func (c *Client) recv() {
 			// This is an unexpected occurrence. Send the error
 			// back to all listeners so that they terminate
 			// gracefully.
-			sendAll(result{err: fmt.Errorf("sid: %v not fond", sid)})
+			c.broadcastErr(fmt.Errorf("sid: %v not fond", sid))
 			return
 		}
 		ch <- result{typ: typ, data: data}
