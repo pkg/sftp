@@ -94,11 +94,17 @@ type Client struct {
 	recvClosed chan struct{}            // remote end has closed the connection
 }
 
-// Close closes the SFTP session.
+// Close closes the write end of the SFTP session. This may return before the
+// remote SFTP server has closed it's end of the connection. Users can invoke
+// Wait() to wait for the session to be fully torn down.
 func (c *Client) Close() error {
-	err := c.w.Close()
+	return c.w.Close()
+}
+
+// Wait waits for the read end of the connection to be closed, indicating the
+// session has been fully torn down.
+func (c *Client) Wait() {
 	<-c.recvClosed
-	return err
 }
 
 // Create creates the named file mode 0666 (before umask), truncating it if

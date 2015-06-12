@@ -118,6 +118,7 @@ func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exe
 func TestNewClient(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 
 	if err := sftp.Close(); err != nil {
 		t.Fatal(err)
@@ -127,6 +128,7 @@ func TestNewClient(t *testing.T) {
 func TestClientLstat(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -153,6 +155,7 @@ func TestClientLstat(t *testing.T) {
 func TestClientLstatMissing(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -170,6 +173,7 @@ func TestClientLstatMissing(t *testing.T) {
 func TestClientMkdir(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest")
@@ -188,6 +192,7 @@ func TestClientMkdir(t *testing.T) {
 func TestClientOpen(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -247,6 +252,7 @@ func (s seek) end(t *testing.T, r io.ReadSeeker) {
 func TestClientSeek(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	fOS, err := ioutil.TempFile("", "seek-test")
@@ -291,6 +297,7 @@ func TestClientSeek(t *testing.T) {
 func TestClientCreate(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -310,6 +317,7 @@ func TestClientCreate(t *testing.T) {
 func TestClientAppend(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -329,6 +337,7 @@ func TestClientAppend(t *testing.T) {
 func TestClientCreateFailed(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -350,6 +359,7 @@ func TestClientCreateFailed(t *testing.T) {
 func TestClientFileStat(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -381,6 +391,7 @@ func TestClientFileStat(t *testing.T) {
 func TestClientRemove(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -398,6 +409,7 @@ func TestClientRemove(t *testing.T) {
 func TestClientRemoveDir(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest")
@@ -415,6 +427,7 @@ func TestClientRemoveDir(t *testing.T) {
 func TestClientRemoveFailed(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -432,6 +445,7 @@ func TestClientRemoveFailed(t *testing.T) {
 func TestClientRename(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -453,6 +467,7 @@ func TestClientRename(t *testing.T) {
 func TestClientReadLine(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest")
@@ -497,6 +512,7 @@ var clientReadTests = []struct {
 func TestClientRead(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	d, err := ioutil.TempDir("", "sftptest")
@@ -585,6 +601,7 @@ var clientWriteTests = []struct {
 func TestClientWrite(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	d, err := ioutil.TempDir("", "sftptest")
@@ -712,6 +729,7 @@ func mark(path string, info os.FileInfo, err error, errors *[]error, clear bool)
 func TestClientWalk(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	makeTree(t)
@@ -799,6 +817,7 @@ func benchmarkRead(b *testing.B, bufsize int, delay time.Duration) {
 	// open sftp client
 	sftp, cmd := testClient(b, READONLY, delay)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	buf := make([]byte, bufsize)
@@ -877,6 +896,7 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 	// open sftp client
 	sftp, cmd := testClient(b, false, delay)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	data := make([]byte, size)
@@ -970,6 +990,7 @@ func BenchmarkWrite4MiBDelay150Msec(b *testing.B) {
 func TestClientStatVFS(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	vfs, err := sftp.StatVFS("/")
@@ -1028,6 +1049,7 @@ func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
 
 	sftp, cmd := testClient(b, READONLY, delay)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 	b.ResetTimer()
 	b.SetBytes(fileSize)
@@ -1101,6 +1123,7 @@ func benchmarkCopyUp(b *testing.B, fileSize int64, delay time.Duration) {
 
 	sftp, cmd := testClient(b, false, delay)
 	defer cmd.Wait()
+	defer sftp.Wait()
 	defer sftp.Close()
 
 	b.ResetTimer()
