@@ -141,7 +141,7 @@ func (c *Client) recvVersion() error {
 // broadcastErr sends an error to all goroutines waiting for a response.
 func (c *Client) broadcastErr(err error) {
 	c.mu.Lock()
-	listeners := make([]chan<- result, len(c.inflight))
+	listeners := make([]chan<- result, 0, len(c.inflight))
 	for _, ch := range c.inflight {
 		listeners = append(listeners, ch)
 	}
@@ -564,7 +564,7 @@ type idmarshaler interface {
 }
 
 func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
-	ch := make(chan result)
+	ch := make(chan result, 1)
 	c.dispatchRequest(ch, p)
 	s := <-ch
 	return s.typ, s.data, s.err
@@ -572,14 +572,14 @@ func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
 
 func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.inflight[p.id()] = ch
-	err := sendPacket(c.w, p)
-	if err != nil {
-		go func() { ch <- result{err: err} }()
+	if err := sendPacket(c.w, p); err != nil {
 		delete(c.inflight, p.id())
+		c.mu.Unlock()
+		ch <- result{err: err}
 		return
 	}
+	c.mu.Unlock()
 }
 
 // Creates the specified directory. An error will be returned if a file or

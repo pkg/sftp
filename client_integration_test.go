@@ -793,6 +793,24 @@ func TestClientWalk(t *testing.T) {
 	}
 }
 
+// sftp/issue/42, abrupt server hangup would result in client hangs.
+func TestServerRoughDisconnect(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+
+	f, err := sftp.Open("/dev/zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cmd.Process.Kill()
+	}()
+
+	io.Copy(ioutil.Discard, f)
+	sftp.Close()
+}
+
 func benchmarkRead(b *testing.B, bufsize int, delay time.Duration) {
 	size := 10*1024*1024 + 123 // ~10MiB
 
