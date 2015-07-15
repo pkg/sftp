@@ -1,4 +1,4 @@
-package sftp_test
+package sftp
 
 import (
 	"syscall"
