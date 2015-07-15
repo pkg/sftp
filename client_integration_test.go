@@ -14,7 +14,6 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
-	"syscall"
 	"testing"
 	"testing/quick"
 	"time"
@@ -983,42 +982,6 @@ func BenchmarkWrite4MiBDelay50Msec(b *testing.B) {
 
 func BenchmarkWrite4MiBDelay150Msec(b *testing.B) {
 	benchmarkWrite(b, 4*1024*1024, 150*time.Millisecond)
-}
-
-func TestClientStatVFS(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
-	defer cmd.Wait()
-	defer sftp.Close()
-
-	vfs, err := sftp.StatVFS("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// get system stats
-	s := syscall.Statfs_t{}
-	err = syscall.Statfs("/", &s)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// check some stats
-	if vfs.Frsize != uint64(s.Frsize) {
-		t.Fatal("fr_size does not match")
-	}
-
-	if vfs.Bsize != uint64(s.Bsize) {
-		t.Fatal("f_bsize does not match")
-	}
-
-	if vfs.Namemax != uint64(s.Namelen) {
-		t.Fatal("f_namemax does not match")
-	}
-
-	if vfs.Bavail != s.Bavail {
-		t.Fatal("f_bavail does not match")
-	}
-
 }
 
 func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
