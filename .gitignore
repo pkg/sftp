@@ -1,0 +1,6 @@
+.*.swo
+.*.swp
+
+testdata/
+server_standalone/server_standalone
+

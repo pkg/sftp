@@ -689,6 +689,13 @@ func unmarshalStatus(id uint32, data []byte) error {
 	}
 }
 
+func marshalStatus(b []byte, err StatusError) []byte {
+	b = marshalUint32(b, err.Code)
+	b = marshalString(b, err.msg)
+	b = marshalString(b, err.lang)
+	return b
+}
+
 // flags converts the flags passed to OpenFile into ssh flags.
 // Unsupported flags are ignored.
 func flags(f int) uint32 {

@@ -2,10 +2,13 @@ package sftp
 
 import (
 	"encoding"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"reflect"
 )
+
+var shortPacketError = fmt.Errorf("packet too short")
 
 func marshalUint32(b []byte, v uint32) []byte {
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
@@ -52,15 +55,43 @@ func unmarshalUint32(b []byte) (uint32, []byte) {
 	return v, b[4:]
 }
 
+func unmarshalUint32Safe(b []byte) (uint32, []byte, error) {
+	if len(b) < 4 {
+		return 0, nil, shortPacketError
+	}
+	v := uint32(b[3]) | uint32(b[2])<<8 | uint32(b[1])<<16 | uint32(b[0])<<24
+	return v, b[4:], nil
+}
+
 func unmarshalUint64(b []byte) (uint64, []byte) {
 	h, b := unmarshalUint32(b)
 	l, b := unmarshalUint32(b)
 	return uint64(h)<<32 | uint64(l), b
 }
 
+func unmarshalUint64Safe(b []byte) (uint64, []byte, error) {
+	if len(b) < 8 {
+		return 0, nil, shortPacketError
+	}
+	h, b := unmarshalUint32(b)
+	l, b := unmarshalUint32(b)
+	return uint64(h)<<32 | uint64(l), b, nil
+}
+
 func unmarshalString(b []byte) (string, []byte) {
 	n, b := unmarshalUint32(b)
 	return string(b[:n]), b[n:]
+}
+
+func unmarshalStringSafe(b []byte) (string, []byte, error) {
+	n, b, err := unmarshalUint32Safe(b)
+	if err != nil {
+		return "", nil, err
+	}
+	if int64(n) > int64(len(b)) {
+		return "", nil, shortPacketError
+	}
+	return string(b[:n]), b[n:], nil
 }
 
 // sendPacket marshals p according to RFC 4234.
@@ -72,7 +103,7 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	}
 	l := uint32(len(bb))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
-	debug("send packet %T, len: %v", m, l)
+	debug("send packet %T, len: %v data: %v", m, l, hex.EncodeToString(bb))
 	_, err = w.Write(hdr)
 	if err != nil {
 		return err
@@ -81,17 +112,43 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	return err
 }
 
+func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
+	return sendPacket(svr.out, m)
+}
+
 func recvPacket(r io.Reader) (uint8, []byte, error) {
 	var b = []byte{0, 0, 0, 0}
 	if _, err := io.ReadFull(r, b); err != nil {
 		return 0, nil, err
 	}
 	l, _ := unmarshalUint32(b)
+	debug("recv packet %d bytes", l)
 	b = make([]byte, l)
 	if _, err := io.ReadFull(r, b); err != nil {
+		debug("recv packet %d bytes: err %v", l, err)
 		return 0, nil, err
 	}
+	debug("recv packet %d bytes: %v", l, hex.EncodeToString(b))
 	return b[0], b[1:], nil
+}
+
+type ExtensionPair struct {
+	Name string
+	Data string
+}
+
+func unmarshalExtensionPair(b []byte) (ExtensionPair, []byte, error) {
+	ep := ExtensionPair{}
+	var err error = nil
+	ep.Name, b, err = unmarshalStringSafe(b)
+	if err != nil {
+		return ep, b, err
+	}
+	ep.Data, b, err = unmarshalStringSafe(b)
+	if err != nil {
+		return ep, b, err
+	}
+	return ep, b, err
 }
 
 // Here starts the definition of packets along with their MarshalBinary
@@ -101,9 +158,7 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 
 type sshFxInitPacket struct {
 	Version    uint32
-	Extensions []struct {
-		Name, Data string
-	}
+	Extensions []ExtensionPair
 }
 
 func (p sshFxInitPacket) MarshalBinary() ([]byte, error) {
@@ -122,6 +177,44 @@ func (p sshFxInitPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+func (p *sshFxInitPacket) UnmarshalBinary(b []byte) (err error) {
+	if p.Version, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	}
+	for len(b) > 0 {
+		ep := ExtensionPair{}
+		ep, b, err = unmarshalExtensionPair(b)
+		if err != nil {
+			return err
+		}
+		p.Extensions = append(p.Extensions, ep)
+	}
+	return nil
+}
+
+type sshFxVersionPacket struct {
+	Version    uint32
+	Extensions []struct {
+		Name, Data string
+	}
+}
+
+func (p sshFxVersionPacket) MarshalBinary() ([]byte, error) {
+	l := 1 + 4 // byte + uint32
+	for _, e := range p.Extensions {
+		l += 4 + len(e.Name) + 4 + len(e.Data)
+	}
+
+	b := make([]byte, 0, l)
+	b = append(b, ssh_FXP_VERSION)
+	b = marshalUint32(b, p.Version)
+	for _, e := range p.Extensions {
+		b = marshalString(b, e.Name)
+		b = marshalString(b, e.Data)
+	}
+	return b, nil
+}
+
 func marshalIdString(packetType byte, id uint32, str string) ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(str)
@@ -131,6 +224,18 @@ func marshalIdString(packetType byte, id uint32, str string) ([]byte, error) {
 	b = marshalUint32(b, id)
 	b = marshalString(b, str)
 	return b, nil
+}
+
+func unmarshalIdString(b []byte, id *uint32, str *string) (err error) {
+	*id, b, err = unmarshalUint32Safe(b)
+	if err != nil {
+		return
+	}
+	*str, b, err = unmarshalStringSafe(b)
+	if err != nil {
+		return
+	}
+	return
 }
 
 type sshFxpReaddirPacket struct {
@@ -158,6 +263,10 @@ type sshFxpLstatPacket struct {
 
 func (p sshFxpLstatPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_LSTAT, p.Id, p.Path)
+}
+
+func (p *sshFxpLstatPacket) UnmarshalBinary(b []byte) error {
+	return unmarshalIdString(b, &p.Id, &p.Path)
 }
 
 type sshFxpFstatPacket struct {
