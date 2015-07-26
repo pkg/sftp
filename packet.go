@@ -287,6 +287,10 @@ func (p sshFxpClosePacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_CLOSE, p.Id, p.Handle)
 }
 
+func (p *sshFxpClosePacket) UnmarshalBinary(b []byte) error {
+	return unmarshalIdString(b, &p.Id, &p.Handle)
+}
+
 type sshFxpRemovePacket struct {
 	Id       uint32
 	Filename string
@@ -333,6 +337,19 @@ func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	b = marshalUint32(b, p.Pflags)
 	b = marshalUint32(b, p.Flags)
 	return b, nil
+}
+
+func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) (err error) {
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	} else if p.Path, b, err = unmarshalStringSafe(b); err != nil {
+		return
+	} else if p.Pflags, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	} else if p.Flags, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	}
+	return
 }
 
 type sshFxpReadPacket struct {
@@ -447,5 +464,29 @@ func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Flags)
 	b = marshal(b, p.Attrs)
+	return b, nil
+}
+
+type sshFxpHandlePacket struct {
+	Id     uint32
+	Handle string
+}
+
+func (p sshFxpHandlePacket) MarshalBinary() ([]byte, error) {
+	b := []byte{ssh_FXP_HANDLE}
+	b = marshalUint32(b, p.Id)
+	b = marshalString(b, p.Handle)
+	return b, nil
+}
+
+type sshFxpStatusPacket struct {
+	Id uint32
+	StatusError
+}
+
+func (p sshFxpStatusPacket) MarshalBinary() ([]byte, error) {
+	b := []byte{ssh_FXP_STATUS}
+	b = marshalUint32(b, p.Id)
+	b = marshalStatus(b, p.StatusError)
 	return b, nil
 }
