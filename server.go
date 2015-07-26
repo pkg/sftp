@@ -13,12 +13,14 @@ import (
 
 type FileSystem interface {
 	Lstat(p string) (os.FileInfo, error)
+	Mkdir(name string, perm os.FileMode) error
 }
 
 type nativeFs struct {
 }
 
-func (nfs *nativeFs) Lstat(p string) (os.FileInfo, error) { return os.Lstat(p) }
+func (nfs *nativeFs) Lstat(p string) (os.FileInfo, error)       { return os.Lstat(p) }
+func (nfs *nativeFs) Mkdir(name string, perm os.FileMode) error { return os.Mkdir(name, perm) }
 
 type Server struct {
 	in            io.Reader
@@ -102,6 +104,7 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_READDIR:
 	case ssh_FXP_REMOVE:
 	case ssh_FXP_MKDIR:
+		pkt = &sshFxpMkdirPacket{}
 	case ssh_FXP_RMDIR:
 	case ssh_FXP_REALPATH:
 	case ssh_FXP_STAT:
@@ -161,6 +164,12 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 	}
 }
 
+func (p sshFxpMkdirPacket) respond(svr *Server) error {
+	// ignore flags field
+	err := svr.fs.Mkdir(p.Path, 0755)
+	return svr.sendPacket(statusFromError(p.Id, err))
+}
+
 type sshFxpStatusPacket struct {
 	Id uint32
 	StatusError
@@ -186,29 +195,33 @@ func statusFromError(id uint32, err error) sshFxpStatusPacket {
 			// ssh_FX_NO_CONNECTION     = 6
 			// ssh_FX_CONNECTION_LOST   = 7
 			// ssh_FX_OP_UNSUPPORTED    = 8
-			Code: ssh_FX_FAILURE,
-			msg:  err.Error(),
+			Code: ssh_FX_OK,
+			msg:  "",
 			lang: "",
 		},
 	}
-	debug("statusFromError: error is %T %#v", err, err)
-	if err == io.EOF {
-		ret.StatusError.Code = ssh_FX_EOF
-	}
-	if pathError, ok := err.(*os.PathError); ok {
-		debug("statusFromError: error is %T %#v", pathError.Err, pathError.Err)
-		if errno, ok := pathError.Err.(syscall.Errno); ok {
-			if errno == 0 {
-				ret.StatusError.Code = ssh_FX_OK
-			} else if errno == syscall.ENOENT {
-				ret.StatusError.Code = ssh_FX_NO_SUCH_FILE
-			} else if errno == syscall.EPERM {
-				ret.StatusError.Code = ssh_FX_PERMISSION_DENIED
-			} else {
-				ret.StatusError.Code = ssh_FX_FAILURE
-			}
+	if err != nil {
+		debug("statusFromError: error is %T %#v", err, err)
+		ret.StatusError.Code = ssh_FX_FAILURE
+		ret.StatusError.msg = err.Error()
+		if err == io.EOF {
+			ret.StatusError.Code = ssh_FX_EOF
+		}
+		if pathError, ok := err.(*os.PathError); ok {
+			debug("statusFromError: error is %T %#v", pathError.Err, pathError.Err)
+			if errno, ok := pathError.Err.(syscall.Errno); ok {
+				if errno == 0 {
+					ret.StatusError.Code = ssh_FX_OK
+				} else if errno == syscall.ENOENT {
+					ret.StatusError.Code = ssh_FX_NO_SUCH_FILE
+				} else if errno == syscall.EPERM {
+					ret.StatusError.Code = ssh_FX_PERMISSION_DENIED
+				} else {
+					ret.StatusError.Code = ssh_FX_FAILURE
+				}
 
-			ret.StatusError.Code = uint32(errno)
+				ret.StatusError.Code = uint32(errno)
+			}
 		}
 	}
 	return ret

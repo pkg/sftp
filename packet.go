@@ -418,6 +418,17 @@ func (p sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) (err error) {
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.Path, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Flags, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	}
+	return nil
+}
+
 type sshFxpSetstatPacket struct {
 	Id    uint32
 	Path  string
