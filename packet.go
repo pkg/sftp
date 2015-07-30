@@ -373,6 +373,19 @@ func (p sshFxpReadPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) (err error) {
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	} else if p.Handle, b, err = unmarshalStringSafe(b); err != nil {
+		return
+	} else if p.Offset, b, err = unmarshalUint64Safe(b); err != nil {
+		return
+	} else if p.Len, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	}
+	return
+}
+
 type sshFxpRenamePacket struct {
 	Id      uint32
 	Oldpath string
@@ -489,4 +502,32 @@ func (p sshFxpStatusPacket) MarshalBinary() ([]byte, error) {
 	b = marshalUint32(b, p.Id)
 	b = marshalStatus(b, p.StatusError)
 	return b, nil
+}
+
+type sshFxpDataPacket struct {
+	Id     uint32
+	Length uint32
+	Data   []byte
+}
+
+func (p sshFxpDataPacket) MarshalBinary() ([]byte, error) {
+	b := []byte{ssh_FXP_DATA}
+	b = marshalUint32(b, p.Id)
+	b = marshalUint32(b, p.Length)
+	b = append(b, p.Data[:p.Length]...)
+	return b, nil
+}
+
+func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) (err error) {
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.Length, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if uint32(len(b)) < p.Length {
+		return fmt.Errorf("truncated packet")
+	} else {
+		p.Data = make([]byte, p.Length)
+		copy(p.Data, b)
+		return nil
+	}
 }

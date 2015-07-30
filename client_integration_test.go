@@ -427,6 +427,43 @@ func sameFile(want, got os.FileInfo) bool {
 		want.Size() == got.Size()
 }
 
+func TestClientReadSimple(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f, err := ioutil.TempFile(d, "read-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fname := f.Name()
+	f.Write([]byte("hello"))
+	f.Close()
+
+	f2, err := sftp.Open(fname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+	stuff := make([]byte, 32)
+	n, err := f2.Read(stuff)
+	if err != nil && err != io.EOF {
+		t.Fatalf("err: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("n should be 5, is %v", n)
+	}
+	if string(stuff[0:5]) != "hello" {
+		t.Fatalf("invalid contents")
+	}
+}
+
 var clientReadTests = []struct {
 	n int64
 }{
