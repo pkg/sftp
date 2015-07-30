@@ -154,6 +154,7 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_WRITE:
 		pkt = &sshFxpWritePacket{}
 	case ssh_FXP_FSTAT:
+		pkt = &sshFxpFstatPacket{}
 	case ssh_FXP_SETSTAT:
 	case ssh_FXP_FSETSTAT:
 	case ssh_FXP_OPENDIR:
@@ -199,12 +200,12 @@ func (p sshFxInitPacket) respond(svr *Server) error {
 	return svr.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 }
 
-type sshFxpLstatReponse struct {
+type sshFxpStatReponse struct {
 	Id   uint32
 	info os.FileInfo
 }
 
-func (p sshFxpLstatReponse) MarshalBinary() ([]byte, error) {
+func (p sshFxpStatReponse) MarshalBinary() ([]byte, error) {
 	b := []byte{ssh_FXP_ATTRS}
 	b = marshalUint32(b, p.Id)
 	b = marshalFileInfo(b, p.info)
@@ -216,7 +217,22 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 	if info, err := svr.fs.Lstat(p.Path); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		return svr.sendPacket(sshFxpLstatReponse{p.Id, info})
+		return svr.sendPacket(sshFxpStatReponse{p.Id, info})
+	}
+}
+
+func (p sshFxpFstatPacket) respond(svr *Server) error {
+	if f, ok := svr.getHandle(p.Handle); !ok {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+	} else if osf, ok := f.(*os.File); ok {
+		if info, err := osf.Stat(); err != nil {
+			return svr.sendPacket(statusFromError(p.Id, err))
+		} else {
+			return svr.sendPacket(sshFxpStatReponse{p.Id, info})
+		}
+	} else {
+		// server error...
+		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
 	}
 }
 

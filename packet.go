@@ -2,7 +2,6 @@ package sftp
 
 import (
 	"encoding"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"reflect"
@@ -103,7 +102,7 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	}
 	l := uint32(len(bb))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
-	debug("send packet %T, len: %v data: %v", m, l, hex.EncodeToString(bb))
+	debug("send packet %T, len: %v", m, l)
 	_, err = w.Write(hdr)
 	if err != nil {
 		return err
@@ -128,7 +127,6 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 		debug("recv packet %d bytes: err %v", l, err)
 		return 0, nil, err
 	}
-	debug("recv packet %d bytes: %v", l, hex.EncodeToString(b))
 	return b[0], b[1:], nil
 }
 
@@ -276,6 +274,10 @@ type sshFxpFstatPacket struct {
 
 func (p sshFxpFstatPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_FSTAT, p.Id, p.Handle)
+}
+
+func (p *sshFxpFstatPacket) UnmarshalBinary(b []byte) error {
+	return unmarshalIdString(b, &p.Id, &p.Handle)
 }
 
 type sshFxpClosePacket struct {
