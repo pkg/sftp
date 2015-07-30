@@ -152,6 +152,7 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_READ:
 		pkt = &sshFxpReadPacket{}
 	case ssh_FXP_WRITE:
+		pkt = &sshFxpWritePacket{}
 	case ssh_FXP_FSTAT:
 	case ssh_FXP_SETSTAT:
 	case ssh_FXP_FSETSTAT:
@@ -273,17 +274,32 @@ func (p sshFxpClosePacket) respond(svr *Server) error {
 func (p sshFxpReadPacket) respond(svr *Server) error {
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
-	} else if p.Len > maxWritePacket {
-		return svr.sendPacket(statusFromError(p.Id, syscall.EINVAL))
-	} else if osf, ok := f.(*os.File); ok {
-		debug("in readpacket server respond: len %d", p.Len)
-		ret := sshFxpDataPacket{Id: p.Id, Length: p.Len, Data: make([]byte, p.Len)}
-		if n, err := osf.ReadAt(ret.Data, int64(p.Offset)); err != nil && (err != io.EOF || n == 0) {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			ret.Length = uint32(n)
-			return svr.sendPacket(ret)
+	} else {
+		if p.Len > maxWritePacket {
+			p.Len = maxWritePacket
 		}
+		if osf, ok := f.(*os.File); ok {
+			debug("in readpacket server respond: len %d", p.Len)
+			ret := sshFxpDataPacket{Id: p.Id, Length: p.Len, Data: make([]byte, p.Len)}
+			if n, err := osf.ReadAt(ret.Data, int64(p.Offset)); err != nil && (err != io.EOF || n == 0) {
+				return svr.sendPacket(statusFromError(p.Id, err))
+			} else {
+				ret.Length = uint32(n)
+				return svr.sendPacket(ret)
+			}
+		} else {
+			// server error...
+			return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+		}
+	}
+}
+
+func (p sshFxpWritePacket) respond(svr *Server) error {
+	if f, ok := svr.getHandle(p.Handle); !ok {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+	} else if osf, ok := f.(*os.File); ok {
+		_, err := osf.WriteAt(p.Data, int64(p.Offset))
+		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
 		// server error...
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))

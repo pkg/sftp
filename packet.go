@@ -429,6 +429,24 @@ func (s sshFxpWritePacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) (err error) {
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	} else if p.Handle, b, err = unmarshalStringSafe(b); err != nil {
+		return
+	} else if p.Offset, b, err = unmarshalUint64Safe(b); err != nil {
+		return
+	} else if p.Length, b, err = unmarshalUint32Safe(b); err != nil {
+		return
+	} else if uint32(len(b)) < p.Length {
+		err = shortPacketError
+		return
+	} else {
+		p.Data = append([]byte{}, b[:p.Length]...)
+	}
+	return
+}
+
 type sshFxpMkdirPacket struct {
 	Id    uint32
 	Path  string
