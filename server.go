@@ -12,18 +12,23 @@ import (
 )
 
 type FileSystem interface {
-	Lstat(p string) (os.FileInfo, error)
+	Lstat(name string) (os.FileInfo, error)
+	Remove(name string) error
+	Rename(oldpath, newpath string) error
+}
+
+type FileSystemOS interface {
+	FileSystem
+	OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error)
+	Readlink(path string) (string, error)
 	Mkdir(name string, perm os.FileMode) error
 }
 
-type FileSystemOpen interface {
-	FileSystem
-	OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error)
-}
-
-type FileSystemSFTPOpen interface {
+type FileSystemSFTP interface {
 	FileSystem
 	OpenFile(path string, f int) (*File, error) // sftp package has a strange OpenFile method with no perm
+	ReadLink(path string) (string, error)
+	Mkdir(name string) error
 }
 
 // common subset of os.File and sftp.File
@@ -43,11 +48,17 @@ type svrFile interface {
 type nativeFs struct {
 }
 
-func (nfs *nativeFs) Lstat(p string) (os.FileInfo, error)       { return os.Lstat(p) }
-func (nfs *nativeFs) Mkdir(name string, perm os.FileMode) error { return os.Mkdir(name, perm) }
-func (nfs *nativeFs) OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error) {
-	return os.OpenFile(name, flag, perm)
+func (nfs *nativeFs) Lstat(path string) (os.FileInfo, error)    { return os.Lstat(path) }
+func (nfs *nativeFs) Mkdir(path string, perm os.FileMode) error { return os.Mkdir(path, perm) }
+func (nfs *nativeFs) Remove(path string) error                  { return os.Remove(path) }
+func (nfs *nativeFs) Rename(oldpath, newpath string) error      { return os.Rename(oldpath, newpath) }
+func (nfs *nativeFs) Readlink(path string) (string, error)      { return os.Readlink(path) }
+func (nfs *nativeFs) OpenFile(path string, flag int, perm os.FileMode) (file *os.File, err error) {
+	return os.OpenFile(path, flag, perm)
 }
+
+var __typecheck_fsos FileSystemOS = &nativeFs{}
+var __typecheck_sftpos FileSystemSFTP = &Client{}
 
 type Server struct {
 	in            io.Reader
@@ -164,15 +175,20 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_SETSTAT:
 	case ssh_FXP_FSETSTAT:
 	case ssh_FXP_OPENDIR:
+		pkt = &sshFxpOpendirPacket{}
 	case ssh_FXP_READDIR:
+		pkt = &sshFxpReaddirPacket{}
 	case ssh_FXP_REMOVE:
+		pkt = &sshFxpRemovePacket{}
 	case ssh_FXP_MKDIR:
 		pkt = &sshFxpMkdirPacket{}
 	case ssh_FXP_RMDIR:
 	case ssh_FXP_REALPATH:
 	case ssh_FXP_STAT:
 	case ssh_FXP_RENAME:
+		pkt = &sshFxpRenamePacket{}
 	case ssh_FXP_READLINK:
+		pkt = &sshFxpReadlinkPacket{}
 	case ssh_FXP_SYMLINK:
 	case ssh_FXP_STATUS:
 	case ssh_FXP_HANDLE:
@@ -206,12 +222,12 @@ func (p sshFxInitPacket) respond(svr *Server) error {
 	return svr.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 }
 
-type sshFxpStatReponse struct {
+type sshFxpStatResponse struct {
 	Id   uint32
 	info os.FileInfo
 }
 
-func (p sshFxpStatReponse) MarshalBinary() ([]byte, error) {
+func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
 	b := []byte{ssh_FXP_ATTRS}
 	b = marshalUint32(b, p.Id)
 	b = marshalFileInfo(b, p.info)
@@ -223,7 +239,7 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 	if info, err := svr.fs.Lstat(p.Path); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		return svr.sendPacket(sshFxpStatReponse{p.Id, info})
+		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
 	}
 }
 
@@ -234,7 +250,7 @@ func (p sshFxpFstatPacket) respond(svr *Server) error {
 		if info, err := osf.Stat(); err != nil {
 			return svr.sendPacket(statusFromError(p.Id, err))
 		} else {
-			return svr.sendPacket(sshFxpStatReponse{p.Id, info})
+			return svr.sendPacket(sshFxpStatResponse{p.Id, info})
 		}
 	} else {
 		// server error...
@@ -243,9 +259,57 @@ func (p sshFxpFstatPacket) respond(svr *Server) error {
 }
 
 func (p sshFxpMkdirPacket) respond(svr *Server) error {
-	// ignore flags field
-	err := svr.fs.Mkdir(p.Path, 0755)
+	if svr.readOnly {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+	}
+	// TODO FIXME: ignore flags field
+	if fso, ok := svr.fs.(FileSystemOS); ok {
+		err := fso.Mkdir(p.Path, 0755)
+		return svr.sendPacket(statusFromError(p.Id, err))
+	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
+		err := sftpo.Mkdir(p.Path)
+		return svr.sendPacket(statusFromError(p.Id, err))
+	} else {
+		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
+	}
+}
+
+func (p sshFxpRemovePacket) respond(svr *Server) error {
+	if svr.readOnly {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+	}
+	err := svr.fs.Remove(p.Filename)
 	return svr.sendPacket(statusFromError(p.Id, err))
+}
+
+func (p sshFxpRenamePacket) respond(svr *Server) error {
+	if svr.readOnly {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+	}
+	err := svr.fs.Rename(p.Oldpath, p.Newpath)
+	return svr.sendPacket(statusFromError(p.Id, err))
+}
+
+func (p sshFxpReadlinkPacket) respond(svr *Server) error {
+	if fso, ok := svr.fs.(FileSystemOS); ok {
+		if f, err := fso.Readlink(p.Path); err != nil {
+			return svr.sendPacket(statusFromError(p.Id, err))
+		} else {
+			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, nil}}})
+		}
+	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
+		if f, err := sftpo.ReadLink(p.Path); err != nil {
+			return svr.sendPacket(statusFromError(p.Id, err))
+		} else {
+			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, nil}}})
+		}
+	} else {
+		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
+	}
+}
+
+func (p sshFxpOpendirPacket) respond(svr *Server) error {
+	return sshFxpOpenPacket{p.Id, p.Path, ssh_FXF_READ, 0}.respond(svr)
 }
 
 func (p sshFxpOpenPacket) respond(svr *Server) error {
@@ -281,14 +345,14 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		osFlags |= os.O_EXCL
 	}
 
-	if fso, ok := svr.fs.(FileSystemOpen); ok {
+	if fso, ok := svr.fs.(FileSystemOS); ok {
 		if f, err := fso.OpenFile(p.Path, osFlags, 0644); err != nil {
 			return svr.sendPacket(statusFromError(p.Id, err))
 		} else {
 			handle := svr.nextHandle(f)
 			return svr.sendPacket(sshFxpHandlePacket{p.Id, handle})
 		}
-	} else if sftpo, ok := svr.fs.(FileSystemSFTPOpen); ok {
+	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
 		if f, err := sftpo.OpenFile(p.Path, osFlags); err != nil {
 			return svr.sendPacket(statusFromError(p.Id, err))
 		} else {
@@ -312,7 +376,6 @@ func (p sshFxpReadPacket) respond(svr *Server) error {
 			p.Len = maxWritePacket
 		}
 		if osf, ok := f.(*os.File); ok {
-			debug("in readpacket server respond: len %d", p.Len)
 			ret := sshFxpDataPacket{Id: p.Id, Length: p.Len, Data: make([]byte, p.Len)}
 			if n, err := osf.ReadAt(ret.Data, int64(p.Offset)); err != nil && (err != io.EOF || n == 0) {
 				return svr.sendPacket(statusFromError(p.Id, err))
@@ -328,6 +391,10 @@ func (p sshFxpReadPacket) respond(svr *Server) error {
 }
 
 func (p sshFxpWritePacket) respond(svr *Server) error {
+	if svr.readOnly {
+		// shouldn't really get here, the open should have failed
+		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+	}
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
 	} else if osf, ok := f.(*os.File); ok {
@@ -336,6 +403,32 @@ func (p sshFxpWritePacket) respond(svr *Server) error {
 	} else {
 		// server error...
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+	}
+}
+
+func (p sshFxpReaddirPacket) respond(svr *Server) error {
+	if f, ok := svr.getHandle(p.Handle); !ok {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+	} else {
+		dirents := []os.FileInfo{}
+		var err error = nil
+
+		if osf, ok := f.(*os.File); ok {
+			dirents, err = osf.Readdir(128)
+		} else {
+			// server error...
+			return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+		}
+
+		if err != nil {
+			return svr.sendPacket(statusFromError(p.Id, err))
+		}
+
+		ret := sshFxpNamePacket{p.Id, nil}
+		for _, dirent := range dirents {
+			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{dirent.Name(), dirent})
+		}
+		return svr.sendPacket(ret)
 	}
 }
 

@@ -404,7 +404,7 @@ func TestClientRename(t *testing.T) {
 	}
 }
 
-func TestClientReadLine(t *testing.T) {
+func TestClientReadLink(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE)
 	defer cmd.Wait()
 	defer sftp.Close()
