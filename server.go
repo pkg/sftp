@@ -52,6 +52,9 @@ func (nfs *nativeFs) OpenFile(name string, flag int, perm os.FileMode) (file *os
 type Server struct {
 	in            io.Reader
 	out           io.Writer
+	debugStream   io.Writer
+	debugLevel    int
+	readOnly      bool
 	rootDir       string
 	lastId        uint32
 	fs            FileSystem
@@ -95,7 +98,7 @@ type serverRespondablePacket interface {
 
 // Creates a new server instance around the provided streams.
 // A subsequent call to Run() is required.
-func NewServer(in io.Reader, out io.Writer, rootDir string) (*Server, error) {
+func NewServer(in io.Reader, out io.Writer, debugStream io.Writer, debugLevel int, readOnly bool, rootDir string) (*Server, error) {
 	if rootDir == "" {
 		if wd, err := os.Getwd(); err != nil {
 			return nil, err
@@ -106,6 +109,9 @@ func NewServer(in io.Reader, out io.Writer, rootDir string) (*Server, error) {
 	return &Server{
 		in:            in,
 		out:           out,
+		debugStream:   debugStream,
+		debugLevel:    debugLevel,
+		readOnly:      readOnly,
 		rootDir:       rootDir,
 		fs:            &nativeFs{},
 		pktChan:       make(chan serverRespondablePacket, 4),
@@ -245,12 +251,23 @@ func (p sshFxpMkdirPacket) respond(svr *Server) error {
 func (p sshFxpOpenPacket) respond(svr *Server) error {
 	osFlags := 0
 	if p.Pflags&ssh_FXF_READ != 0 && p.Pflags&ssh_FXF_WRITE != 0 {
+		if svr.readOnly {
+			return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+		}
 		osFlags |= os.O_RDWR
+	} else if p.Pflags&ssh_FXF_WRITE != 0 {
+		if svr.readOnly {
+			return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+		}
+		osFlags |= os.O_WRONLY
 	} else if p.Pflags&ssh_FXF_READ != 0 {
 		osFlags |= os.O_RDONLY
-	} else if p.Pflags&ssh_FXF_WRITE != 0 {
-		osFlags |= os.O_WRONLY
+	} else {
+		// how are they opening?
+		return svr.sendPacket(statusFromError(p.Id, syscall.EINVAL))
+
 	}
+
 	if p.Pflags&ssh_FXF_APPEND != 0 {
 		osFlags |= os.O_APPEND
 	}
@@ -322,6 +339,20 @@ func (p sshFxpWritePacket) respond(svr *Server) error {
 	}
 }
 
+func errnoToSshErr(errno syscall.Errno) uint32 {
+	if errno == 0 {
+		return ssh_FX_OK
+	} else if errno == syscall.ENOENT {
+		return ssh_FX_NO_SUCH_FILE
+	} else if errno == syscall.EPERM {
+		return ssh_FX_PERMISSION_DENIED
+	} else {
+		return ssh_FX_FAILURE
+	}
+
+	return uint32(errno)
+}
+
 func statusFromError(id uint32, err error) sshFxpStatusPacket {
 	ret := sshFxpStatusPacket{
 		Id: id,
@@ -346,21 +377,12 @@ func statusFromError(id uint32, err error) sshFxpStatusPacket {
 		ret.StatusError.msg = err.Error()
 		if err == io.EOF {
 			ret.StatusError.Code = ssh_FX_EOF
-		}
-		if pathError, ok := err.(*os.PathError); ok {
+		} else if errno, ok := err.(syscall.Errno); ok {
+			ret.StatusError.Code = errnoToSshErr(errno)
+		} else if pathError, ok := err.(*os.PathError); ok {
 			debug("statusFromError: error is %T %#v", pathError.Err, pathError.Err)
 			if errno, ok := pathError.Err.(syscall.Errno); ok {
-				if errno == 0 {
-					ret.StatusError.Code = ssh_FX_OK
-				} else if errno == syscall.ENOENT {
-					ret.StatusError.Code = ssh_FX_NO_SUCH_FILE
-				} else if errno == syscall.EPERM {
-					ret.StatusError.Code = ssh_FX_PERMISSION_DENIED
-				} else {
-					ret.StatusError.Code = ssh_FX_FAILURE
-				}
-
-				ret.StatusError.Code = uint32(errno)
+				ret.StatusError.Code = errnoToSshErr(errno)
 			}
 		}
 	}

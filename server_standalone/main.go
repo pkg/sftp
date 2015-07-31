@@ -4,12 +4,29 @@ package main
 // in practice this will statically link; however this allows unit testing from the sftp client.
 
 import (
+	"flag"
+	"io/ioutil"
 	"os"
 
 	"github.com/ScriptRock/sftp"
 )
 
 func main() {
-	svr, _ := sftp.NewServer(os.Stdin, os.Stdout, "")
+	readOnly := false
+	debugLevelStr := "none"
+	debugLevel := 0
+	debugStderr := false
+	flag.BoolVar(&readOnly, "R", false, "read-only server")
+	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
+	flag.StringVar(&debugLevelStr, "l", "none", "debug level")
+	flag.Parse()
+
+	debugStream := ioutil.Discard
+	if debugStderr {
+		debugStream = os.Stderr
+		debugLevel = 1
+	}
+
+	svr, _ := sftp.NewServer(os.Stdin, os.Stdout, debugStream, debugLevel, readOnly, "")
 	svr.Run()
 }
