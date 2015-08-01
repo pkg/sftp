@@ -426,7 +426,7 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 
 		ret := sshFxpNamePacket{p.Id, nil}
 		for _, dirent := range dirents {
-			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{dirent.Name(), dirent})
+			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{dirent.Name(), []interface{}{dirent.Name(), dirent}})
 		}
 		return svr.sendPacket(ret)
 	}

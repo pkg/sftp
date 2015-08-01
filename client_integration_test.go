@@ -27,6 +27,7 @@ const (
 	debuglevel = "ERROR" // set to "DEBUG" for debugging
 )
 
+var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
 var testSftp = flag.String("sftp", "/usr/lib/openssh/sftp-server", "location of the sftp server binary")
 
@@ -36,6 +37,33 @@ func testClient(t testing.TB, readonly bool) (*Client, *exec.Cmd) {
 	if !*testIntegration {
 		t.Skip("skipping intergration test")
 	}
+
+	if *testServerImpl {
+		txPipeRd, txPipeWr := io.Pipe()
+		rxPipeRd, rxPipeWr := io.Pipe()
+
+		server, err := NewServer(txPipeRd, rxPipeWr, os.Stderr, 0, readonly, ".")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go server.Run()
+
+		client, err := NewClientPipe(rxPipeRd, txPipeWr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := client.sendInit(); err != nil {
+			t.Fatal(err)
+		}
+		if err := client.recvVersion(); err != nil {
+			t.Fatal(err)
+		}
+
+		// dummy command...
+		return client, exec.Command("true")
+	}
+
 	cmd := exec.Command(*testSftp, "-e", "-R", "-l", debuglevel) // log to stderr, read only
 	if !readonly {
 		cmd = exec.Command(*testSftp, "-e", "-l", debuglevel) // log to stderr

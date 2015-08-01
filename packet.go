@@ -348,13 +348,15 @@ func (p *sshFxpReadlinkPacket) UnmarshalBinary(b []byte) error {
 
 type sshFxpNameAttr struct {
 	Name  string
-	Attrs interface{}
+	Attrs []interface{}
 }
 
 func (p sshFxpNameAttr) MarshalBinary() ([]byte, error) {
 	b := []byte{}
 	b = marshalString(b, p.Name)
-	b = marshal(b, p.Attrs)
+	for _, attr := range p.Attrs {
+		b = marshal(b, attr)
+	}
 	return b, nil
 }
 

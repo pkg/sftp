@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"encoding"
+	"fmt"
 	"io"
 	"os"
 	"path"
