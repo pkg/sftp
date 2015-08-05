@@ -663,9 +663,8 @@ func TestClientChtimesReadonly(t *testing.T) {
 	}
 }
 
-/*
-func TestClientStatVFS(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY)
+func TestClientTruncate(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -673,18 +672,48 @@ func TestClientStatVFS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fname := f.Name()
 
-	if svfs, err := sftp.StatVFS("/"); err != nil {
+	if n, err := f.Write([]byte("hello world")); n != 11 || err != nil {
 		t.Fatal(err)
-	} else {
-		t.Fatalf("vfs: %v", *svfs)
+	}
+	f.Close()
+
+	if err := sftp.Truncate(fname, 5); err != nil {
+		t.Fatal(err)
+	}
+	if stat, err := os.Stat(fname); err != nil {
+		t.Fatal(err)
+	} else if stat.Size() != 5 {
+		t.Fatalf("unexpected size: %d", stat.Size())
 	}
 }
 
-func (c *Client) StatVFS(path string) (*StatVFS, error)
-func (c *Client) Truncate(path string, size int64) error
-func (c *Client) Walk(root string) *fs.Walker
-*/
+func TestClientTruncateReadonly(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fname := f.Name()
+
+	if n, err := f.Write([]byte("hello world")); n != 11 || err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := sftp.Truncate(fname, 5); err == nil {
+		t.Fatal("expected error")
+	}
+	if stat, err := os.Stat(fname); err != nil {
+		t.Fatal(err)
+	} else if stat.Size() != 11 {
+		t.Fatalf("unexpected size: %d", stat.Size())
+	}
+}
 
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
