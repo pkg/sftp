@@ -322,7 +322,7 @@ func runSftpClient(script string, path string, host string, port int) (string, e
 	cmd.Stdin = bytes.NewBufferString(script)
 	cmd.Stdout = stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 	err := cmd.Wait()

@@ -260,6 +260,30 @@ func (c *Client) opendir(path string) (string, error) {
 	}
 }
 
+func (c *Client) Stat(p string) (os.FileInfo, error) {
+	id := c.nextId()
+	typ, data, err := c.sendRequest(sshFxpStatPacket{
+		Id:   id,
+		Path: p,
+	})
+	if err != nil {
+		return nil, err
+	}
+	switch typ {
+	case ssh_FXP_ATTRS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		attr, _ := unmarshalAttrs(data)
+		return fileInfoFromStat(attr, path.Base(p)), nil
+	case ssh_FXP_STATUS:
+		return nil, unmarshalStatus(id, data)
+	default:
+		return nil, unimplementedPacketErr(typ)
+	}
+}
+
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpLstatPacket{

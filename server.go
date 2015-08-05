@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
+	"path/filepath"
 	"sync"
 	"syscall"
 )
@@ -14,6 +16,7 @@ import (
 type FileSystem interface {
 	Lstat(name string) (os.FileInfo, error)
 	Remove(name string) error
+	Stat(name string) (os.FileInfo, error)
 	Rename(oldpath, newpath string) error
 }
 
@@ -21,6 +24,7 @@ type FileSystemOS interface {
 	FileSystem
 	OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error)
 	Readlink(path string) (string, error)
+	Realpath(path string) (string, error)
 	Mkdir(name string, perm os.FileMode) error
 }
 
@@ -49,10 +53,15 @@ type nativeFs struct {
 }
 
 func (nfs *nativeFs) Lstat(path string) (os.FileInfo, error)    { return os.Lstat(path) }
+func (nfs *nativeFs) Stat(path string) (os.FileInfo, error)     { return os.Stat(path) }
 func (nfs *nativeFs) Mkdir(path string, perm os.FileMode) error { return os.Mkdir(path, perm) }
 func (nfs *nativeFs) Remove(path string) error                  { return os.Remove(path) }
 func (nfs *nativeFs) Rename(oldpath, newpath string) error      { return os.Rename(oldpath, newpath) }
 func (nfs *nativeFs) Readlink(path string) (string, error)      { return os.Readlink(path) }
+func (nfs *nativeFs) Realpath(path string) (string, error) {
+	f, err := filepath.Abs(path)
+	return filepath.Clean(f), err
+}
 func (nfs *nativeFs) OpenFile(path string, flag int, perm os.FileMode) (file *os.File, err error) {
 	return os.OpenFile(path, flag, perm)
 }
@@ -186,7 +195,9 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 		pkt = &sshFxpMkdirPacket{}
 	case ssh_FXP_RMDIR:
 	case ssh_FXP_REALPATH:
+		pkt = &sshFxpRealpathPacket{}
 	case ssh_FXP_STAT:
+		pkt = &sshFxpStatPacket{}
 	case ssh_FXP_RENAME:
 		pkt = &sshFxpRenamePacket{}
 	case ssh_FXP_READLINK:
@@ -245,6 +256,15 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 	}
 }
 
+func (p sshFxpStatPacket) respond(svr *Server) error {
+	// stat the requested file
+	if info, err := svr.fs.Stat(p.Path); err != nil {
+		return svr.sendPacket(statusFromError(p.Id, err))
+	} else {
+		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
+	}
+}
+
 func (p sshFxpFstatPacket) respond(svr *Server) error {
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
@@ -292,18 +312,32 @@ func (p sshFxpRenamePacket) respond(svr *Server) error {
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
+var emptyFileStat = []interface{}{uint32(0)}
+
 func (p sshFxpReadlinkPacket) respond(svr *Server) error {
 	if fso, ok := svr.fs.(FileSystemOS); ok {
 		if f, err := fso.Readlink(p.Path); err != nil {
 			return svr.sendPacket(statusFromError(p.Id, err))
 		} else {
-			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, nil}}})
+			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
 		}
 	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
 		if f, err := sftpo.ReadLink(p.Path); err != nil {
 			return svr.sendPacket(statusFromError(p.Id, err))
 		} else {
-			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, nil}}})
+			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
+		}
+	} else {
+		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
+	}
+}
+
+func (p sshFxpRealpathPacket) respond(svr *Server) error {
+	if fso, ok := svr.fs.(FileSystemOS); ok {
+		if f, err := fso.Realpath(p.Path); err != nil {
+			return svr.sendPacket(statusFromError(p.Id, err))
+		} else {
+			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
 		}
 	} else {
 		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
@@ -412,10 +446,12 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
 	} else {
+		dirname := ""
 		dirents := []os.FileInfo{}
 		var err error = nil
 
 		if osf, ok := f.(*os.File); ok {
+			dirname = osf.Name()
 			dirents, err = osf.Readdir(128)
 		} else {
 			// server error...
@@ -428,7 +464,7 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 
 		ret := sshFxpNamePacket{p.Id, nil}
 		for _, dirent := range dirents {
-			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{dirent.Name(), []interface{}{dirent.Name(), dirent}})
+			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{dirent.Name(), path.Join(dirname, dirent.Name()), []interface{}{dirent}})
 		}
 		return svr.sendPacket(ret)
 	}
