@@ -11,11 +11,15 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"strconv"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/kr/fs"
 )
@@ -26,6 +30,8 @@ const (
 
 	debuglevel = "ERROR" // set to "DEBUG" for debugging
 )
+
+var spaceRegex = regexp.MustCompile(`\s+`)
 
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
@@ -449,6 +455,192 @@ func TestClientReadLink(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClientChmod(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Chmod(f.Name(), 0531); err != nil {
+		t.Fatal(err)
+	}
+	if stat, err := os.Stat(f.Name()); err != nil {
+		t.Fatal(err)
+	} else if stat.Mode()&os.ModePerm != 0531 {
+		t.Fatalf("invalid perm %o\n", stat.Mode())
+	}
+}
+
+func TestClientChmodReadonly(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Chmod(f.Name(), 0531); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClientChown(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	usr, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	chownto, err := user.Lookup("daemon") // seems common-ish...
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if usr.Uid != "0" {
+		t.Log("must be root to run chown tests")
+		t.Skip()
+	}
+	toUid, err := strconv.Atoi(chownto.Uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toGid, err := strconv.Atoi(chownto.Gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := exec.Command("ls", "-nl", f.Name()).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Chown(f.Name(), toUid, toGid); err != nil {
+		t.Fatal(err)
+	}
+	after, err := exec.Command("ls", "-nl", f.Name()).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	beforeWords := spaceRegex.Split(string(before), -1)
+	if beforeWords[2] != "0" {
+		t.Fatalf("bad previous user? should be root")
+	}
+	afterWords := spaceRegex.Split(string(after), -1)
+	if afterWords[2] != chownto.Uid || afterWords[3] != chownto.Gid {
+		t.Fatalf("bad chown: %#v", afterWords)
+	}
+	t.Logf("before: %v", string(before))
+	t.Logf(" after: %v", string(after))
+}
+
+func TestClientChownReadonly(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	usr, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	chownto, err := user.Lookup("daemon") // seems common-ish...
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if usr.Uid != "0" {
+		t.Log("must be root to run chown tests")
+		t.Skip()
+	}
+	toUid, err := strconv.Atoi(chownto.Uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toGid, err := strconv.Atoi(chownto.Gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sftp.Chown(f.Name(), toUid, toGid); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClientChtimes(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	atime := time.Date(2013, 2, 23, 13, 24, 35, 0, time.UTC)
+	mtime := time.Date(1985, 6, 12, 6, 6, 6, 0, time.UTC)
+	if err := sftp.Chtimes(f.Name(), atime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	if stat, err := os.Stat(f.Name()); err != nil {
+		t.Fatal(err)
+	} else if stat.ModTime().Sub(mtime) != 0 {
+		t.Fatalf("incorrect mtime: %v vs %v", stat.ModTime(), mtime)
+	}
+}
+
+func TestClientChtimesReadonly(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	atime := time.Date(2013, 2, 23, 13, 24, 35, 0, time.UTC)
+	mtime := time.Date(1985, 6, 12, 6, 6, 6, 0, time.UTC)
+	if err := sftp.Chtimes(f.Name(), atime, mtime); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+/*
+func TestClientStatVFS(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if svfs, err := sftp.StatVFS("/"); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Fatalf("vfs: %v", *svfs)
+	}
+}
+
+func (c *Client) StatVFS(path string) (*StatVFS, error)
+func (c *Client) Truncate(path string, size int64) error
+func (c *Client) Walk(root string) *fs.Walker
+*/
 
 func sameFile(want, got os.FileInfo) bool {
 	return want.Name() == got.Name() &&
