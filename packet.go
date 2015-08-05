@@ -100,7 +100,6 @@ func unmarshalStringSafe(b []byte) (string, []byte, error) {
 }
 
 // sendPacket marshals p according to RFC 4234.
-
 func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	bb, err := m.MarshalBinary()
 	if err != nil {
@@ -255,6 +254,8 @@ func (p *sshFxpReaddirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIdString(b, &p.Id, &p.Handle)
 }
 
+func (p sshFxpReaddirPacket) id() uint32 { return p.Id }
+
 type sshFxpOpendirPacket struct {
 	Id   uint32
 	Path string
@@ -268,10 +269,14 @@ func (p *sshFxpOpendirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIdString(b, &p.Id, &p.Path)
 }
 
+func (p sshFxpOpendirPacket) id() uint32 { return p.Id }
+
 type sshFxpLstatPacket struct {
 	Id   uint32
 	Path string
 }
+
+func (p sshFxpLstatPacket) id() uint32 { return p.Id }
 
 func (p sshFxpLstatPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_LSTAT, p.Id, p.Path)
@@ -285,6 +290,8 @@ type sshFxpFstatPacket struct {
 	Id     uint32
 	Handle string
 }
+
+func (p sshFxpFstatPacket) id() uint32 { return p.Id }
 
 func (p sshFxpFstatPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_FSTAT, p.Id, p.Handle)
@@ -307,10 +314,14 @@ func (p *sshFxpClosePacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIdString(b, &p.Id, &p.Handle)
 }
 
+func (p sshFxpClosePacket) id() uint32 { return p.Id }
+
 type sshFxpRemovePacket struct {
 	Id       uint32
 	Filename string
 }
+
+func (p sshFxpRemovePacket) id() uint32 { return p.Id }
 
 func (p sshFxpRemovePacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_REMOVE, p.Id, p.Filename)
@@ -325,6 +336,8 @@ type sshFxpRmdirPacket struct {
 	Path string
 }
 
+func (p sshFxpRmdirPacket) id() uint32 { return p.Id }
+
 func (p sshFxpRmdirPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_RMDIR, p.Id, p.Path)
 }
@@ -337,6 +350,8 @@ type sshFxpReadlinkPacket struct {
 	Id   uint32
 	Path string
 }
+
+func (p sshFxpReadlinkPacket) id() uint32 { return p.Id }
 
 func (p sshFxpReadlinkPacket) MarshalBinary() ([]byte, error) {
 	return marshalIdString(ssh_FXP_READLINK, p.Id, p.Path)
@@ -387,6 +402,8 @@ type sshFxpOpenPacket struct {
 	Flags  uint32 // ignored
 }
 
+func (p sshFxpOpenPacket) id() uint32 { return p.Id }
+
 func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 +
 		4 + len(p.Path) +
@@ -421,6 +438,8 @@ type sshFxpReadPacket struct {
 	Len    uint32
 }
 
+func (p sshFxpReadPacket) id() uint32 { return p.Id }
+
 func (p sshFxpReadPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Handle) +
@@ -454,6 +473,8 @@ type sshFxpRenamePacket struct {
 	Newpath string
 }
 
+func (p sshFxpRenamePacket) id() uint32 { return p.Id }
+
 func (p sshFxpRenamePacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Oldpath) +
@@ -485,6 +506,8 @@ type sshFxpWritePacket struct {
 	Length uint32
 	Data   []byte
 }
+
+func (s sshFxpWritePacket) id() uint32 { return s.Id }
 
 func (s sshFxpWritePacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
@@ -526,6 +549,8 @@ type sshFxpMkdirPacket struct {
 	Flags uint32 // ignored
 }
 
+func (p sshFxpMkdirPacket) id() uint32 { return p.Id }
+
 func (p sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Path) +
@@ -556,6 +581,8 @@ type sshFxpSetstatPacket struct {
 	Flags uint32
 	Attrs interface{}
 }
+
+func (p sshFxpSetstatPacket) id() uint32 { return p.Id }
 
 func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
@@ -621,4 +648,47 @@ func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) (err error) {
 		copy(p.Data, b)
 		return nil
 	}
+}
+
+type sshFxpStatvfsPacket struct {
+	Id   uint32
+	Path string
+}
+
+func (p sshFxpStatvfsPacket) id() uint32 { return p.Id }
+
+func (p sshFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
+	l := 1 + 4 + // type(byte) + uint32
+		len(p.Path) +
+		len("statvfs@openssh.com")
+
+	b := make([]byte, 0, l)
+	b = append(b, ssh_FXP_EXTENDED)
+	b = marshalUint32(b, p.Id)
+	b = marshalString(b, "statvfs@openssh.com")
+	b = marshalString(b, p.Path)
+	return b, nil
+}
+
+type StatVFS struct {
+	Id      uint32
+	Bsize   uint64 /* file system block size */
+	Frsize  uint64 /* fundamental fs block size */
+	Blocks  uint64 /* number of blocks (unit f_frsize) */
+	Bfree   uint64 /* free blocks in file system */
+	Bavail  uint64 /* free blocks for non-root */
+	Files   uint64 /* total file inodes */
+	Ffree   uint64 /* free file inodes */
+	Favail  uint64 /* free file inodes for to non-root */
+	Fsid    uint64 /* file system id */
+	Flag    uint64 /* bit mask of f_flag values */
+	Namemax uint64 /* maximum filename length */
+}
+
+func (p *StatVFS) TotalSpace() uint64 {
+	return p.Frsize * p.Blocks
+}
+
+func (p *StatVFS) FreeSpace() uint64 {
+	return p.Frsize * p.Bfree
 }

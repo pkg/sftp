@@ -73,6 +73,7 @@ type Server struct {
 	openFiles     map[string]svrFile
 	openFilesLock *sync.RWMutex
 	handleCount   int
+	maxTxPacket   uint32
 }
 
 func (svr *Server) nextHandle(f svrFile) string {
@@ -128,6 +129,7 @@ func NewServer(in io.Reader, out io.Writer, debugStream io.Writer, debugLevel in
 		pktChan:       make(chan serverRespondablePacket, 4),
 		openFiles:     map[string]svrFile{},
 		openFilesLock: &sync.RWMutex{},
+		maxTxPacket:   1 << 15,
 	}, nil
 }
 
@@ -372,8 +374,8 @@ func (p sshFxpReadPacket) respond(svr *Server) error {
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
 	} else {
-		if p.Len > maxWritePacket {
-			p.Len = maxWritePacket
+		if p.Len > svr.maxTxPacket {
+			p.Len = svr.maxTxPacket
 		}
 		if osf, ok := f.(*os.File); ok {
 			ret := sshFxpDataPacket{Id: p.Id, Length: p.Len, Data: make([]byte, p.Len)}
