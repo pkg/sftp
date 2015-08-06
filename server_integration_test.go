@@ -19,6 +19,9 @@ import (
 )
 
 var testSftpClientBin = flag.String("sftp_client", "/usr/bin/sftp", "location of the sftp client binary")
+var sshServerDebugStream = os.Stdout  // ioutil.Discard
+var sftpServerDebugStream = os.Stdout // ioutil.Discard
+var sftpClientDebugStream = os.Stdout // ioutil.Discard
 
 /***********************************************************************************************
 
@@ -158,11 +161,11 @@ type sshSessionChannelServer struct {
 }
 
 func (svr *sshServer) handleChanReq(chanReq ssh.NewChannel) {
-	fmt.Fprintf(os.Stderr, "channel request: %v, extra: '%v'\n", chanReq.ChannelType(), hex.EncodeToString(chanReq.ExtraData()))
+	fmt.Fprintf(sshServerDebugStream, "channel request: %v, extra: '%v'\n", chanReq.ChannelType(), hex.EncodeToString(chanReq.ExtraData()))
 	switch chanReq.ChannelType() {
 	case "session":
 		if ch, reqs, err := chanReq.Accept(); err != nil {
-			fmt.Fprintf(os.Stderr, "fail to accept channel request: %v\n", err)
+			fmt.Fprintf(sshServerDebugStream, "fail to accept channel request: %v\n", err)
 			chanReq.Reject(ssh.ResourceShortage, "channel accept failure")
 		} else {
 			chsvr := &sshSessionChannelServer{
@@ -185,6 +188,7 @@ func (chsvr *sshSessionChannelServer) handleReqs() {
 	for req := range chsvr.newReqs {
 		chsvr.handleReq(req)
 	}
+	fmt.Fprintf(sshServerDebugStream, "ssh server session channel complete\n")
 }
 
 func (chsvr *sshSessionChannelServer) handleReq(req *ssh.Request) {
@@ -199,16 +203,16 @@ func (chsvr *sshSessionChannelServer) handleReq(req *ssh.Request) {
 }
 
 func rejectRequest(req *ssh.Request) error {
-	fmt.Fprintf(os.Stderr, "ssh rejecting request, type: %s\n", req.Type)
+	fmt.Fprintf(sshServerDebugStream, "ssh rejecting request, type: %s\n", req.Type)
 	err := req.Reply(false, []byte{})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ssh request reply had error: %v\n", err)
+		fmt.Fprintf(sshServerDebugStream, "ssh request reply had error: %v\n", err)
 	}
 	return err
 }
 
 func rejectRequestUnmarshalError(req *ssh.Request, s interface{}, err error) error {
-	fmt.Fprintf(os.Stderr, "ssh request unmarshaling error, type '%T': %v\n", s, err)
+	fmt.Fprintf(sshServerDebugStream, "ssh request unmarshaling error, type '%T': %v\n", s, err)
 	rejectRequest(req)
 	return err
 }
@@ -244,12 +248,17 @@ func (chsvr *sshSessionChannelServer) handleEnv(req *ssh.Request) error {
 type sshSubsystemRequest struct {
 	Name string
 }
+
 type sshSubsystemExitStatus struct {
 	Status uint32
 }
 
 func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
-	defer chsvr.ch.Close()
+	defer func() {
+		err1 := chsvr.ch.CloseWrite()
+		err2 := chsvr.ch.Close()
+		fmt.Fprintf(sshServerDebugStream, "ssh server subsystem request complete, err: %v %v\n", err1, err2)
+	}()
 
 	subsystemReq := &sshSubsystemRequest{}
 	if err := ssh.Unmarshal(req.Payload, subsystemReq); err != nil {
@@ -263,13 +272,32 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 	if subsystemReq.Name == "sftp" {
 		req.Reply(true, nil)
 
-		sftpServer, err := NewServer(chsvr.ch, chsvr.ch, os.Stderr, 0, false, ".")
-		if err != nil {
-			return err
-		}
+		if false {
+			// use the sftp server backend; this is to test the ssh code, not the sftp code
+			cmd := exec.Command(*testSftp, "-e", "-l", "DEBUG") // log to stderr
+			cmd.Stdin = chsvr.ch
+			cmd.Stdout = chsvr.ch
+			cmd.Stderr = sftpServerDebugStream
+			if err := cmd.Start(); err != nil {
+				return err
+			}
+			return cmd.Wait()
+		} else {
+			sftpServer, err := NewServer(chsvr.ch, chsvr.ch, sftpServerDebugStream, 0, false, ".")
+			if err != nil {
+				return err
+			}
 
-		// wait for the session to close
-		return sftpServer.Run()
+			// wait for the session to close
+			runErr := sftpServer.Run()
+			exitStatus := uint32(1)
+			if runErr == nil {
+				exitStatus = uint32(0)
+			}
+
+			_, exitStatusErr := chsvr.ch.SendRequest("exit-status", false, ssh.Marshal(sshSubsystemExitStatus{exitStatus}))
+			return exitStatusErr
+		}
 	} else {
 		return req.Reply(false, nil)
 	}
@@ -303,13 +331,19 @@ func testServer(t *testing.T, readonly bool) (string, int) {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
+				fmt.Fprintf(sshServerDebugStream, "ssh server socket closed\n")
 				break
 			}
 
-			_, err = sshServerFromConn(conn, basicServerConfig())
-			if err != nil {
-				t.Fatal(err)
-			}
+			go func() {
+				defer conn.Close()
+				sshSvr, err := sshServerFromConn(conn, basicServerConfig())
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = sshSvr.Wait()
+				fmt.Fprintf(sshServerDebugStream, "ssh server finished, err: %v\n", err)
+			}()
 		}
 	}()
 
@@ -317,11 +351,11 @@ func testServer(t *testing.T, readonly bool) (string, int) {
 }
 
 func runSftpClient(script string, path string, host string, port int) (string, error) {
-	cmd := exec.Command(*testSftpClientBin, "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
+	cmd := exec.Command(*testSftpClientBin, "-vvvv", "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
 	stdout := &bytes.Buffer{}
 	cmd.Stdin = bytes.NewBufferString(script)
 	cmd.Stdout = stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = sftpClientDebugStream
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}

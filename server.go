@@ -149,19 +149,31 @@ func (svr *Server) rxPackets() error {
 	for {
 		pktType, pktBytes, err := recvPacket(svr.in)
 		if err == io.EOF {
+			fmt.Fprintf(svr.debugStream, "rxPackets loop done\n")
 			return nil
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "recvPacket error: %v\n", err)
+			fmt.Fprintf(svr.debugStream, "recvPacket error: %v\n", err)
 			return err
 		}
 
 		if pkt, err := svr.decodePacket(fxp(pktType), pktBytes); err != nil {
-			fmt.Fprintf(os.Stderr, "decodePacket error: %v\n", err)
+			fmt.Fprintf(svr.debugStream, "decodePacket error: %v\n", err)
 			return err
 		} else {
 			svr.pktChan <- pkt
 		}
 	}
+}
+
+// Run this server until the streams stop or until the subsystem is stopped
+func (svr *Server) Run() error {
+	go svr.rxPackets()
+	for pkt := range svr.pktChan {
+		fmt.Fprintf(svr.debugStream, "pkt: %T %v\n", pkt, pkt)
+		pkt.respond(svr)
+	}
+	fmt.Fprintf(svr.debugStream, "Run finished\n")
+	return nil
 }
 
 func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondablePacket, error) {
@@ -219,16 +231,6 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 		return nil, err
 	}
 	return pkt, nil
-}
-
-// Run this server until the streams stop or until the subsystem is stopped
-func (svr *Server) Run() error {
-	go svr.rxPackets()
-	for pkt := range svr.pktChan {
-		fmt.Fprintf(os.Stderr, "pkt: %T %v\n", pkt, pkt)
-		pkt.respond(svr)
-	}
-	return nil
 }
 
 func (p sshFxInitPacket) respond(svr *Server) error {
