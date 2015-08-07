@@ -23,6 +23,11 @@ var sshServerDebugStream = os.Stdout  // ioutil.Discard
 var sftpServerDebugStream = os.Stdout // ioutil.Discard
 var sftpClientDebugStream = os.Stdout // ioutil.Discard
 
+const (
+	GOLANG_SFTP  = true
+	OPENSSH_SFTP = false
+)
+
 /***********************************************************************************************
 
 
@@ -101,21 +106,22 @@ func basicServerConfig() *ssh.ServerConfig {
 }
 
 type sshServer struct {
-	conn     net.Conn
-	config   *ssh.ServerConfig
-	sshConn  *ssh.ServerConn
-	newChans <-chan ssh.NewChannel
-	newReqs  <-chan *ssh.Request
+	useSubsystem bool
+	conn         net.Conn
+	config       *ssh.ServerConfig
+	sshConn      *ssh.ServerConn
+	newChans     <-chan ssh.NewChannel
+	newReqs      <-chan *ssh.Request
 }
 
-func sshServerFromConn(conn net.Conn, config *ssh.ServerConfig) (*sshServer, error) {
+func sshServerFromConn(conn net.Conn, useSubsystem bool, config *ssh.ServerConfig) (*sshServer, error) {
 	// From a standard TCP connection to an encrypted SSH connection
 	sshConn, newChans, newReqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
 		return nil, err
 	}
 
-	svr := &sshServer{conn, config, sshConn, newChans, newReqs}
+	svr := &sshServer{useSubsystem, conn, config, sshConn, newChans, newReqs}
 	svr.listenChannels()
 	return svr, nil
 }
@@ -272,8 +278,9 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 	if subsystemReq.Name == "sftp" {
 		req.Reply(true, nil)
 
-		if false {
-			// use the sftp server backend; this is to test the ssh code, not the sftp code
+		if !chsvr.svr.useSubsystem {
+			// use the openssh sftp server backend; this is to test the ssh code, not the sftp code,
+			// or is used for comparison between our sftp subsystem and the openssh sftp subsystem
 			cmd := exec.Command(*testSftp, "-e", "-l", "DEBUG") // log to stderr
 			cmd.Stdin = chsvr.ch
 			cmd.Stdout = chsvr.ch
@@ -312,7 +319,7 @@ Actual unit tests
 ***********************************************************************************************/
 
 // starts an ssh server to test. returns: host string and port
-func testServer(t *testing.T, readonly bool) (string, int) {
+func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, string, int) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +344,7 @@ func testServer(t *testing.T, readonly bool) (string, int) {
 
 			go func() {
 				defer conn.Close()
-				sshSvr, err := sshServerFromConn(conn, basicServerConfig())
+				sshSvr, err := sshServerFromConn(conn, useSubsystem, basicServerConfig())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -347,7 +354,7 @@ func testServer(t *testing.T, readonly bool) (string, int) {
 		}
 	}()
 
-	return host, port
+	return listener, host, port
 }
 
 func runSftpClient(script string, path string, host string, port int) (string, error) {
@@ -363,14 +370,28 @@ func runSftpClient(script string, path string, host string, port int) (string, e
 	return string(stdout.Bytes()), err
 }
 
-func TestServerLstat(t *testing.T) {
-	host, port := testServer(t, READONLY)
+func TestServerCompareSubsystems(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY)
+	defer listenerGo.Close()
+	defer listenerOp.Close()
 
-	script := "ls"
-	output, err := runSftpClient(script, "/tmp/", host, port)
+	script := `
+ls /
+ls /dev/
+`
+	outputGo, err := runSftpClient(script, "/", hostGo, portGo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Log(output)
+	outputOp, err := runSftpClient(script, "/", hostOp, portOp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if outputGo != outputOp {
+		t.Errorf("outputs differ, go:\n%v\nopenssh:\n%v\n", outputGo, outputOp)
+	}
+	t.Logf("go output:\n%v\nopenssh output:\n%v\n", outputGo, outputOp)
 }
