@@ -9,7 +9,10 @@ import (
 )
 
 var (
-	shortPacketError       = fmt.Errorf("packet too short")
+	shortPacketError = fmt.Errorf("packet too short")
+)
+
+const (
 	debugDumpTxPacket      = false
 	debugDumpRxPacket      = false
 	debugDumpTxPacketBytes = false
@@ -246,16 +249,17 @@ func marshalIdString(packetType byte, id uint32, str string) ([]byte, error) {
 	return b, nil
 }
 
-func unmarshalIdString(b []byte, id *uint32, str *string) (err error) {
+func unmarshalIdString(b []byte, id *uint32, str *string) (error) {
+	var err error = nil
 	*id, b, err = unmarshalUint32Safe(b)
 	if err != nil {
-		return
+		return err
 	}
 	*str, b, err = unmarshalStringSafe(b)
 	if err != nil {
-		return
+		return err
 	}
-	return
+	return nil
 }
 
 type sshFxpReaddirPacket struct {

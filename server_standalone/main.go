@@ -7,8 +7,8 @@ import (
 	"flag"
 	"io/ioutil"
 	"os"
+	"fmt"
 
-	//"github.com/ScriptRock/sftp"
 	"github.com/pkg/sftp"
 )
 
@@ -29,5 +29,8 @@ func main() {
 	}
 
 	svr, _ := sftp.NewServer(os.Stdin, os.Stdout, debugStream, debugLevel, readOnly, "")
-	svr.Run()
+	if err := svr.Serve(); err != nil {
+		fmt.Fprintf(debugStream, "sftp server completed with error: %v", err)
+		os.Exit(1)
+	}
 }

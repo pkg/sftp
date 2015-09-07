@@ -127,10 +127,9 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 	mtime := uint32(fi.ModTime().Unix())
 	atime := mtime
 
-	flags := ssh_FILEXFER_ATTR_SIZE |
+	var flags uint32 = ssh_FILEXFER_ATTR_SIZE |
 		ssh_FILEXFER_ATTR_PERMISSIONS |
-		ssh_FILEXFER_ATTR_ACMODTIME |
-		uint32(0)
+		ssh_FILEXFER_ATTR_ACMODTIME
 
 	if statt, ok := fi.Sys().(*syscall.Stat_t); ok {
 		flags |= ssh_FILEXFER_ATTR_UIDGID

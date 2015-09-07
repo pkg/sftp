@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	//"github.com/ScriptRock/sftp/user"
 	"github.com/pkg/sftp/user"
 )
 

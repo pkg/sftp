@@ -2,7 +2,7 @@ package sftp
 
 // sftp server integration tests
 // enable with -integration
-// example invokation (darwin): gofmt -w `find . -name \*.go` && (cd server_standalone/ ; go build -tags debug) && go test -tags debug github.com/ScriptRock/sftp -integration -v -sftp /usr/libexec/sftp-server -run ServerCompareSubsystems
+// example invokation (darwin): gofmt -w `find . -name \*.go` && (cd server_standalone/ ; go build -tags debug) && go test -tags debug github.com/pkg/sftp -integration -v -sftp /usr/libexec/sftp-server -run ServerCompareSubsystems
 
 import (
 	"bytes"
@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	//"github.com/ScriptRock/crypto/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -298,7 +297,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 			}
 
 			// wait for the session to close
-			runErr := sftpServer.Run()
+			runErr := sftpServer.Serve()
 			exitStatus := uint32(1)
 			if runErr == nil {
 				exitStatus = uint32(0)

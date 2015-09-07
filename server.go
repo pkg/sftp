@@ -12,6 +12,15 @@ import (
 	"syscall"
 )
 
+const (
+	sftpServerWorkerCount = 8
+)
+
+// Server is an SSH File Transfer Protocol (sftp) server.
+// This is intended to provide the sftp subsystem to an ssh server daemon.
+// This implementation currently supports most of sftp server protocol version 3,
+// as specified at http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
+// Currently unimplemented are SETSTAT, FSETSTAT, SYMLINK, possibly others; patches welcome.
 type Server struct {
 	in            io.Reader
 	out           io.WriteCloser
@@ -26,7 +35,7 @@ type Server struct {
 	openFilesLock *sync.RWMutex
 	handleCount   int
 	maxTxPacket   uint32
-	WorkerCount   int
+	workerCount   int
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -62,7 +71,8 @@ type serverRespondablePacket interface {
 }
 
 // Creates a new server instance around the provided streams.
-// A subsequent call to Run() is required.
+// Various debug output will be written to debugStream, with verbosity set by debugLevel
+// A subsequent call to Serve() is required.
 func NewServer(in io.Reader, out io.WriteCloser, debugStream io.Writer, debugLevel int, readOnly bool, rootDir string) (*Server, error) {
 	if rootDir == "" {
 		if wd, err := os.Getwd(); err != nil {
@@ -71,7 +81,6 @@ func NewServer(in io.Reader, out io.WriteCloser, debugStream io.Writer, debugLev
 			rootDir = wd
 		}
 	}
-	workerCount := 8
 	return &Server{
 		in:            in,
 		out:           out,
@@ -80,11 +89,11 @@ func NewServer(in io.Reader, out io.WriteCloser, debugStream io.Writer, debugLev
 		debugLevel:    debugLevel,
 		readOnly:      readOnly,
 		rootDir:       rootDir,
-		pktChan:       make(chan rxPacket, workerCount),
+		pktChan:       make(chan rxPacket, sftpServerWorkerCount),
 		openFiles:     map[string]*os.File{},
 		openFilesLock: &sync.RWMutex{},
 		maxTxPacket:   1 << 15,
-		WorkerCount:   workerCount,
+		workerCount:   sftpServerWorkerCount,
 	}, nil
 }
 
@@ -127,16 +136,13 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 }
 
 // Run this server until the streams stop or until the subsystem is stopped
-func (svr *Server) Run() error {
-	if svr.WorkerCount <= 0 {
-		return fmt.Errorf("sftp server requires > 0 workers")
-	}
+func (svr *Server) Serve() error {
 	go svr.rxPackets()
 	doneChan := make(chan error)
-	for i := 0; i < svr.WorkerCount; i++ {
+	for i := 0; i < svr.workerCount; i++ {
 		go svr.sftpServerWorker(doneChan)
 	}
-	for i := 0; i < svr.WorkerCount; i++ {
+	for i := 0; i < svr.workerCount; i++ {
 		if err := <-doneChan; err != nil {
 			// abort early and shut down the session on un-decodable packets
 			break

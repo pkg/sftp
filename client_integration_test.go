@@ -32,8 +32,6 @@ const (
 	debuglevel = "ERROR" // set to "DEBUG" for debugging
 )
 
-var spaceRegex = regexp.MustCompile(`\s+`)
-
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
 var testSftp = flag.String("sftp", "/usr/lib/openssh/sftp-server", "location of the sftp server binary")
@@ -94,7 +92,7 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 	if err != nil {
 		t.Fatal(err)
 	}
-	go server.Run()
+	go server.Serve()
 
 	var ctx io.WriteCloser = txPipeWr
 	if delay > NO_DELAY {
@@ -577,6 +575,8 @@ func TestClientChown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	spaceRegex := regexp.MustCompile(`\s+`)
 
 	beforeWords := spaceRegex.Split(string(before), -1)
 	if beforeWords[2] != "0" {
