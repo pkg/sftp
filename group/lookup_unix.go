@@ -32,7 +32,7 @@ static int mygetgrgid_r(int gid, struct group *grp,
 	char *buf, size_t buflen, struct group **result) {
  return getgrgid_r(gid, grp, buf, buflen, result);
 }
- 
+
 static int mygetgrouplist(const char *user, gid_t group, gid_t *groups,
 	int *ngroups) {
  return getgrouplist(user, group, (void *)groups, ngroups);
