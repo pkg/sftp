@@ -668,7 +668,15 @@ type sshFxpSetstatPacket struct {
 	Attrs interface{}
 }
 
-func (p sshFxpSetstatPacket) id() uint32 { return p.Id }
+type sshFxpFsetstatPacket struct {
+	Id     uint32
+	Handle string
+	Flags  uint32
+	Attrs  interface{}
+}
+
+func (p sshFxpSetstatPacket) id() uint32  { return p.Id }
+func (p sshFxpFsetstatPacket) id() uint32 { return p.Id }
 
 func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
@@ -682,6 +690,46 @@ func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 	b = marshalUint32(b, p.Flags)
 	b = marshal(b, p.Attrs)
 	return b, nil
+}
+
+func (p sshFxpFsetstatPacket) MarshalBinary() ([]byte, error) {
+	l := 1 + 4 + // type(byte) + uint32
+		4 + len(p.Handle) +
+		4 // uint32 + uint64
+
+	b := make([]byte, 0, l)
+	b = append(b, ssh_FXP_FSETSTAT)
+	b = marshalUint32(b, p.Id)
+	b = marshalString(b, p.Handle)
+	b = marshalUint32(b, p.Flags)
+	b = marshal(b, p.Attrs)
+	return b, nil
+}
+
+func (p *sshFxpSetstatPacket) UnmarshalBinary(b []byte) error {
+	var err error = nil
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.Path, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Flags, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	}
+	p.Attrs = b
+	return nil
+}
+
+func (p *sshFxpFsetstatPacket) UnmarshalBinary(b []byte) error {
+	var err error = nil
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.Handle, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Flags, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	}
+	p.Attrs = b
+	return nil
 }
 
 type sshFxpHandlePacket struct {
