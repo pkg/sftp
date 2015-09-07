@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	ssh_FILEXFER_ATTR_SIZE              = 0x00000001
-	ssh_FILEXFER_ATTR_UIDGID            = 0x00000002
-	ssh_FILEXFER_ATTR_PERMISSIONS       = 0x00000004
-	ssh_FILEXFER_ATTR_ACMODTIME         = 0x00000008
-	ssh_FILEXFER_ATTR_EXTENDED          = 0x80000000
+	ssh_FILEXFER_ATTR_SIZE        = 0x00000001
+	ssh_FILEXFER_ATTR_UIDGID      = 0x00000002
+	ssh_FILEXFER_ATTR_PERMISSIONS = 0x00000004
+	ssh_FILEXFER_ATTR_ACMODTIME   = 0x00000008
+	ssh_FILEXFER_ATTR_EXTENDED    = 0x80000000
 )
 
 // fileInfo is an artificial type designed to satisfy os.FileInfo.
