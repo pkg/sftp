@@ -87,3 +87,52 @@ func TestLookupId(t *testing.T) {
 	}
 	compare(t, want, got)
 }
+
+func compareGroup(t *testing.T, want, got *Group) {
+	if want.Gid != got.Gid {
+		t.Errorf("got Gid=%q; want %q", got.Gid, want.Gid)
+	}
+	if want.Name != got.Name {
+		t.Errorf("got Name=%q; want %q", got.Name, want.Name)
+	}
+}
+
+func TestLookupGroup(t *testing.T) {
+	check(t)
+
+	// Test LookupGroupId on the current user
+	want, err := CurrentGroup()
+	if err != nil {
+		t.Fatalf("CurrentGroup: %v", err)
+	}
+	got, err := LookupGroupId(want.Gid)
+	if err != nil {
+		t.Fatalf("LookupGroupId: %v", err)
+	}
+	compareGroup(t, want, got)
+
+	members, err := got.Members()
+	if err != nil {
+		t.Fatalf("Members: %v", err)
+	}
+	for _, user := range members {
+		u, err := Lookup(user)
+		if err != nil {
+			t.Errorf("expected a valid group member; user=%v, err=%v", user, err)
+		}
+		isMember, err := u.In(got)
+		if err != nil {
+			t.Fatalf("u.In: %v", err)
+		}
+		if !isMember {
+			t.Errorf("expected user to be group member; user=%v, group=%v, err=%v", user, got.Name, err)
+		}
+	}
+
+	// Test Lookup by groupname, using the groupname from LookupId
+	g, err := LookupGroup(got.Name)
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	compareGroup(t, got, g)
+}

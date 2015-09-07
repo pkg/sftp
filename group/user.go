@@ -26,6 +26,12 @@ type User struct {
 	HomeDir  string
 }
 
+// Group represents a group database entry.
+type Group struct {
+	Gid  string // group id
+	Name string // group name
+}
+
 // UnknownUserIdError is returned by LookupId when
 // a user cannot be found.
 type UnknownUserIdError int
@@ -40,4 +46,20 @@ type UnknownUserError string
 
 func (e UnknownUserError) Error() string {
 	return "user: unknown user " + string(e)
+}
+
+// UnknownGroupIdError is returned by LookupGroupId when
+// a group cannot be found.
+type UnknownGroupIdError int
+
+func (e UnknownGroupIdError) Error() string {
+	return "group: unknown groupid " + strconv.Itoa(int(e))
+}
+
+// UnknownGroupError is returned by LookupGroup when
+// a group cannot be found.
+type UnknownGroupError string
+
+func (e UnknownGroupError) Error() string {
+	return "group: unknown group " + string(e)
 }
