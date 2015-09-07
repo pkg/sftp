@@ -249,7 +249,7 @@ func marshalIdString(packetType byte, id uint32, str string) ([]byte, error) {
 	return b, nil
 }
 
-func unmarshalIdString(b []byte, id *uint32, str *string) (error) {
+func unmarshalIdString(b []byte, id *uint32, str *string) error {
 	var err error = nil
 	*id, b, err = unmarshalUint32Safe(b)
 	if err != nil {
@@ -380,6 +380,39 @@ func (p sshFxpRmdirPacket) MarshalBinary() ([]byte, error) {
 
 func (p *sshFxpRmdirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIdString(b, &p.Id, &p.Path)
+}
+
+type sshFxpSymlinkPacket struct {
+	Id         uint32
+	Targetpath string
+	Linkpath   string
+}
+
+func (p sshFxpSymlinkPacket) id() uint32 { return p.Id }
+
+func (p sshFxpSymlinkPacket) MarshalBinary() ([]byte, error) {
+	l := 1 + 4 + // type(byte) + uint32
+		4 + len(p.Targetpath) +
+		4 + len(p.Linkpath)
+
+	b := make([]byte, 0, l)
+	b = append(b, ssh_FXP_SYMLINK)
+	b = marshalUint32(b, p.Id)
+	b = marshalString(b, p.Targetpath)
+	b = marshalString(b, p.Linkpath)
+	return b, nil
+}
+
+func (p *sshFxpSymlinkPacket) UnmarshalBinary(b []byte) error {
+	var err error = nil
+	if p.Id, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.Targetpath, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Linkpath, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	}
+	return nil
 }
 
 type sshFxpReadlinkPacket struct {

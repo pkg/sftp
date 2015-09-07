@@ -336,6 +336,25 @@ func (c *Client) ReadLink(p string) (string, error) {
 	}
 }
 
+// Symlink creates a symbolic link at 'newname', pointing at target 'oldname'
+func (c *Client) Symlink(oldname, newname string) error {
+	id := c.nextId()
+	typ, data, err := c.sendRequest(sshFxpSymlinkPacket{
+		Id:         id,
+		Linkpath:   newname,
+		Targetpath: oldname,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
 // setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
 func (c *Client) setstat(path string, flags uint32, attrs interface{}) error {
 	id := c.nextId()

@@ -182,6 +182,7 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_MKDIR:
 		pkt = &sshFxpMkdirPacket{}
 	case ssh_FXP_RMDIR:
+		pkt = &sshFxpRmdirPacket{}
 	case ssh_FXP_REALPATH:
 		pkt = &sshFxpRealpathPacket{}
 	case ssh_FXP_STAT:
@@ -191,6 +192,7 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_READLINK:
 		pkt = &sshFxpReadlinkPacket{}
 	case ssh_FXP_SYMLINK:
+		pkt = &sshFxpSymlinkPacket{}
 	case ssh_FXP_STATUS:
 	case ssh_FXP_HANDLE:
 	case ssh_FXP_DATA:
@@ -262,6 +264,14 @@ func (p sshFxpMkdirPacket) respond(svr *Server) error {
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
+func (p sshFxpRmdirPacket) respond(svr *Server) error {
+	if svr.readOnly {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+	}
+	err := os.Remove(p.Path)
+	return svr.sendPacket(statusFromError(p.Id, err))
+}
+
 func (p sshFxpRemovePacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
@@ -275,6 +285,14 @@ func (p sshFxpRenamePacket) respond(svr *Server) error {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
 	err := os.Rename(p.Oldpath, p.Newpath)
+	return svr.sendPacket(statusFromError(p.Id, err))
+}
+
+func (p sshFxpSymlinkPacket) respond(svr *Server) error {
+	if svr.readOnly {
+		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+	}
+	err := os.Symlink(p.Targetpath, p.Linkpath)
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 

@@ -5,9 +5,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"os"
-	"fmt"
 
 	"github.com/pkg/sftp"
 )

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -20,9 +21,9 @@ import (
 )
 
 var testSftpClientBin = flag.String("sftp_client", "/usr/bin/sftp", "location of the sftp client binary")
-var sshServerDebugStream = os.Stdout  // ioutil.Discard
-var sftpServerDebugStream = os.Stdout // ioutil.Discard
-var sftpClientDebugStream = os.Stdout // ioutil.Discard
+var sshServerDebugStream = ioutil.Discard
+var sftpServerDebugStream = ioutil.Discard
+var sftpClientDebugStream = ioutil.Discard
 
 const (
 	GOLANG_SFTP  = true
@@ -321,10 +322,6 @@ Actual unit tests
 
 // starts an ssh server to test. returns: host string and port
 func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, string, int) {
-	if !*testIntegration {
-		t.Skip("skipping intergration test")
-	}
-
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -363,7 +360,7 @@ func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, s
 }
 
 func runSftpClient(script string, path string, host string, port int) (string, error) {
-	cmd := exec.Command(*testSftpClientBin /*"-vvvv",*/, "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
+	cmd := exec.Command(*testSftpClientBin, "-vvvv", "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
 	stdout := &bytes.Buffer{}
 	cmd.Stdin = bytes.NewBufferString(script)
 	cmd.Stdout = stdout
@@ -376,6 +373,10 @@ func runSftpClient(script string, path string, host string, port int) (string, e
 }
 
 func TestServerCompareSubsystems(t *testing.T) {
+	if !*testIntegration {
+		t.Skip("skipping intergration test")
+	}
+
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
 	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY)
 	defer listenerGo.Close()

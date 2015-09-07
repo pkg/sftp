@@ -495,8 +495,30 @@ func TestClientReadLink(t *testing.T) {
 	if err := os.Symlink(f.Name(), f2); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sftp.ReadLink(f2); err != nil {
+	if rl, err := sftp.ReadLink(f2); err != nil {
 		t.Fatal(err)
+	} else if rl != f.Name() {
+		t.Fatalf("unexpected link target: %v, not %v", rl, f.Name())
+	}
+}
+
+func TestClientSymlink(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2 := f.Name() + ".sym"
+	if err := sftp.Symlink(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if rl, err := sftp.ReadLink(f2); err != nil {
+		t.Fatal(err)
+	} else if rl != f.Name() {
+		t.Fatalf("unexpected link target: %v, not %v", rl, f.Name())
 	}
 }
 
