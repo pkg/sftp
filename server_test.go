@@ -49,7 +49,7 @@ func TestServerSymlink(t *testing.T) {
 	defer listenerGo.Close()
 
 	link := "/tmp/" + randName()
-	//defer os.RemoveAll(link)
+	defer os.RemoveAll(link)
 
 	// now create a symbolic link within the new directory
 	if output, err := runSftpClient("symlink /bin/sh "+link, "/", hostGo, portGo); err != nil {
