@@ -10,7 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ScriptRock/sftp/user"
+	//"github.com/ScriptRock/sftp/user"
+	"github.com/pkg/sftp/user"
 )
 
 func runLsTypeWord(dirent os.FileInfo) string {
