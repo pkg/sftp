@@ -320,6 +320,10 @@ Actual unit tests
 
 // starts an ssh server to test. returns: host string and port
 func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, string, int) {
+	if !*testIntegration {
+		t.Skip("skipping intergration test")
+	}
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
