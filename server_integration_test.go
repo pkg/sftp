@@ -359,8 +359,12 @@ func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, s
 	return listener, host, port
 }
 
-func runSftpClient(script string, path string, host string, port int) (string, error) {
-	cmd := exec.Command(*testSftpClientBin, "-vvvv", "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
+func runSftpClient(t *testing.T, script string, path string, host string, port int) (string, error) {
+	// if sftp client binary is unavailable, skip test
+	if _, err := os.Stat(*testSftpClientBin); err != nil {
+		t.Skip("sftp client binary unavailable")
+	}
+	cmd := exec.Command(*testSftpClientBin /*"-vvvv",*/, "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
 	stdout := &bytes.Buffer{}
 	cmd.Stdin = bytes.NewBufferString(script)
 	cmd.Stdout = stdout
@@ -391,12 +395,12 @@ ls -l /etc/
 ls -l /bin/
 ls -l /usr/bin/
 `
-	outputGo, err := runSftpClient(script, "/", hostGo, portGo)
+	outputGo, err := runSftpClient(t, script, "/", hostGo, portGo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	outputOp, err := runSftpClient(script, "/", hostOp, portOp)
+	outputOp, err := runSftpClient(t, script, "/", hostOp, portOp)
 	if err != nil {
 		t.Fatal(err)
 	}

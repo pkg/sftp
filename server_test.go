@@ -25,7 +25,7 @@ func TestServerMkdirRmdir(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// mkdir remote
-	if _, err := runSftpClient("mkdir "+tmpDir, "/", hostGo, portGo); err != nil {
+	if _, err := runSftpClient(t, "mkdir "+tmpDir, "/", hostGo, portGo); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,7 +35,7 @@ func TestServerMkdirRmdir(t *testing.T) {
 	}
 
 	// now remove the directory
-	if _, err := runSftpClient("rmdir "+tmpDir, "/", hostGo, portGo); err != nil {
+	if _, err := runSftpClient(t, "rmdir "+tmpDir, "/", hostGo, portGo); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,7 +52,7 @@ func TestServerSymlink(t *testing.T) {
 	defer os.RemoveAll(link)
 
 	// now create a symbolic link within the new directory
-	if output, err := runSftpClient("symlink /bin/sh "+link, "/", hostGo, portGo); err != nil {
+	if output, err := runSftpClient(t, "symlink /bin/sh "+link, "/", hostGo, portGo); err != nil {
 		t.Fatalf("failed: %v %v", err, string(output))
 	}
 
