@@ -358,7 +358,7 @@ func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, s
 }
 
 func runSftpClient(script string, path string, host string, port int) (string, error) {
-	cmd := exec.Command(*testSftpClientBin, "-vvvv", "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
+	cmd := exec.Command(*testSftpClientBin /*"-vvvv",*/, "-b", "-", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR", "-o", "UserKnownHostsFile /dev/null", "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s:%s", host, path))
 	stdout := &bytes.Buffer{}
 	cmd.Stdin = bytes.NewBufferString(script)
 	cmd.Stdout = stdout
@@ -377,11 +377,13 @@ func TestServerCompareSubsystems(t *testing.T) {
 	defer listenerOp.Close()
 
 	script := `
-#ls /
-#ls -l /
-#ls /dev/
-#ls -l /dev/
-ls -l /tmp/shit/
+ls /
+ls -l /
+ls /dev/
+ls -l /dev/
+ls -l /etc/
+ls -l /bin/
+ls -l /usr/bin/
 `
 	outputGo, err := runSftpClient(script, "/", hostGo, portGo)
 	if err != nil {
@@ -394,7 +396,26 @@ ls -l /tmp/shit/
 	}
 
 	if outputGo != outputOp {
-		t.Errorf("outputs differ, go:\n%v\nopenssh:\n%v\n", outputGo, outputOp)
+		diffOffsetLine := 0
+		diffOffsetNextLine := 0
+		bad := false
+		for i := 0; i < len(outputGo) && i < len(outputOp); i++ {
+			if outputGo[i] != outputOp[i] {
+				bad = true
+			} else if outputGo[i] == '\n' {
+				if !bad {
+					diffOffsetLine = i
+					diffOffsetNextLine = i
+				} else {
+					diffOffsetNextLine = i
+					break
+				}
+			}
+		}
+
+		t.Errorf("outputs differ, go:\n%v\nopenssh:\n%v\n",
+			outputGo[diffOffsetLine:diffOffsetNextLine],
+			outputOp[diffOffsetLine:diffOffsetNextLine])
 	}
-	t.Logf("go output:\n%v\nopenssh output:\n%v\n", outputGo, outputOp)
+	//t.Logf("go output:\n%v\nopenssh output:\n%v\n", outputGo, outputOp)
 }

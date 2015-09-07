@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -389,7 +388,7 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 		for _, dirent := range dirents {
 			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 				dirent.Name(),
-				path.Join(dirname, dirent.Name()),
+				runLs(dirname, dirent),
 				[]interface{}{dirent},
 			})
 		}
