@@ -8,7 +8,13 @@ import (
 	"reflect"
 )
 
-var shortPacketError = fmt.Errorf("packet too short")
+var (
+	shortPacketError       = fmt.Errorf("packet too short")
+	debugDumpTxPacket      = false
+	debugDumpRxPacket      = false
+	debugDumpTxPacketBytes = false
+	debugDumpRxPacketBytes = false
+)
 
 func marshalUint32(b []byte, v uint32) []byte {
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
@@ -105,9 +111,13 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	if err != nil {
 		return fmt.Errorf("marshal2(%#v): binary marshaller failed", err)
 	}
+	if debugDumpTxPacketBytes {
+		debug("send packet: %s %d bytes %x", fxp(bb[0]).String(), len(bb), bb[1:])
+	} else if debugDumpTxPacket {
+		debug("send packet: %s %d bytes", fxp(bb[0]).String(), len(bb))
+	}
 	l := uint32(len(bb))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
-	debug("send packet %T, len: %v", m, l)
 	_, err = w.Write(hdr)
 	if err != nil {
 		return err
@@ -117,6 +127,9 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 }
 
 func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
+	// any responder can call sendPacket(); actual socket access must be serialized
+	svr.outMutex.Lock()
+	defer svr.outMutex.Unlock()
 	return sendPacket(svr.out, m)
 }
 
@@ -126,11 +139,15 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 		return 0, nil, err
 	}
 	l, _ := unmarshalUint32(b)
-	debug("recv packet %d bytes", l)
 	b = make([]byte, l)
 	if _, err := io.ReadFull(r, b); err != nil {
 		debug("recv packet %d bytes: err %v", l, err)
 		return 0, nil, err
+	}
+	if debugDumpRxPacketBytes {
+		debug("recv packet: %s %d bytes %x", fxp(b[0]).String(), l, b[1:])
+	} else if debugDumpRxPacket {
+		debug("recv packet: %s %d bytes", fxp(b[0]).String(), l)
 	}
 	return b[0], b[1:], nil
 }

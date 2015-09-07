@@ -13,79 +13,24 @@ import (
 	"syscall"
 )
 
-type FileSystem interface {
-	Lstat(name string) (os.FileInfo, error)
-	Remove(name string) error
-	Stat(name string) (os.FileInfo, error)
-	Rename(oldpath, newpath string) error
-}
-
-type FileSystemOS interface {
-	FileSystem
-	OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error)
-	Readlink(path string) (string, error)
-	Realpath(path string) (string, error)
-	Mkdir(name string, perm os.FileMode) error
-}
-
-type FileSystemSFTP interface {
-	FileSystem
-	OpenFile(path string, f int) (*File, error) // sftp package has a strange OpenFile method with no perm
-	ReadLink(path string) (string, error)
-	Mkdir(name string) error
-}
-
-// common subset of os.File and sftp.File
-type svrFile interface {
-	Chmod(mode os.FileMode) error
-	Chown(uid, gid int) error
-	Close() error
-	Read(b []byte) (int, error)
-	Seek(offset int64, whence int) (int64, error)
-	Stat() (os.FileInfo, error)
-	Truncate(size int64) error
-	Write(b []byte) (int, error)
-	// func (f *File) WriteTo(w io.Writer) (int64, error)	// not in os
-	// func (f *File) ReadFrom(r io.Reader) (int64, error)	// not in os
-}
-
-type nativeFs struct {
-}
-
-func (nfs *nativeFs) Lstat(path string) (os.FileInfo, error)    { return os.Lstat(path) }
-func (nfs *nativeFs) Stat(path string) (os.FileInfo, error)     { return os.Stat(path) }
-func (nfs *nativeFs) Mkdir(path string, perm os.FileMode) error { return os.Mkdir(path, perm) }
-func (nfs *nativeFs) Remove(path string) error                  { return os.Remove(path) }
-func (nfs *nativeFs) Rename(oldpath, newpath string) error      { return os.Rename(oldpath, newpath) }
-func (nfs *nativeFs) Readlink(path string) (string, error)      { return os.Readlink(path) }
-func (nfs *nativeFs) Realpath(path string) (string, error) {
-	f, err := filepath.Abs(path)
-	return filepath.Clean(f), err
-}
-func (nfs *nativeFs) OpenFile(path string, flag int, perm os.FileMode) (file *os.File, err error) {
-	return os.OpenFile(path, flag, perm)
-}
-
-var __typecheck_fsos FileSystemOS = &nativeFs{}
-var __typecheck_sftpos FileSystemSFTP = &Client{}
-
 type Server struct {
 	in            io.Reader
-	out           io.Writer
+	out           io.WriteCloser
+	outMutex      *sync.Mutex
 	debugStream   io.Writer
 	debugLevel    int
 	readOnly      bool
 	rootDir       string
 	lastId        uint32
-	fs            FileSystem
-	pktChan       chan serverRespondablePacket
-	openFiles     map[string]svrFile
+	pktChan       chan rxPacket
+	openFiles     map[string]*os.File
 	openFilesLock *sync.RWMutex
 	handleCount   int
 	maxTxPacket   uint32
+	WorkerCount   int
 }
 
-func (svr *Server) nextHandle(f svrFile) string {
+func (svr *Server) nextHandle(f *os.File) string {
 	svr.openFilesLock.Lock()
 	defer svr.openFilesLock.Unlock()
 	svr.handleCount++
@@ -105,7 +50,7 @@ func (svr *Server) closeHandle(handle string) error {
 	}
 }
 
-func (svr *Server) getHandle(handle string) (svrFile, bool) {
+func (svr *Server) getHandle(handle string) (*os.File, bool) {
 	svr.openFilesLock.RLock()
 	defer svr.openFilesLock.RUnlock()
 	f, ok := svr.openFiles[handle]
@@ -119,7 +64,7 @@ type serverRespondablePacket interface {
 
 // Creates a new server instance around the provided streams.
 // A subsequent call to Run() is required.
-func NewServer(in io.Reader, out io.Writer, debugStream io.Writer, debugLevel int, readOnly bool, rootDir string) (*Server, error) {
+func NewServer(in io.Reader, out io.WriteCloser, debugStream io.Writer, debugLevel int, readOnly bool, rootDir string) (*Server, error) {
 	if rootDir == "" {
 		if wd, err := os.Getwd(); err != nil {
 			return nil, err
@@ -127,19 +72,26 @@ func NewServer(in io.Reader, out io.Writer, debugStream io.Writer, debugLevel in
 			rootDir = wd
 		}
 	}
+	workerCount := 8
 	return &Server{
 		in:            in,
 		out:           out,
+		outMutex:      &sync.Mutex{},
 		debugStream:   debugStream,
 		debugLevel:    debugLevel,
 		readOnly:      readOnly,
 		rootDir:       rootDir,
-		fs:            &nativeFs{},
-		pktChan:       make(chan serverRespondablePacket, 4),
-		openFiles:     map[string]svrFile{},
+		pktChan:       make(chan rxPacket, workerCount),
+		openFiles:     map[string]*os.File{},
 		openFilesLock: &sync.RWMutex{},
 		maxTxPacket:   1 << 15,
+		WorkerCount:   workerCount,
 	}, nil
+}
+
+type rxPacket struct {
+	pktType  fxp
+	pktBytes []byte
 }
 
 // Unmarshal a single logical packet from the secure channel
@@ -156,24 +108,43 @@ func (svr *Server) rxPackets() error {
 			return err
 		}
 
-		if pkt, err := svr.decodePacket(fxp(pktType), pktBytes); err != nil {
+		svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
+	}
+}
+
+// Up to N parallel servers
+func (svr *Server) sftpServerWorker(doneChan chan error) {
+	for pkt := range svr.pktChan {
+		if pkt, err := svr.decodePacket(pkt.pktType, pkt.pktBytes); err != nil {
 			fmt.Fprintf(svr.debugStream, "decodePacket error: %v\n", err)
-			return err
+			doneChan <- err
+			return
 		} else {
-			svr.pktChan <- pkt
+			//fmt.Fprintf(svr.debugStream, "pkt: %T %v\n", pkt, pkt)
+			pkt.respond(svr)
 		}
 	}
+	doneChan <- nil
 }
 
 // Run this server until the streams stop or until the subsystem is stopped
 func (svr *Server) Run() error {
-	go svr.rxPackets()
-	for pkt := range svr.pktChan {
-		fmt.Fprintf(svr.debugStream, "pkt: %T %v\n", pkt, pkt)
-		pkt.respond(svr)
+	if svr.WorkerCount <= 0 {
+		return fmt.Errorf("sftp server requires > 0 workers")
 	}
-	fmt.Fprintf(svr.debugStream, "Run finished\n")
-	return nil
+	go svr.rxPackets()
+	doneChan := make(chan error)
+	for i := 0; i < svr.WorkerCount; i++ {
+		go svr.sftpServerWorker(doneChan)
+	}
+	for i := 0; i < svr.WorkerCount; i++ {
+		if err := <-doneChan; err != nil {
+			// abort early and shut down the session on un-decodable packets
+			break
+		}
+	}
+	fmt.Fprintf(svr.debugStream, "sftp server run finished\n")
+	return svr.out.Close()
 }
 
 func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondablePacket, error) {
@@ -251,7 +222,7 @@ func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
 
 func (p sshFxpLstatPacket) respond(svr *Server) error {
 	// stat the requested file
-	if info, err := svr.fs.Lstat(p.Path); err != nil {
+	if info, err := os.Lstat(p.Path); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
 		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
@@ -260,7 +231,7 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 
 func (p sshFxpStatPacket) respond(svr *Server) error {
 	// stat the requested file
-	if info, err := svr.fs.Stat(p.Path); err != nil {
+	if info, err := os.Stat(p.Path); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
 		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
@@ -270,15 +241,10 @@ func (p sshFxpStatPacket) respond(svr *Server) error {
 func (p sshFxpFstatPacket) respond(svr *Server) error {
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
-	} else if osf, ok := f.(*os.File); ok {
-		if info, err := osf.Stat(); err != nil {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			return svr.sendPacket(sshFxpStatResponse{p.Id, info})
-		}
+	} else if info, err := f.Stat(); err != nil {
+		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		// server error...
-		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
 	}
 }
 
@@ -287,22 +253,15 @@ func (p sshFxpMkdirPacket) respond(svr *Server) error {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
 	// TODO FIXME: ignore flags field
-	if fso, ok := svr.fs.(FileSystemOS); ok {
-		err := fso.Mkdir(p.Path, 0755)
-		return svr.sendPacket(statusFromError(p.Id, err))
-	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
-		err := sftpo.Mkdir(p.Path)
-		return svr.sendPacket(statusFromError(p.Id, err))
-	} else {
-		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
-	}
+	err := os.Mkdir(p.Path, 0755)
+	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
 func (p sshFxpRemovePacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
-	err := svr.fs.Remove(p.Filename)
+	err := os.Remove(p.Filename)
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
@@ -310,39 +269,26 @@ func (p sshFxpRenamePacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
-	err := svr.fs.Rename(p.Oldpath, p.Newpath)
+	err := os.Rename(p.Oldpath, p.Newpath)
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
 var emptyFileStat = []interface{}{uint32(0)}
 
 func (p sshFxpReadlinkPacket) respond(svr *Server) error {
-	if fso, ok := svr.fs.(FileSystemOS); ok {
-		if f, err := fso.Readlink(p.Path); err != nil {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
-		}
-	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
-		if f, err := sftpo.ReadLink(p.Path); err != nil {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
-		}
+	if f, err := os.Readlink(p.Path); err != nil {
+		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
+		return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
 	}
 }
 
 func (p sshFxpRealpathPacket) respond(svr *Server) error {
-	if fso, ok := svr.fs.(FileSystemOS); ok {
-		if f, err := fso.Realpath(p.Path); err != nil {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
-		}
+	if f, err := filepath.Abs(p.Path); err != nil {
+		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
+		f = filepath.Clean(f)
+		return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
 	}
 }
 
@@ -383,22 +329,11 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		osFlags |= os.O_EXCL
 	}
 
-	if fso, ok := svr.fs.(FileSystemOS); ok {
-		if f, err := fso.OpenFile(p.Path, osFlags, 0644); err != nil {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			handle := svr.nextHandle(f)
-			return svr.sendPacket(sshFxpHandlePacket{p.Id, handle})
-		}
-	} else if sftpo, ok := svr.fs.(FileSystemSFTP); ok {
-		if f, err := sftpo.OpenFile(p.Path, osFlags); err != nil {
-			return svr.sendPacket(statusFromError(p.Id, err))
-		} else {
-			handle := svr.nextHandle(f)
-			return svr.sendPacket(sshFxpHandlePacket{p.Id, handle})
-		}
+	if f, err := os.OpenFile(p.Path, osFlags, 0644); err != nil {
+		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		return svr.sendPacket(statusFromError(p.Id, fmt.Errorf("unknown filesystem backend")))
+		handle := svr.nextHandle(f)
+		return svr.sendPacket(sshFxpHandlePacket{p.Id, handle})
 	}
 }
 
@@ -413,17 +348,12 @@ func (p sshFxpReadPacket) respond(svr *Server) error {
 		if p.Len > svr.maxTxPacket {
 			p.Len = svr.maxTxPacket
 		}
-		if osf, ok := f.(*os.File); ok {
-			ret := sshFxpDataPacket{Id: p.Id, Length: p.Len, Data: make([]byte, p.Len)}
-			if n, err := osf.ReadAt(ret.Data, int64(p.Offset)); err != nil && (err != io.EOF || n == 0) {
-				return svr.sendPacket(statusFromError(p.Id, err))
-			} else {
-				ret.Length = uint32(n)
-				return svr.sendPacket(ret)
-			}
+		ret := sshFxpDataPacket{Id: p.Id, Length: p.Len, Data: make([]byte, p.Len)}
+		if n, err := f.ReadAt(ret.Data, int64(p.Offset)); err != nil && (err != io.EOF || n == 0) {
+			return svr.sendPacket(statusFromError(p.Id, err))
 		} else {
-			// server error...
-			return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+			ret.Length = uint32(n)
+			return svr.sendPacket(ret)
 		}
 	}
 }
@@ -435,12 +365,9 @@ func (p sshFxpWritePacket) respond(svr *Server) error {
 	}
 	if f, ok := svr.getHandle(p.Handle); !ok {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
-	} else if osf, ok := f.(*os.File); ok {
-		_, err := osf.WriteAt(p.Data, int64(p.Offset))
-		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		// server error...
-		return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
+		_, err := f.WriteAt(p.Data, int64(p.Offset))
+		return svr.sendPacket(statusFromError(p.Id, err))
 	}
 }
 
@@ -452,22 +379,21 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 		dirents := []os.FileInfo{}
 		var err error = nil
 
-		if osf, ok := f.(*os.File); ok {
-			dirname = osf.Name()
-			dirents, err = osf.Readdir(128)
-		} else {
-			// server error...
-			return svr.sendPacket(statusFromError(p.Id, syscall.EBADF))
-		}
-
+		dirname = f.Name()
+		dirents, err = f.Readdir(128)
 		if err != nil {
 			return svr.sendPacket(statusFromError(p.Id, err))
 		}
 
 		ret := sshFxpNamePacket{p.Id, nil}
 		for _, dirent := range dirents {
-			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{dirent.Name(), path.Join(dirname, dirent.Name()), []interface{}{dirent}})
+			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
+				dirent.Name(),
+				path.Join(dirname, dirent.Name()),
+				[]interface{}{dirent},
+			})
 		}
+		//debug("readdir respond %v", ret)
 		return svr.sendPacket(ret)
 	}
 }

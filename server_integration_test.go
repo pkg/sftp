@@ -377,8 +377,11 @@ func TestServerCompareSubsystems(t *testing.T) {
 	defer listenerOp.Close()
 
 	script := `
-ls /
-ls /dev/
+#ls /
+#ls -l /
+#ls /dev/
+#ls -l /dev/
+ls -l /tmp/shit/
 `
 	outputGo, err := runSftpClient(script, "/", hostGo, portGo)
 	if err != nil {
