@@ -8,7 +8,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/ScriptRock/sftp"
+	//"github.com/ScriptRock/sftp"
+	"github.com/pkg/sftp"
 )
 
 func main() {
