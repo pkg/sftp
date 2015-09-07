@@ -416,7 +416,6 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 				[]interface{}{dirent},
 			})
 		}
-		//debug("readdir respond %v", ret)
 		return svr.sendPacket(ret)
 	}
 }

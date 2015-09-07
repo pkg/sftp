@@ -10,12 +10,14 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -322,6 +324,10 @@ Actual unit tests
 
 // starts an ssh server to test. returns: host string and port
 func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, string, int) {
+	if !*testIntegration {
+		t.Skip("skipping intergration test")
+	}
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -377,10 +383,6 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 }
 
 func TestServerCompareSubsystems(t *testing.T) {
-	if !*testIntegration {
-		t.Skip("skipping intergration test")
-	}
-
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
 	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY)
 	defer listenerGo.Close()
@@ -427,5 +429,60 @@ ls -l /usr/bin/
 			outputGo[diffOffsetLine:diffOffsetNextLine],
 			outputOp[diffOffsetLine:diffOffsetNextLine])
 	}
-	//t.Logf("go output:\n%v\nopenssh output:\n%v\n", outputGo, outputOp)
+}
+
+func randName() string {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	data := make([]byte, 16)
+	for i := 0; i < 16; i++ {
+		data[i] = byte(r.Uint32())
+	}
+	return "sftp." + hex.EncodeToString(data)
+}
+
+func TestServerMkdirRmdir(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpDir := "/tmp/" + randName()
+	defer os.RemoveAll(tmpDir)
+
+	// mkdir remote
+	if _, err := runSftpClient(t, "mkdir "+tmpDir, "/", hostGo, portGo); err != nil {
+		t.Fatal(err)
+	}
+
+	// directory should now exist
+	if _, err := os.Stat(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// now remove the directory
+	if _, err := runSftpClient(t, "rmdir "+tmpDir, "/", hostGo, portGo); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(tmpDir); err == nil {
+		t.Fatal("should have error after deleting the directory")
+	}
+}
+
+func TestServerSymlink(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	link := "/tmp/" + randName()
+	defer os.RemoveAll(link)
+
+	// now create a symbolic link within the new directory
+	if output, err := runSftpClient(t, "symlink /bin/sh "+link, "/", hostGo, portGo); err != nil {
+		t.Fatalf("failed: %v %v", err, string(output))
+	}
+
+	// symlink should now exist
+	if stat, err := os.Lstat(link); err != nil {
+		t.Fatal(err)
+	} else if (stat.Mode() & os.ModeSymlink) != os.ModeSymlink {
+		t.Fatalf("is not a symlink: %v", stat.Mode())
+	}
 }
