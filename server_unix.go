@@ -9,8 +9,6 @@ import (
 	"path"
 	"syscall"
 	"time"
-
-	"github.com/pkg/sftp/user"
 )
 
 func runLsTypeWord(dirent os.FileInfo) string {
@@ -113,13 +111,8 @@ func runLsStatt(dirname string, dirent os.FileInfo, statt *syscall.Stat_t) strin
 	uid := statt.Uid
 	gid := statt.Gid
 	username := fmt.Sprintf("%d", uid)
-	if usr, err := user.LookupId(username); err == nil {
-		username = usr.Username
-	}
 	groupname := fmt.Sprintf("%d", gid)
-	if grp, err := user.LookupGroupId(groupname); err == nil {
-		groupname = grp.Name
-	}
+	// TODO FIXME: uid -> username, gid -> groupname lookup for ls -l format output
 
 	mtime := dirent.ModTime()
 	monthStr := mtime.Month().String()[0:3]
