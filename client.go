@@ -259,6 +259,8 @@ func (c *Client) opendir(path string) (string, error) {
 	}
 }
 
+// Stat returns a FileInfo structure describing the file specified by path 'p'.
+// If 'p' is a symbolic link, the returned FileInfo structure describes the referent file.
 func (c *Client) Stat(p string) (os.FileInfo, error) {
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpStatPacket{
@@ -283,6 +285,8 @@ func (c *Client) Stat(p string) (os.FileInfo, error) {
 	}
 }
 
+// Lstat returns a FileInfo structure describing the file specified by path 'p'.
+// If 'p' is a symbolic link, the returned FileInfo structure describes the symbolic link.
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpLstatPacket{
