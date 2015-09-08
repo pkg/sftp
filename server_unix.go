@@ -119,7 +119,9 @@ func runLsStatt(dirname string, dirent os.FileInfo, statt *syscall.Stat_t) strin
 	day := mtime.Day()
 	year := mtime.Year()
 	now := time.Now()
-	isOld := mtime.Before(now.Add(-1 * time.Hour * 24 * 182))
+	nowDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	isOld := mtime.Before(nowDay.Add(-time.Hour * 24 * 365 / 2))
+
 	yearOrTime := fmt.Sprintf("%02d:%02d", mtime.Hour(), mtime.Minute())
 	if isOld {
 		yearOrTime = fmt.Sprintf("%d", year)

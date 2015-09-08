@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -407,27 +408,35 @@ ls -l /usr/bin/
 		t.Fatal(err)
 	}
 
-	if outputGo != outputOp {
-		diffOffsetLine := 0
-		diffOffsetNextLine := 0
+	newlineRegex := regexp.MustCompile(`\r*\n`)
+	spaceRegex := regexp.MustCompile(`\s+`)
+	outputGoLines := newlineRegex.Split(outputGo, -1)
+	outputOpLines := newlineRegex.Split(outputOp, -1)
+
+	for i, goLine := range outputGoLines {
+		if i > len(outputOpLines) {
+			t.Fatalf("output line count differs")
+		}
+		opLine := outputOpLines[i]
 		bad := false
-		for i := 0; i < len(outputGo) && i < len(outputOp); i++ {
-			if outputGo[i] != outputOp[i] {
-				bad = true
-			} else if outputGo[i] == '\n' {
-				if !bad {
-					diffOffsetLine = i
-					diffOffsetNextLine = i
-				} else {
-					diffOffsetNextLine = i
-					break
+		if goLine != opLine {
+			goWords := spaceRegex.Split(goLine, -1)
+			opWords := spaceRegex.Split(opLine, -1)
+			// allow words[2] and [3] to be different as these are users & groups
+			for j, goWord := range goWords {
+				if j > len(opWords) {
+					bad = true
+				}
+				opWord := opWords[j]
+				if goWord != opWord && j != 2 && j != 3 {
+					bad = true
 				}
 			}
 		}
 
-		t.Errorf("outputs differ, go:\n%v\nopenssh:\n%v\n",
-			outputGo[diffOffsetLine:diffOffsetNextLine],
-			outputOp[diffOffsetLine:diffOffsetNextLine])
+		if bad {
+			t.Errorf("outputs differ, go:\n%v\nopenssh:\n%v\n", goLine, opLine)
+		}
 	}
 }
 

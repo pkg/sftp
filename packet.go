@@ -70,11 +70,12 @@ func unmarshalUint32(b []byte) (uint32, []byte) {
 }
 
 func unmarshalUint32Safe(b []byte) (uint32, []byte, error) {
+	var v uint32 = 0
 	if len(b) < 4 {
 		return 0, nil, shortPacketError
 	}
-	v := uint32(b[3]) | uint32(b[2])<<8 | uint32(b[1])<<16 | uint32(b[0])<<24
-	return v, b[4:], nil
+	v, b = unmarshalUint32(b)
+	return v, b, nil
 }
 
 func unmarshalUint64(b []byte) (uint64, []byte) {
@@ -84,12 +85,12 @@ func unmarshalUint64(b []byte) (uint64, []byte) {
 }
 
 func unmarshalUint64Safe(b []byte) (uint64, []byte, error) {
+	var v uint64 = 0
 	if len(b) < 8 {
 		return 0, nil, shortPacketError
 	}
-	h, b := unmarshalUint32(b)
-	l, b := unmarshalUint32(b)
-	return uint64(h)<<32 | uint64(l), b, nil
+	v, b = unmarshalUint64(b)
+	return v, b, nil
 }
 
 func unmarshalString(b []byte) (string, []byte) {
@@ -115,9 +116,9 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 		return fmt.Errorf("marshal2(%#v): binary marshaller failed", err)
 	}
 	if debugDumpTxPacketBytes {
-		debug("send packet: %s %d bytes %x", fxp(bb[0]).String(), len(bb), bb[1:])
+		debug("send packet: %s %d bytes %x", fxp(bb[0]), len(bb), bb[1:])
 	} else if debugDumpTxPacket {
-		debug("send packet: %s %d bytes", fxp(bb[0]).String(), len(bb))
+		debug("send packet: %s %d bytes", fxp(bb[0]), len(bb))
 	}
 	l := uint32(len(bb))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
@@ -148,9 +149,9 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 		return 0, nil, err
 	}
 	if debugDumpRxPacketBytes {
-		debug("recv packet: %s %d bytes %x", fxp(b[0]).String(), l, b[1:])
+		debug("recv packet: %s %d bytes %x", fxp(b[0]), l, b[1:])
 	} else if debugDumpRxPacket {
-		debug("recv packet: %s %d bytes", fxp(b[0]).String(), l)
+		debug("recv packet: %s %d bytes", fxp(b[0]), l)
 	}
 	return b[0], b[1:], nil
 }

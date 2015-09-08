@@ -31,24 +31,19 @@ type Server struct {
 	rootDir       string
 	lastId        uint32
 	pktChan       chan rxPacket
-	openFiles     map[string]serverOpenFile
+	openFiles     map[string]*os.File
 	openFilesLock *sync.RWMutex
 	handleCount   int
 	maxTxPacket   uint32
 	workerCount   int
 }
 
-type serverOpenFile struct {
-	*os.File
-	path string
-}
-
-func (svr *Server) nextHandle(path string, f *os.File) string {
+func (svr *Server) nextHandle(f *os.File) string {
 	svr.openFilesLock.Lock()
 	defer svr.openFilesLock.Unlock()
 	svr.handleCount++
 	handle := fmt.Sprintf("%d", svr.handleCount)
-	svr.openFiles[handle] = serverOpenFile{f, path}
+	svr.openFiles[handle] = f
 	return handle
 }
 
@@ -63,7 +58,7 @@ func (svr *Server) closeHandle(handle string) error {
 	}
 }
 
-func (svr *Server) getHandle(handle string) (serverOpenFile, bool) {
+func (svr *Server) getHandle(handle string) (*os.File, bool) {
 	svr.openFilesLock.RLock()
 	defer svr.openFilesLock.RUnlock()
 	f, ok := svr.openFiles[handle]
@@ -95,7 +90,7 @@ func NewServer(in io.Reader, out io.WriteCloser, debugStream io.Writer, debugLev
 		readOnly:      readOnly,
 		rootDir:       rootDir,
 		pktChan:       make(chan rxPacket, sftpServerWorkerCount),
-		openFiles:     map[string]serverOpenFile{},
+		openFiles:     map[string]*os.File{},
 		openFilesLock: &sync.RWMutex{},
 		maxTxPacket:   1 << 15,
 		workerCount:   sftpServerWorkerCount,
@@ -355,7 +350,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	if f, err := os.OpenFile(p.Path, osFlags, 0644); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		handle := svr.nextHandle(p.Path, f)
+		handle := svr.nextHandle(f)
 		return svr.sendPacket(sshFxpHandlePacket{p.Id, handle})
 	}
 }
@@ -476,7 +471,7 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 		b := p.Attrs.([]byte)
 		var err error = nil
 
-		debug("fsetstat name \"%s\"", f.path)
+		debug("fsetstat name \"%s\"", f.Name())
 		if (p.Flags & ssh_FILEXFER_ATTR_SIZE) != 0 {
 			var size uint64 = 0
 			if size, b, err = unmarshalUint64Safe(b); err == nil {
@@ -497,7 +492,7 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 			} else {
 				atimeT := time.Unix(int64(atime), 0)
 				mtimeT := time.Unix(int64(mtime), 0)
-				err = os.Chtimes(f.path, atimeT, mtimeT)
+				err = os.Chtimes(f.Name(), atimeT, mtimeT)
 			}
 		}
 		if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
