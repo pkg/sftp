@@ -220,7 +220,7 @@ func fromFileMode(mode os.FileMode) uint32 {
 		ret |= syscall.S_IFSOCK
 	}
 
-	if mode == 0 {
+	if mode&os.ModeType == 0 {
 		ret |= syscall.S_IFREG
 	}
 	ret |= uint32(mode & os.ModePerm)

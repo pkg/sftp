@@ -440,13 +440,18 @@ ls -l /usr/bin/
 	}
 }
 
-func randName() string {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	data := make([]byte, 16)
-	for i := 0; i < 16; i++ {
-		data[i] = byte(r.Uint32())
+var rng = rand.New(rand.NewSource(time.Now().Unix()))
+
+func randData(length int) []byte {
+	data := make([]byte, length)
+	for i := 0; i < length; i++ {
+		data[i] = byte(rng.Uint32())
 	}
-	return "sftp." + hex.EncodeToString(data)
+	return data
+}
+
+func randName() string {
+	return "sftp." + hex.EncodeToString(randData(16))
 }
 
 func TestServerMkdirRmdir(t *testing.T) {
@@ -493,5 +498,65 @@ func TestServerSymlink(t *testing.T) {
 		t.Fatal(err)
 	} else if (stat.Mode() & os.ModeSymlink) != os.ModeSymlink {
 		t.Fatalf("is not a symlink: %v", stat.Mode())
+	}
+}
+
+func TestServerPut(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpFileLocal := "/tmp/" + randName()
+	tmpFileRemote := "/tmp/" + randName()
+	defer os.RemoveAll(tmpFileLocal)
+	defer os.RemoveAll(tmpFileRemote)
+
+	t.Logf("put: local %v remote %v", tmpFileLocal, tmpFileRemote)
+
+	// create a file with random contents. This will be the local file pushed to the server
+	tmpFileLocalData := randData(10 * 1024 * 1024)
+	if err := ioutil.WriteFile(tmpFileLocal, tmpFileLocalData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// sftp the file to the server
+	if output, err := runSftpClient(t, "put "+tmpFileLocal+" "+tmpFileRemote, "/", hostGo, portGo); err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// tmpFile2 should now exist, with the same contents
+	if tmpFileRemoteData, err := ioutil.ReadFile(tmpFileRemote); err != nil {
+		t.Fatal(err)
+	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
+		t.Fatal("contents of file incorrect after put")
+	}
+}
+
+func TestServerGet(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpFileLocal := "/tmp/" + randName()
+	tmpFileRemote := "/tmp/" + randName()
+	defer os.RemoveAll(tmpFileLocal)
+	defer os.RemoveAll(tmpFileRemote)
+
+	t.Logf("get: local %v remote %v", tmpFileLocal, tmpFileRemote)
+
+	// create a file with random contents. This will be the remote file pulled from the server
+	tmpFileRemoteData := randData(10 * 1024 * 1024)
+	if err := ioutil.WriteFile(tmpFileRemote, tmpFileRemoteData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// sftp the file to the server
+	if output, err := runSftpClient(t, "get "+tmpFileRemote+" "+tmpFileLocal, "/", hostGo, portGo); err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// tmpFile2 should now exist, with the same contents
+	if tmpFileLocalData, err := ioutil.ReadFile(tmpFileLocal); err != nil {
+		t.Fatal(err)
+	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
+		t.Fatal("contents of file incorrect after put")
 	}
 }

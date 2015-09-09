@@ -149,6 +149,11 @@ func (svr *Server) Serve() error {
 		}
 	}
 	fmt.Fprintf(svr.debugStream, "sftp server run finished\n")
+	// close any still-open files
+	for handle, file := range svr.openFiles {
+		fmt.Fprintf(svr.debugStream, "sftp server file with handle '%v' left open: %v\n", handle, file.Name())
+		file.Close()
+	}
 	return svr.out.Close()
 }
 
