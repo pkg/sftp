@@ -106,6 +106,56 @@ func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 	return &fs, b
 }
 
+func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
+	// attributes variable struct, and also variable per protocol version
+	// spec version 3 attributes:
+	// uint32   flags
+	// uint64   size           present only if flag SSH_FILEXFER_ATTR_SIZE
+	// uint32   uid            present only if flag SSH_FILEXFER_ATTR_UIDGID
+	// uint32   gid            present only if flag SSH_FILEXFER_ATTR_UIDGID
+	// uint32   permissions    present only if flag SSH_FILEXFER_ATTR_PERMISSIONS
+	// uint32   atime          present only if flag SSH_FILEXFER_ACMODTIME
+	// uint32   mtime          present only if flag SSH_FILEXFER_ACMODTIME
+	// uint32   extended_count present only if flag SSH_FILEXFER_ATTR_EXTENDED
+	// string   extended_type
+	// string   extended_data
+	// ...      more extended data (extended_type - extended_data pairs),
+	// 	   so that number of pairs equals extended_count
+
+	uid := uint32(0)
+	gid := uint32(0)
+	mtime := uint32(fi.ModTime().Unix())
+	atime := mtime
+
+	var flags uint32 = ssh_FILEXFER_ATTR_SIZE |
+		ssh_FILEXFER_ATTR_PERMISSIONS |
+		ssh_FILEXFER_ATTR_ACMODTIME
+
+	if statt, ok := fi.Sys().(*syscall.Stat_t); ok {
+		flags |= ssh_FILEXFER_ATTR_UIDGID
+		uid = statt.Uid
+		gid = statt.Gid
+	}
+
+	b = marshalUint32(b, flags) // flags
+	if flags&ssh_FILEXFER_ATTR_SIZE != 0 {
+		b = marshalUint64(b, uint64(fi.Size())) // size
+	}
+	if flags&ssh_FILEXFER_ATTR_UIDGID != 0 {
+		b = marshalUint32(b, uid)
+		b = marshalUint32(b, gid)
+	}
+	if flags&ssh_FILEXFER_ATTR_PERMISSIONS != 0 {
+		b = marshalUint32(b, fromFileMode(fi.Mode())) // permissions
+	}
+	if flags&ssh_FILEXFER_ATTR_ACMODTIME != 0 {
+		b = marshalUint32(b, atime)
+		b = marshalUint32(b, mtime)
+	}
+
+	return b
+}
+
 // toFileMode converts sftp filemode bits to the os.FileMode specification
 func toFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
@@ -135,4 +185,45 @@ func toFileMode(mode uint32) os.FileMode {
 		fm |= os.ModeSticky
 	}
 	return fm
+}
+
+// fromFileMode converts from the os.FileMode specification to sftp filemode bits
+func fromFileMode(mode os.FileMode) uint32 {
+	ret := uint32(0)
+
+	if mode&os.ModeDevice != 0 {
+		if mode&os.ModeCharDevice != 0 {
+			ret |= syscall.S_IFCHR
+		} else {
+			ret |= syscall.S_IFBLK
+		}
+	}
+	if mode&os.ModeDir != 0 {
+		ret |= syscall.S_IFDIR
+	}
+	if mode&os.ModeSymlink != 0 {
+		ret |= syscall.S_IFLNK
+	}
+	if mode&os.ModeNamedPipe != 0 {
+		ret |= syscall.S_IFIFO
+	}
+	if mode&os.ModeSetgid != 0 {
+		ret |= syscall.S_ISGID
+	}
+	if mode&os.ModeSetuid != 0 {
+		ret |= syscall.S_ISUID
+	}
+	if mode&os.ModeSticky != 0 {
+		ret |= syscall.S_ISVTX
+	}
+	if mode&os.ModeSocket != 0 {
+		ret |= syscall.S_IFSOCK
+	}
+
+	if mode&os.ModeType == 0 {
+		ret |= syscall.S_IFREG
+	}
+	ret |= uint32(mode & os.ModePerm)
+
+	return ret
 }

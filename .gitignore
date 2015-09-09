@@ -1,0 +1,5 @@
+.*.swo
+.*.swp
+
+server_standalone/server_standalone
+

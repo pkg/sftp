@@ -259,6 +259,34 @@ func (c *Client) opendir(path string) (string, error) {
 	}
 }
 
+// Stat returns a FileInfo structure describing the file specified by path 'p'.
+// If 'p' is a symbolic link, the returned FileInfo structure describes the referent file.
+func (c *Client) Stat(p string) (os.FileInfo, error) {
+	id := c.nextId()
+	typ, data, err := c.sendRequest(sshFxpStatPacket{
+		Id:   id,
+		Path: p,
+	})
+	if err != nil {
+		return nil, err
+	}
+	switch typ {
+	case ssh_FXP_ATTRS:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return nil, &unexpectedIdErr{id, sid}
+		}
+		attr, _ := unmarshalAttrs(data)
+		return fileInfoFromStat(attr, path.Base(p)), nil
+	case ssh_FXP_STATUS:
+		return nil, unmarshalStatus(id, data)
+	default:
+		return nil, unimplementedPacketErr(typ)
+	}
+}
+
+// Lstat returns a FileInfo structure describing the file specified by path 'p'.
+// If 'p' is a symbolic link, the returned FileInfo structure describes the symbolic link.
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpLstatPacket{
@@ -309,6 +337,25 @@ func (c *Client) ReadLink(p string) (string, error) {
 		return "", unmarshalStatus(id, data)
 	default:
 		return "", unimplementedPacketErr(typ)
+	}
+}
+
+// Symlink creates a symbolic link at 'newname', pointing at target 'oldname'
+func (c *Client) Symlink(oldname, newname string) error {
+	id := c.nextId()
+	typ, data, err := c.sendRequest(sshFxpSymlinkPacket{
+		Id:         id,
+		Linkpath:   newname,
+		Targetpath: oldname,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return okOrErr(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
 	}
 }
 
@@ -1069,6 +1116,13 @@ func unmarshalStatus(id uint32, data []byte) error {
 		msg:  msg,
 		lang: lang,
 	}
+}
+
+func marshalStatus(b []byte, err StatusError) []byte {
+	b = marshalUint32(b, err.Code)
+	b = marshalString(b, err.msg)
+	b = marshalString(b, err.lang)
+	return b
 }
 
 // flags converts the flags passed to OpenFile into ssh flags.
