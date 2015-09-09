@@ -14,12 +14,15 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kr/fs"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -559,4 +562,112 @@ func TestServerGet(t *testing.T) {
 	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
 		t.Fatal("contents of file incorrect after put")
 	}
+}
+
+func compareDirectoriesRecursive(t *testing.T, aroot, broot string) {
+	walker := fs.Walk(aroot)
+	for walker.Step() {
+		if err := walker.Err(); err != nil {
+			t.Fatal(err)
+		}
+		// find paths
+		aPath := walker.Path()
+		aRel, err := filepath.Rel(aroot, aPath)
+		if err != nil {
+			t.Fatalf("could not find relative path for %v: %v", aPath, err)
+		}
+		bPath := path.Join(broot, aRel)
+
+		if aRel == "." {
+			continue
+		}
+
+		//t.Logf("comparing: %v a: %v b %v", aRel, aPath, bPath)
+
+		// if a is a link, the sftp recursive copy won't have copied it. ignore
+		aLink, err := os.Lstat(aPath)
+		if err != nil {
+			t.Fatalf("could not lstat %v: %v", aPath, err)
+		}
+		if aLink.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		// stat the files
+		aFile, err := os.Stat(aPath)
+		if err != nil {
+			t.Fatalf("could not stat %v: %v", aPath, err)
+		}
+		bFile, err := os.Stat(bPath)
+		if err != nil {
+			t.Fatalf("could not stat %v: %v", bPath, err)
+		}
+
+		// compare stats, with some leniency for the timestamp
+		if aFile.Mode() != bFile.Mode() {
+			t.Fatalf("modes different for %v: %v vs %v", aRel, aFile.Mode(), bFile.Mode())
+		}
+		if !aFile.IsDir() {
+			if aFile.Size() != bFile.Size() {
+				t.Fatalf("sizes different for %v: %v vs %v", aRel, aFile.Size(), bFile.Size())
+			}
+		}
+		timeDiff := aFile.ModTime().Sub(bFile.ModTime())
+		if timeDiff > time.Second || timeDiff < -time.Second {
+			t.Fatalf("mtimes different for %v: %v vs %v", aRel, aFile.ModTime(), bFile.ModTime())
+		}
+
+		// compare contents
+		if !aFile.IsDir() {
+			if aContents, err := ioutil.ReadFile(aPath); err != nil {
+				t.Fatal(err)
+			} else if bContents, err := ioutil.ReadFile(bPath); err != nil {
+				t.Fatal(err)
+			} else if string(aContents) != string(bContents) {
+				t.Fatalf("contents different for %v", aRel)
+			}
+		}
+	}
+}
+
+func TestServerPutRecursive(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	dirLocal, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpDirRemote := "/tmp/" + randName()
+	defer os.RemoveAll(tmpDirRemote)
+
+	t.Logf("put recursive: local %v remote %v", dirLocal, tmpDirRemote)
+
+	// push this directory (source code etc) recursively to the server
+	if output, err := runSftpClient(t, "mkdir "+tmpDirRemote+"\r\nput -r -P "+dirLocal+"/ "+tmpDirRemote+"/", "/", hostGo, portGo); err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	compareDirectoriesRecursive(t, dirLocal, path.Join(tmpDirRemote, path.Base(dirLocal)))
+}
+
+func TestServerGetRecursive(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	dirRemote, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpDirLocal := "/tmp/" + randName()
+	defer os.RemoveAll(tmpDirLocal)
+
+	t.Logf("get recursive: local %v remote %v", tmpDirLocal, dirRemote)
+
+	// pull this directory (source code etc) recursively from the server
+	if output, err := runSftpClient(t, "lmkdir "+tmpDirLocal+"\r\nget -r -P "+dirRemote+"/ "+tmpDirLocal+"/", "/", hostGo, portGo); err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	compareDirectoriesRecursive(t, dirRemote, path.Join(tmpDirLocal, path.Base(dirRemote)))
 }
