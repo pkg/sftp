@@ -3,7 +3,7 @@ sftp
 
 The `sftp` package provides support for file system operations on remote ssh servers using the SFTP subsystem.
 
-[![Build Status](https://drone.io/github.com/pkg/sftp/status.png)](https://drone.io/github.com/pkg/sftp/latest)
+[![wercker status](https://app.wercker.com/status/7d3e9b916954ac3a7ed15a457938bac4/s/master "wercker status")](https://app.wercker.com/project/bykey/7d3e9b916954ac3a7ed15a457938bac4)
 
 usage and examples
 ------------------
