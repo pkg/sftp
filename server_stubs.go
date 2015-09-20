@@ -1,4 +1,4 @@
-// +build !cgo,!plan9 android
+// +build !cgo,!plan9 windows android
 
 package sftp
 
