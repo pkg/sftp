@@ -71,6 +71,26 @@ func fileInfoFromStat(st *FileStat, name string) os.FileInfo {
 	return fs
 }
 
+func fileStatFromInfo(fi os.FileInfo) (uint32, FileStat) {
+	mtime := fi.ModTime().Unix()
+	atime := mtime
+	var flags uint32 = ssh_FILEXFER_ATTR_SIZE |
+		ssh_FILEXFER_ATTR_PERMISSIONS |
+		ssh_FILEXFER_ATTR_ACMODTIME
+
+	fileStat := FileStat{
+		Size:  uint64(fi.Size()),
+		Mode:  fromFileMode(fi.Mode()),
+		Mtime: uint32(mtime),
+		Atime: uint32(atime),
+	}
+
+	// os specific file stat decoding
+	fileStatFromInfoOs(fi, &flags, &fileStat)
+
+	return flags, fileStat
+}
+
 func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 	flags, b := unmarshalUint32(b)
 	var fs FileStat
@@ -122,35 +142,22 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 	// ...      more extended data (extended_type - extended_data pairs),
 	// 	   so that number of pairs equals extended_count
 
-	uid := uint32(0)
-	gid := uint32(0)
-	mtime := uint32(fi.ModTime().Unix())
-	atime := mtime
+	flags, fileStat := fileStatFromInfo(fi)
 
-	var flags uint32 = ssh_FILEXFER_ATTR_SIZE |
-		ssh_FILEXFER_ATTR_PERMISSIONS |
-		ssh_FILEXFER_ATTR_ACMODTIME
-
-	if statt, ok := fi.Sys().(*syscall.Stat_t); ok {
-		flags |= ssh_FILEXFER_ATTR_UIDGID
-		uid = statt.Uid
-		gid = statt.Gid
-	}
-
-	b = marshalUint32(b, flags) // flags
+	b = marshalUint32(b, flags)
 	if flags&ssh_FILEXFER_ATTR_SIZE != 0 {
-		b = marshalUint64(b, uint64(fi.Size())) // size
+		b = marshalUint64(b, fileStat.Size)
 	}
 	if flags&ssh_FILEXFER_ATTR_UIDGID != 0 {
-		b = marshalUint32(b, uid)
-		b = marshalUint32(b, gid)
+		b = marshalUint32(b, fileStat.Uid)
+		b = marshalUint32(b, fileStat.Gid)
 	}
 	if flags&ssh_FILEXFER_ATTR_PERMISSIONS != 0 {
-		b = marshalUint32(b, fromFileMode(fi.Mode())) // permissions
+		b = marshalUint32(b, fileStat.Mode)
 	}
 	if flags&ssh_FILEXFER_ATTR_ACMODTIME != 0 {
-		b = marshalUint32(b, atime)
-		b = marshalUint32(b, mtime)
+		b = marshalUint32(b, fileStat.Atime)
+		b = marshalUint32(b, fileStat.Mtime)
 	}
 
 	return b
