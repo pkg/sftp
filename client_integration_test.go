@@ -396,7 +396,7 @@ func TestClientFileName(t *testing.T) {
 	}
 
 	if got, want := f2.Name(), f.Name(); got != want {
-		t.Fatalf("Name: got %q want %q", f.Name(), want, got)
+		t.Fatalf("Name: got %q want %q", want, got)
 	}
 }
 
