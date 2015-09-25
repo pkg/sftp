@@ -674,6 +674,11 @@ func (f *File) Close() error {
 	return f.c.close(f.handle)
 }
 
+// Name returns the name of the file as presented to Open or Create.
+func (f *File) Name() string {
+	return f.path	
+}
+
 const maxConcurrentRequests = 64
 
 // Read reads up to len(b) bytes from the File. It returns the number of
