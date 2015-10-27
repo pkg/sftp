@@ -1110,7 +1110,7 @@ func unmarshalStatus(id uint32, data []byte) error {
 	}
 	code, data := unmarshalUint32(data)
 	msg, data := unmarshalString(data)
-	lang, _ := unmarshalString(data)
+	lang, _, _ := unmarshalStringSafe(data)
 	return &StatusError{
 		Code: code,
 		msg:  msg,
