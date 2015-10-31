@@ -73,3 +73,14 @@ func TestFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestMissingLangTag(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fail()
+		}
+	}()
+	buf := marshalUint32([]byte{}, 0)
+	buf = marshalStatus(buf, StatusError{})
+	_ = unmarshalStatus(0, buf[:len(buf)-4])
+}
