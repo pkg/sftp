@@ -379,6 +379,27 @@ func TestClientCreateFailed(t *testing.T) {
 	}
 }
 
+func TestClientFileName(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	f2, err := sftp.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := f2.Name(), f.Name(); got != want {
+		t.Fatalf("Name: got %q want %q", want, got)
+	}
+}
+
 func TestClientFileStat(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
