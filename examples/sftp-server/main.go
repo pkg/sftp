@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 
@@ -17,19 +18,20 @@ import (
 // Based on example server code from golang.org/x/crypto/ssh and server_standalone
 func main() {
 
-	readOnly := false
-	debugLevelStr := "none"
-	debugLevel := 0
-	debugStderr := false
-	rootDir := ""
+	var (
+		readOnly      bool
+		debugLevelStr string
+		debugLevel    int
+		debugStderr   bool
+		rootDir       string
+	)
 
 	flag.BoolVar(&readOnly, "R", false, "read-only server")
 	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
 	flag.StringVar(&debugLevelStr, "l", "none", "debug level")
-	flag.StringVar(&debugLevelStr, "root", "", "root directory")
+	flag.StringVar(&rootDir, "root", "", "root directory")
 	flag.Parse()
 
-	// term := terminal.NewTerminal(channel, "> ")
 	debugStream := ioutil.Discard
 	if debugStderr {
 		debugStream = os.Stderr
@@ -52,12 +54,12 @@ func main() {
 
 	privateBytes, err := ioutil.ReadFile("id_rsa")
 	if err != nil {
-		panic("Failed to load private key")
+		log.Fatal("Failed to load private key", err)
 	}
 
 	private, err := ssh.ParsePrivateKey(privateBytes)
 	if err != nil {
-		panic("Failed to parse private key")
+		log.Fatal("Failed to parse private key", err)
 	}
 
 	config.AddHostKey(private)
@@ -66,20 +68,20 @@ func main() {
 	// accepted.
 	listener, err := net.Listen("tcp", "0.0.0.0:2022")
 	if err != nil {
-		panic("failed to listen for connection")
+		log.Fatal("failed to listen for connection", err)
 	}
 	fmt.Printf("Listening on %v\n", listener.Addr())
 
 	nConn, err := listener.Accept()
 	if err != nil {
-		panic("failed to accept incoming connection")
+		log.Fatal("failed to accept incoming connection", err)
 	}
 
 	// Before use, a handshake must be performed on the incoming
 	// net.Conn.
 	_, chans, reqs, err := ssh.NewServerConn(nConn, config)
 	if err != nil {
-		panic("failed to handshake")
+		log.Fatal("failed to handshake", err)
 	}
 	fmt.Fprintf(debugStream, "SSH server established\n")
 
@@ -89,9 +91,8 @@ func main() {
 	// Service the incoming Channel channel.
 	for newChannel := range chans {
 		// Channels have a type, depending on the application level
-		// protocol intended. In the case of a shell, the type is
-		// "session" and ServerShell may be used to present a simple
-		// terminal interface.
+		// protocol intended. In the case of an SFTP session, this is "subsystem"
+		// with a payload string of "<length=4>sftp"
 		fmt.Fprintf(debugStream, "Incoming channel: %s\n", newChannel.ChannelType())
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
@@ -100,7 +101,7 @@ func main() {
 		}
 		channel, requests, err := newChannel.Accept()
 		if err != nil {
-			panic("could not accept channel.")
+			log.Fatal("could not accept channel.", err)
 		}
 		fmt.Fprintf(debugStream, "Channel accepted\n")
 
@@ -125,8 +126,10 @@ func main() {
 
 		server, err := sftp.NewServer(channel, channel, debugStream, debugLevel, readOnly, rootDir)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
-		go server.Serve()
+		if err := server.Serve(); err != nil {
+			log.Fatal("sftp server completed with error:", err)
+		}
 	}
 }
