@@ -539,7 +539,7 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // is not empty.
 func (c *Client) Remove(path string) error {
 	err := c.removeFile(path)
-	if status, ok := err.(*StatusError); ok && status.Code == ssh_FX_FAILURE {
+	if status, ok := err.(*StatusError); ok && (status.Code == ssh_FX_FAILURE || status.Code == ssh_FX_FILE_IS_A_DIRECTORY) {
 		err = c.removeDirectory(path)
 	}
 	return err
@@ -676,7 +676,7 @@ func (f *File) Close() error {
 
 // Name returns the name of the file as presented to Open or Create.
 func (f *File) Name() string {
-	return f.path	
+	return f.path
 }
 
 const maxConcurrentRequests = 64
