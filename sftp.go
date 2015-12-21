@@ -37,15 +37,37 @@ const (
 )
 
 const (
-	ssh_FX_OK                = 0
-	ssh_FX_EOF               = 1
-	ssh_FX_NO_SUCH_FILE      = 2
-	ssh_FX_PERMISSION_DENIED = 3
-	ssh_FX_FAILURE           = 4
-	ssh_FX_BAD_MESSAGE       = 5
-	ssh_FX_NO_CONNECTION     = 6
-	ssh_FX_CONNECTION_LOST   = 7
-	ssh_FX_OP_UNSUPPORTED    = 8
+	ssh_FX_OK                       = 0
+	ssh_FX_EOF                      = 1
+	ssh_FX_NO_SUCH_FILE             = 2
+	ssh_FX_PERMISSION_DENIED        = 3
+	ssh_FX_FAILURE                  = 4
+	ssh_FX_BAD_MESSAGE              = 5
+	ssh_FX_NO_CONNECTION            = 6
+	ssh_FX_CONNECTION_LOST          = 7
+	ssh_FX_OP_UNSUPPORTED           = 8
+	ssh_FX_INVALID_HANDLE           = 9
+	ssh_FX_NO_SUCH_PATH             = 10
+	ssh_FX_FILE_ALREADY_EXISTS      = 11
+	ssh_FX_WRITE_PROTECT            = 12
+	ssh_FX_NO_MEDIA                 = 13
+	ssh_FX_NO_SPACE_ON_FILESYSTEM   = 14
+	ssh_FX_QUOTA_EXCEEDED           = 15
+	ssh_FX_UNKNOWN_PRINCIPAL        = 16
+	ssh_FX_LOCK_CONFLICT            = 17
+	ssh_FX_DIR_NOT_EMPTY            = 18
+	ssh_FX_NOT_A_DIRECTORY          = 19
+	ssh_FX_INVALID_FILENAME         = 20
+	ssh_FX_LINK_LOOP                = 21
+	ssh_FX_CANNOT_DELETE            = 22
+	ssh_FX_INVALID_PARAMETER        = 23
+	ssh_FX_FILE_IS_A_DIRECTORY      = 24
+	ssh_FX_BYTE_RANGE_LOCK_CONFLICT = 25
+	ssh_FX_BYTE_RANGE_LOCK_REFUSED  = 26
+	ssh_FX_DELETE_PENDING           = 27
+	ssh_FX_FILE_CORRUPT             = 28
+	ssh_FX_OWNER_INVALID            = 29
+	ssh_FX_GROUP_INVALID            = 30
 )
 
 const (
