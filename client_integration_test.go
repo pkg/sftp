@@ -34,7 +34,7 @@ const (
 
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
-var testSftp = flag.String("sftp", "/usr/lib/openssh/sftp-server", "location of the sftp server binary")
+var testSftp = flag.String("sftp", sftpServer, "location of the sftp server binary")
 
 type delayedWrite struct {
 	t time.Time

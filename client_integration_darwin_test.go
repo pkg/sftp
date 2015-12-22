@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const sftpServer = "/usr/libexec/sftp-server"
+
 func TestClientStatVFS(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
