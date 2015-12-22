@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -211,6 +212,15 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	return pkt, nil
 }
 
+func (svr *Server) chroot(path string) string {
+	cleanPathFromChroot := filepath.Clean(string(filepath.Separator) + path)
+	return filepath.Join(svr.rootDir, cleanPathFromChroot)
+}
+
+func (svr *Server) unchroot(path string) string {
+	return path[len(svr.rootDir):]
+}
+
 func (p sshFxInitPacket) respond(svr *Server) error {
 	return svr.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 }
@@ -229,7 +239,7 @@ func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
 
 func (p sshFxpLstatPacket) respond(svr *Server) error {
 	// stat the requested file
-	if info, err := os.Lstat(p.Path); err != nil {
+	if info, err := os.Lstat(svr.chroot(p.Path)); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
 		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
@@ -238,7 +248,7 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 
 func (p sshFxpStatPacket) respond(svr *Server) error {
 	// stat the requested file
-	if info, err := os.Stat(p.Path); err != nil {
+	if info, err := os.Stat(svr.chroot(p.Path)); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
 		return svr.sendPacket(sshFxpStatResponse{p.Id, info})
@@ -260,7 +270,7 @@ func (p sshFxpMkdirPacket) respond(svr *Server) error {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
 	// TODO FIXME: ignore flags field
-	err := os.Mkdir(p.Path, 0755)
+	err := os.Mkdir(svr.chroot(p.Path), 0755)
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
@@ -268,7 +278,7 @@ func (p sshFxpRmdirPacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
-	err := os.Remove(p.Path)
+	err := os.Remove(svr.chroot(p.Path))
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
@@ -276,7 +286,7 @@ func (p sshFxpRemovePacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
-	err := os.Remove(p.Filename)
+	err := os.Remove(svr.chroot(p.Filename))
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
@@ -284,7 +294,7 @@ func (p sshFxpRenamePacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
-	err := os.Rename(p.Oldpath, p.Newpath)
+	err := os.Rename(svr.chroot(p.Oldpath), svr.chroot(p.Newpath))
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
@@ -292,26 +302,42 @@ func (p sshFxpSymlinkPacket) respond(svr *Server) error {
 	if svr.readOnly {
 		return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
 	}
-	err := os.Symlink(p.Targetpath, p.Linkpath)
+	realTarget := svr.chroot(p.Targetpath)
+	linkPath := p.Linkpath
+	if filepath.IsAbs(linkPath) {
+		// chroot absolute paths
+		linkPath = svr.chroot(linkPath)
+	} else {
+		// check relative paths don't break the chroot
+		linkTarget, err := filepath.Abs(filepath.Join(realTarget, linkPath))
+		if err != nil {
+			return svr.sendPacket(statusFromError(p.Id, err))
+		}
+		if !strings.HasPrefix(linkTarget, svr.rootDir) {
+			return svr.sendPacket(statusFromError(p.Id, syscall.EPERM))
+		}
+	}
+	err := os.Symlink(realTarget, linkPath)
 	return svr.sendPacket(statusFromError(p.Id, err))
 }
 
 var emptyFileStat = []interface{}{uint32(0)}
 
 func (p sshFxpReadlinkPacket) respond(svr *Server) error {
-	if f, err := os.Readlink(p.Path); err != nil {
+	if f, err := os.Readlink(svr.chroot(p.Path)); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
+		f = svr.unchroot(f)
+		return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{{f, f, emptyFileStat}}})
 	}
 }
 
 func (p sshFxpRealpathPacket) respond(svr *Server) error {
-	if f, err := filepath.Abs(p.Path); err != nil {
+	if f, err := filepath.Abs(svr.chroot(p.Path)); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
-		f = filepath.Clean(f)
-		return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{sshFxpNameAttr{f, f, emptyFileStat}}})
+		f = svr.unchroot(filepath.Clean(f))
+		return svr.sendPacket(sshFxpNamePacket{p.Id, []sshFxpNameAttr{{f, f, emptyFileStat}}})
 	}
 }
 
@@ -352,7 +378,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		osFlags |= os.O_EXCL
 	}
 
-	if f, err := os.OpenFile(p.Path, osFlags, 0644); err != nil {
+	if f, err := os.OpenFile(svr.chroot(p.Path), osFlags, 0644); err != nil {
 		return svr.sendPacket(statusFromError(p.Id, err))
 	} else {
 		handle := svr.nextHandle(f)
@@ -428,17 +454,18 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		b := p.Attrs.([]byte)
 		var err error = nil
 
-		debug("setstat name \"%s\"", p.Path)
+		realPath := svr.chroot(p.Path)
+		debug("setstat name \"%s\"", realPath)
 		if (p.Flags & ssh_FILEXFER_ATTR_SIZE) != 0 {
 			var size uint64 = 0
 			if size, b, err = unmarshalUint64Safe(b); err == nil {
-				err = os.Truncate(p.Path, int64(size))
+				err = os.Truncate(realPath, int64(size))
 			}
 		}
 		if (p.Flags & ssh_FILEXFER_ATTR_PERMISSIONS) != 0 {
 			var mode uint32 = 0
 			if mode, b, err = unmarshalUint32Safe(b); err == nil {
-				err = os.Chmod(p.Path, os.FileMode(mode))
+				err = os.Chmod(realPath, os.FileMode(mode))
 			}
 		}
 		if (p.Flags & ssh_FILEXFER_ATTR_ACMODTIME) != 0 {
@@ -449,7 +476,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 			} else {
 				atimeT := time.Unix(int64(atime), 0)
 				mtimeT := time.Unix(int64(mtime), 0)
-				err = os.Chtimes(p.Path, atimeT, mtimeT)
+				err = os.Chtimes(realPath, atimeT, mtimeT)
 			}
 		}
 		if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
@@ -458,7 +485,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 			if uid, b, err = unmarshalUint32Safe(b); err != nil {
 			} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
 			} else {
-				err = os.Chown(p.Path, int(uid), int(gid))
+				err = os.Chown(realPath, int(uid), int(gid))
 			}
 		}
 
