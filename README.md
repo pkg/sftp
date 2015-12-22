@@ -3,7 +3,7 @@ sftp
 
 The `sftp` package provides support for file system operations on remote ssh servers using the SFTP subsystem.
 
-[![wercker status](https://app.wercker.com/status/7d3e9b916954ac3a7ed15a457938bac4/s/master "wercker status")](https://app.wercker.com/project/bykey/7d3e9b916954ac3a7ed15a457938bac4)
+[!"unix status")](https://travis-ci.org/pkg/sftp.svg)
 
 usage and examples
 ------------------
