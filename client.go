@@ -539,8 +539,17 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // is not empty.
 func (c *Client) Remove(path string) error {
 	err := c.removeFile(path)
-	if status, ok := err.(*StatusError); ok && status.Code == ssh_FX_FAILURE {
-		err = c.removeDirectory(path)
+	switch err := err.(type) {
+	case *StatusError:
+		switch err.Code {
+		// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
+		case ssh_FX_PERMISSION_DENIED, ssh_FX_FAILURE:
+			return c.removeDirectory(path)
+		default:
+			return err
+		}
+	default:
+		return err
 	}
 	return err
 }
@@ -676,7 +685,7 @@ func (f *File) Close() error {
 
 // Name returns the name of the file as presented to Open or Create.
 func (f *File) Name() string {
-	return f.path	
+	return f.path
 }
 
 const maxConcurrentRequests = 64

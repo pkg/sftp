@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const sftpServer = "/usr/lib/openssh/sftp-server"
+
 func TestClientStatVFS(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
