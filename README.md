@@ -24,4 +24,6 @@ roadmap
 contributing
 ------------
 
-Features, Issues, and Pull Requests are always welcome.
+We welcome pull requests, bug fixes and issue reports.
+
+Before proposing a large change, first please discuss your change by raising an issue.
