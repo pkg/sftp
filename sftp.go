@@ -37,15 +37,18 @@ const (
 )
 
 const (
-	ssh_FX_OK                          = 0
-	ssh_FX_EOF                         = 1
-	ssh_FX_NO_SUCH_FILE                = 2
-	ssh_FX_PERMISSION_DENIED           = 3
-	ssh_FX_FAILURE                     = 4
-	ssh_FX_BAD_MESSAGE                 = 5
-	ssh_FX_NO_CONNECTION               = 6
-	ssh_FX_CONNECTION_LOST             = 7
-	ssh_FX_OP_UNSUPPORTED              = 8
+	ssh_FX_OK                = 0
+	ssh_FX_EOF               = 1
+	ssh_FX_NO_SUCH_FILE      = 2
+	ssh_FX_PERMISSION_DENIED = 3
+	ssh_FX_FAILURE           = 4
+	ssh_FX_BAD_MESSAGE       = 5
+	ssh_FX_NO_CONNECTION     = 6
+	ssh_FX_CONNECTION_LOST   = 7
+	ssh_FX_OP_UNSUPPORTED    = 8
+
+	// see draft-ietf-secsh-filexfer-13
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-9.1
 	ssh_FX_INVALID_HANDLE              = 9
 	ssh_FX_NO_SUCH_PATH                = 10
 	ssh_FX_FILE_ALREADY_EXISTS         = 11
