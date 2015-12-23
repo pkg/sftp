@@ -235,6 +235,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	}
 	return attrs, err
 }
+
 func (c *Client) opendir(path string) (string, error) {
 	id := c.nextId()
 	typ, data, err := c.sendRequest(sshFxpOpendirPacket{
@@ -539,8 +540,18 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // is not empty.
 func (c *Client) Remove(path string) error {
 	err := c.removeFile(path)
-	if status, ok := err.(*StatusError); ok && (status.Code == ssh_FX_FAILURE || status.Code == ssh_FX_FILE_IS_A_DIRECTORY) {
-		err = c.removeDirectory(path)
+	switch err := err.(type) {
+	case *StatusError:
+		switch err.Code {
+		// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
+		// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
+		case ssh_FX_PERMISSION_DENIED, ssh_FX_FAILURE, ssh_FX_FILE_IS_A_DIRECTORY:
+			return c.removeDirectory(path)
+		default:
+			return err
+		}
+	default:
+		return err
 	}
 	return err
 }
@@ -596,6 +607,40 @@ func (c *Client) Rename(oldname, newname string) error {
 	default:
 		return unimplementedPacketErr(typ)
 	}
+}
+
+func (c *Client) realpath(path string) (string, error) {
+	id := c.nextId()
+	typ, data, err := c.sendRequest(sshFxpRealpathPacket{
+		Id:   id,
+		Path: path,
+	})
+	if err != nil {
+		return "", err
+	}
+	switch typ {
+	case ssh_FXP_NAME:
+		sid, data := unmarshalUint32(data)
+		if sid != id {
+			return "", &unexpectedIdErr{id, sid}
+		}
+		count, data := unmarshalUint32(data)
+		if count != 1 {
+			return "", unexpectedCount(1, count)
+		}
+		filename, _ := unmarshalString(data) // ignore attributes
+		return filename, nil
+	case ssh_FXP_STATUS:
+		return "", okOrErr(unmarshalStatus(id, data))
+	default:
+		return "", unimplementedPacketErr(typ)
+	}
+}
+
+// Getwd returns the current working directory of the server. Operations
+// involving relative paths will be based at this location.
+func (c *Client) Getwd() (string, error) {
+	return c.realpath(".")
 }
 
 // result captures the result of receiving the a packet from the server

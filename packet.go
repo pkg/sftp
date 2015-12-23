@@ -439,7 +439,7 @@ type sshFxpRealpathPacket struct {
 func (p sshFxpRealpathPacket) id() uint32 { return p.Id }
 
 func (p sshFxpRealpathPacket) MarshalBinary() ([]byte, error) {
-	return marshalIdString(ssh_FXP_READLINK, p.Id, p.Path)
+	return marshalIdString(ssh_FXP_REALPATH, p.Id, p.Path)
 }
 
 func (p *sshFxpRealpathPacket) UnmarshalBinary(b []byte) error {

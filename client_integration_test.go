@@ -34,7 +34,7 @@ const (
 
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
-var testSftp = flag.String("sftp", "/usr/lib/openssh/sftp-server", "location of the sftp server binary")
+var testSftp = flag.String("sftp", sftpServer, "location of the sftp server binary")
 
 type delayedWrite struct {
 	t time.Time
@@ -500,6 +500,27 @@ func TestClientRename(t *testing.T) {
 	}
 	if _, err := os.Lstat(f2); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClientGetwd(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	lwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rwd, err := sftp.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !path.IsAbs(rwd) {
+		t.Fatalf("Getwd: wanted absolute path, got %q", rwd)
+	}
+	if lwd != rwd {
+		t.Fatalf("Getwd: want %q, got %q", lwd, rwd)
 	}
 }
 
