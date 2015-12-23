@@ -503,6 +503,27 @@ func TestClientRename(t *testing.T) {
 	}
 }
 
+func TestClientGetwd(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	lwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rwd, err := sftp.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !path.IsAbs(rwd) {
+		t.Fatalf("Getwd: wanted absolute path, got %q", rwd)
+	}
+	if lwd != rwd {
+		t.Fatalf("Getwd: want %q, got %q", lwd, rwd)
+	}
+}
+
 func TestClientReadLink(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
