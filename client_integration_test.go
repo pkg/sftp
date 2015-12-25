@@ -1233,6 +1233,23 @@ func TestServerRoughDisconnect(t *testing.T) {
 	sftp.Close()
 }
 
+// sftp/issue/26 writing to a read only file caused client to loop.
+func TestClientWriteToROFile(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := sftp.Open("/dev/zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	_, err = f.Write([]byte("hello"))
+	if err == nil {
+		t.Fatal("expected error, got", err)
+	}
+}
+
 func benchmarkRead(b *testing.B, bufsize int, delay time.Duration) {
 	size := 10*1024*1024 + 123 // ~10MiB
 
