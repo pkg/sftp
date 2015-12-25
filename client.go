@@ -667,9 +667,7 @@ func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.inflight[p.id()] = ch
 	if err := sendPacket(c.w, p); err != nil {
 		delete(c.inflight, p.id())
-		c.mu.Unlock()
 		ch <- result{err: err}
-		return
 	}
 	c.mu.Unlock()
 }
@@ -737,7 +735,7 @@ func (f *File) Read(b []byte) (int, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
-	ch := make(chan result)
+	ch := make(chan result, 1)
 	type inflightRead struct {
 		b      []byte
 		offset uint64
@@ -833,7 +831,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 	offset := f.offset
 	writeOffset := offset
 	fileSize := uint64(fi.Size())
-	ch := make(chan result)
+	ch := make(chan result, 1)
 	type inflightRead struct {
 		b      []byte
 		offset uint64
@@ -943,7 +941,6 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 		return copied, firstErr.err
 	}
 	return copied, nil
-
 }
 
 // Stat returns the FileInfo structure describing file. If there is an
@@ -967,7 +964,7 @@ func (f *File) Write(b []byte) (int, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
-	ch := make(chan result)
+	ch := make(chan result, 1)
 	var firstErr error
 	written := len(b)
 	for len(b) > 0 || inFlight > 0 {
@@ -1030,7 +1027,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
-	ch := make(chan result)
+	ch := make(chan result, 1)
 	var firstErr error
 	read := int64(0)
 	b := make([]byte, f.c.maxPacket)
