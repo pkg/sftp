@@ -544,7 +544,8 @@ func (c *Client) Remove(path string) error {
 	case *StatusError:
 		switch err.Code {
 		// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
-		case ssh_FX_PERMISSION_DENIED, ssh_FX_FAILURE:
+		// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
+		case ssh_FX_PERMISSION_DENIED, ssh_FX_FAILURE, ssh_FX_FILE_IS_A_DIRECTORY:
 			return c.removeDirectory(path)
 		default:
 			return err
