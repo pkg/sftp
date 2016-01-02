@@ -111,16 +111,13 @@ func (svr *Server) rxPackets() error {
 		pktType, pktBytes, err := recvPacket(svr.in)
 		switch err {
 		case nil:
-			break
+			svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
 		case io.EOF:
-			fmt.Fprintf(svr.debugStream, "rxPackets loop done\n")
 			return nil
 		default:
 			fmt.Fprintf(svr.debugStream, "recvPacket error: %v\n", err)
 			return err
 		}
-
-		svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
 	}
 }
 
@@ -153,7 +150,6 @@ func (svr *Server) Serve() error {
 			break
 		}
 	}
-	fmt.Fprintf(svr.debugStream, "sftp server run finished\n")
 	// close any still-open files
 	for handle, file := range svr.openFiles {
 		fmt.Fprintf(svr.debugStream, "sftp server file with handle '%v' left open: %v\n", handle, file.Name())
@@ -163,7 +159,6 @@ func (svr *Server) Serve() error {
 }
 
 func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondablePacket, error) {
-	//pktId, restBytes := unmarshalUint32(pktBytes[1:])
 	var pkt serverRespondablePacket = nil
 	switch pktType {
 	case ssh_FXP_INIT:
@@ -205,15 +200,10 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	case ssh_FXP_SYMLINK:
 		pkt = &sshFxpSymlinkPacket{}
 	default:
-		return nil, fmt.Errorf("unhandled packet type: %s", pktType.String())
+		return nil, fmt.Errorf("unhandled packet type: %s", pktType)
 	}
-	if pkt == nil {
-		return nil, fmt.Errorf("unhandled packet type: %s", pktType.String())
-	}
-	if err := pkt.UnmarshalBinary(pktBytes); err != nil {
-		return nil, err
-	}
-	return pkt, nil
+	err := pkt.UnmarshalBinary(pktBytes)
+	return pkt, err
 }
 
 func (p sshFxInitPacket) respond(svr *Server) error {
