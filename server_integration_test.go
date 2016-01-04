@@ -275,48 +275,40 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 
 	// no idea if this is actually correct spec-wise.
 	// just enough for an sftp server to start.
-	if subsystemReq.Name == "sftp" {
-		req.Reply(true, nil)
-
-		if !chsvr.svr.useSubsystem {
-			// use the openssh sftp server backend; this is to test the ssh code, not the sftp code,
-			// or is used for comparison between our sftp subsystem and the openssh sftp subsystem
-			cmd := exec.Command(*testSftp, "-e", "-l", "DEBUG") // log to stderr
-			cmd.Stdin = chsvr.ch
-			cmd.Stdout = chsvr.ch
-			cmd.Stderr = sftpServerDebugStream
-			if err := cmd.Start(); err != nil {
-				return err
-			}
-			return cmd.Wait()
-		} else {
-			sftpServer, err := NewServer(chsvr.ch, chsvr.ch, sftpServerDebugStream, 0, false, ".")
-			if err != nil {
-				return err
-			}
-
-			// wait for the session to close
-			runErr := sftpServer.Serve()
-			exitStatus := uint32(1)
-			if runErr == nil {
-				exitStatus = uint32(0)
-			}
-
-			_, exitStatusErr := chsvr.ch.SendRequest("exit-status", false, ssh.Marshal(sshSubsystemExitStatus{exitStatus}))
-			return exitStatusErr
-		}
-	} else {
+	if subsystemReq.Name != "sftp" {
 		return req.Reply(false, nil)
 	}
+
+	req.Reply(true, nil)
+
+	if !chsvr.svr.useSubsystem {
+		// use the openssh sftp server backend; this is to test the ssh code, not the sftp code,
+		// or is used for comparison between our sftp subsystem and the openssh sftp subsystem
+		cmd := exec.Command(*testSftp, "-e", "-l", "DEBUG") // log to stderr
+		cmd.Stdin = chsvr.ch
+		cmd.Stdout = chsvr.ch
+		cmd.Stderr = sftpServerDebugStream
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		return cmd.Wait()
+	}
+
+	sftpServer, err := NewServer(chsvr.ch, chsvr.ch, sftpServerDebugStream, 0, false, ".")
+	if err != nil {
+		return err
+	}
+
+	// wait for the session to close
+	runErr := sftpServer.Serve()
+	exitStatus := uint32(1)
+	if runErr == nil {
+		exitStatus = uint32(0)
+	}
+
+	_, exitStatusErr := chsvr.ch.SendRequest("exit-status", false, ssh.Marshal(sshSubsystemExitStatus{exitStatus}))
+	return exitStatusErr
 }
-
-/***********************************************************************************************
-
-
-Actual unit tests
-
-
-***********************************************************************************************/
 
 // starts an ssh server to test. returns: host string and port
 func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, string, int) {
