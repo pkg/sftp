@@ -188,7 +188,7 @@ func TestClientLstat(t *testing.T) {
 	}
 }
 
-func TestClientLstatMissing(t *testing.T) {
+func TestClientLstatIsNotExist(t *testing.T) {
 	sftp, cmd := testClient(t, READONLY, NO_DELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -199,9 +199,8 @@ func TestClientLstatMissing(t *testing.T) {
 	}
 	os.Remove(f.Name())
 
-	_, err = sftp.Lstat(f.Name())
-	if err1, ok := err.(*StatusError); !ok || err1.Code != ssh_FX_NO_SUCH_FILE {
-		t.Fatalf("Lstat: want: %v, got %#v", ssh_FX_NO_SUCH_FILE, err)
+	if _, err := sftp.Lstat(f.Name()); !os.IsNotExist(err) {
+		t.Errorf("os.IsNotExist(%v) = false, want true", err)
 	}
 }
 
@@ -240,6 +239,26 @@ func TestClientOpen(t *testing.T) {
 	}
 	if err := got.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClientOpenIsNotExist(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	if _, err := sftp.Open("/doesnt/exist/"); !os.IsNotExist(err) {
+		t.Errorf("os.IsNotExist(%v) = false, want true", err)
+	}
+}
+
+func TestClientStatIsNotExist(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	if _, err := sftp.Stat("/doesnt/exist/"); !os.IsNotExist(err) {
+		t.Errorf("os.IsNotExist(%v) = false, want true", err)
 	}
 }
 
