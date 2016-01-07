@@ -205,6 +205,8 @@ func (u *unexpectedVersionErr) Error() string {
 	return fmt.Sprintf("sftp: unexpected server version: want %v, got %v", u.want, u.got)
 }
 
+// A StatusError is returned when an SFTP operation fails, and provides
+// additional information about the failure.
 type StatusError struct {
 	Code      uint32
 	msg, lang string

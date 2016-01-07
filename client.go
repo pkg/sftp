@@ -29,7 +29,8 @@ func MaxPacket(size int) func(*Client) error {
 	}
 }
 
-// New creates a new SFTP client on conn.
+// NewClient creates a new SFTP client on conn, using zero or more option
+// functions.
 func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
@@ -496,9 +497,10 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 	}
 }
 
-// Get vfs stats from remote host.
-// Implementing statvfs@openssh.com SSH_FXP_EXTENDED feature
-// from http://www.opensource.apple.com/source/OpenSSH/OpenSSH-175/openssh/PROTOCOL?txt
+// StatVFS retrieves VFS statistics from a remote host.
+//
+// It implements the statvfs@openssh.com SSH_FXP_EXTENDED feature
+// from http://www.opensource.apple.com/source/OpenSSH/OpenSSH-175/openssh/PROTOCOL?txt.
 func (c *Client) StatVFS(path string) (*StatVFS, error) {
 	// send the StatVFS packet to the server
 	id := c.nextID()
@@ -672,7 +674,7 @@ func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.mu.Unlock()
 }
 
-// Creates the specified directory. An error will be returned if a file or
+// Mkdir creates the specified directory. An error will be returned if a file or
 // directory with the specified path already exists, or if the directory's
 // parent folder does not exist (the method cannot create complete paths).
 func (c *Client) Mkdir(path string) error {

@@ -55,6 +55,7 @@ type FileStat struct {
 	Extended []StatExtended
 }
 
+// StatExtended contains additional, extended information for a FileStat.
 type StatExtended struct {
 	ExtType string
 	ExtData string
