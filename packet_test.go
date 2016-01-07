@@ -213,6 +213,90 @@ func TestRecvPacket(t *testing.T) {
 	}
 }
 
+func TestSSHFxpOpenPacketreadonly(t *testing.T) {
+	var tests = []struct {
+		pflags uint32
+		ok     bool
+	}{
+		{
+			pflags: ssh_FXF_READ,
+			ok:     true,
+		},
+		{
+			pflags: ssh_FXF_WRITE,
+			ok:     false,
+		},
+		{
+			pflags: ssh_FXF_READ | ssh_FXF_WRITE,
+			ok:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		p := &sshFxpOpenPacket{
+			Pflags: tt.pflags,
+		}
+
+		if want, got := tt.ok, p.readonly(); want != got {
+			t.Errorf("unexpected value for p.readonly(): want: %v, got: %v",
+				want, got)
+		}
+	}
+}
+
+func TestSSHFxpOpenPackethasPflags(t *testing.T) {
+	var tests = []struct {
+		desc      string
+		haveFlags uint32
+		testFlags []uint32
+		ok        bool
+	}{
+		{
+			desc:      "have read, test against write",
+			haveFlags: ssh_FXF_READ,
+			testFlags: []uint32{ssh_FXF_WRITE},
+			ok:        false,
+		},
+		{
+			desc:      "have write, test against read",
+			haveFlags: ssh_FXF_WRITE,
+			testFlags: []uint32{ssh_FXF_READ},
+			ok:        false,
+		},
+		{
+			desc:      "have read+write, test against read",
+			haveFlags: ssh_FXF_READ | ssh_FXF_WRITE,
+			testFlags: []uint32{ssh_FXF_READ},
+			ok:        true,
+		},
+		{
+			desc:      "have read+write, test against write",
+			haveFlags: ssh_FXF_READ | ssh_FXF_WRITE,
+			testFlags: []uint32{ssh_FXF_WRITE},
+			ok:        true,
+		},
+		{
+			desc:      "have read+write, test against read+write",
+			haveFlags: ssh_FXF_READ | ssh_FXF_WRITE,
+			testFlags: []uint32{ssh_FXF_READ, ssh_FXF_WRITE},
+			ok:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Log(tt.desc)
+
+		p := &sshFxpOpenPacket{
+			Pflags: tt.haveFlags,
+		}
+
+		if want, got := tt.ok, p.hasPflags(tt.testFlags...); want != got {
+			t.Errorf("unexpected value for p.hasPflags(%#v): want: %v, got: %v",
+				tt.testFlags, want, got)
+		}
+	}
+}
+
 func BenchmarkMarshalInit(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		sp(sshFxInitPacket{
