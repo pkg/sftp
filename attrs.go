@@ -50,8 +50,8 @@ type FileStat struct {
 	Mode     uint32
 	Mtime    uint32
 	Atime    uint32
-	Uid      uint32
-	Gid      uint32
+	UID      uint32
+	GID      uint32
 	Extended []StatExtended
 }
 
@@ -98,10 +98,10 @@ func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 		fs.Size, b = unmarshalUint64(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_UIDGID == ssh_FILEXFER_ATTR_UIDGID {
-		fs.Uid, b = unmarshalUint32(b)
+		fs.UID, b = unmarshalUint32(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_UIDGID == ssh_FILEXFER_ATTR_UIDGID {
-		fs.Gid, b = unmarshalUint32(b)
+		fs.GID, b = unmarshalUint32(b)
 	}
 	if flags&ssh_FILEXFER_ATTR_PERMISSIONS == ssh_FILEXFER_ATTR_PERMISSIONS {
 		fs.Mode, b = unmarshalUint32(b)
@@ -149,8 +149,8 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 		b = marshalUint64(b, fileStat.Size)
 	}
 	if flags&ssh_FILEXFER_ATTR_UIDGID != 0 {
-		b = marshalUint32(b, fileStat.Uid)
-		b = marshalUint32(b, fileStat.Gid)
+		b = marshalUint32(b, fileStat.UID)
+		b = marshalUint32(b, fileStat.GID)
 	}
 	if flags&ssh_FILEXFER_ATTR_PERMISSIONS != 0 {
 		b = marshalUint32(b, fileStat.Mode)

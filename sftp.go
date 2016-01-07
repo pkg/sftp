@@ -185,9 +185,9 @@ func unimplementedPacketErr(u uint8) error {
 	return fmt.Errorf("sftp: unimplemented packet type: got %v", fxp(u))
 }
 
-type unexpectedIdErr struct{ want, got uint32 }
+type unexpectedIDErr struct{ want, got uint32 }
 
-func (u *unexpectedIdErr) Error() string {
+func (u *unexpectedIDErr) Error() string {
 	return fmt.Sprintf("sftp: unexpected id: want %v, got %v", u.want, u.got)
 }
 

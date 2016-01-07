@@ -640,11 +640,11 @@ func TestClientChown(t *testing.T) {
 		t.Log("must be root to run chown tests")
 		t.Skip()
 	}
-	toUid, err := strconv.Atoi(chownto.Uid)
+	toUID, err := strconv.Atoi(chownto.Uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	toGid, err := strconv.Atoi(chownto.Gid)
+	toGID, err := strconv.Atoi(chownto.Gid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -657,7 +657,7 @@ func TestClientChown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sftp.Chown(f.Name(), toUid, toGid); err != nil {
+	if err := sftp.Chown(f.Name(), toUID, toGID); err != nil {
 		t.Fatal(err)
 	}
 	after, err := exec.Command("ls", "-nl", f.Name()).Output()
@@ -697,11 +697,11 @@ func TestClientChownReadonly(t *testing.T) {
 		t.Log("must be root to run chown tests")
 		t.Skip()
 	}
-	toUid, err := strconv.Atoi(chownto.Uid)
+	toUID, err := strconv.Atoi(chownto.Uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	toGid, err := strconv.Atoi(chownto.Gid)
+	toGID, err := strconv.Atoi(chownto.Gid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,7 +710,7 @@ func TestClientChownReadonly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sftp.Chown(f.Name(), toUid, toGid); err == nil {
+	if err := sftp.Chown(f.Name(), toUID, toGID); err == nil {
 		t.Fatal("expected error")
 	}
 }
