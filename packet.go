@@ -157,13 +157,13 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 	return b[0], b[1:], nil
 }
 
-type ExtensionPair struct {
+type extensionPair struct {
 	Name string
 	Data string
 }
 
-func unmarshalExtensionPair(b []byte) (ExtensionPair, []byte, error) {
-	var ep ExtensionPair
+func unmarshalExtensionPair(b []byte) (extensionPair, []byte, error) {
+	var ep extensionPair
 	var err error
 	ep.Name, b, err = unmarshalStringSafe(b)
 	if err != nil {
@@ -183,7 +183,7 @@ func unmarshalExtensionPair(b []byte) (ExtensionPair, []byte, error) {
 
 type sshFxInitPacket struct {
 	Version    uint32
-	Extensions []ExtensionPair
+	Extensions []extensionPair
 }
 
 func (p sshFxInitPacket) MarshalBinary() ([]byte, error) {
@@ -202,12 +202,13 @@ func (p sshFxInitPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxInitPacket) UnmarshalBinary(b []byte) (err error) {
+func (p *sshFxInitPacket) UnmarshalBinary(b []byte) error {
+	var err error
 	if p.Version, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
 	}
 	for len(b) > 0 {
-		ep := ExtensionPair{}
+		var ep extensionPair
 		ep, b, err = unmarshalExtensionPair(b)
 		if err != nil {
 			return err
@@ -808,6 +809,7 @@ func (p sshFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+// A StatVFS contains statistics about a filesystem.
 type StatVFS struct {
 	ID      uint32
 	Bsize   uint64 /* file system block size */
@@ -823,10 +825,12 @@ type StatVFS struct {
 	Namemax uint64 /* maximum filename length */
 }
 
+// TotalSpace calculates the amount of total space in a filesystem.
 func (p *StatVFS) TotalSpace() uint64 {
 	return p.Frsize * p.Blocks
 }
 
+// FreeSpace calculates the amount of free space in a filesystem.
 func (p *StatVFS) FreeSpace() uint64 {
 	return p.Frsize * p.Bfree
 }

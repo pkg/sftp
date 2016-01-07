@@ -70,7 +70,7 @@ type serverRespondablePacket interface {
 	respond(svr *Server) error
 }
 
-// Creates a new server instance around the provided streams.
+// NewServer creates a new server instance around the provided streams.
 // Various debug output will be written to debugStream, with verbosity set by debugLevel
 // A subsequent call to Serve() is required.
 func NewServer(in io.Reader, out io.WriteCloser, debugStream io.Writer, debugLevel int, readOnly bool, rootDir string) (*Server, error) {
@@ -137,7 +137,8 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 	doneChan <- nil
 }
 
-// Run this server until the streams stop or until the subsystem is stopped
+// Serve serves SFTP connections until the streams stop or the SFTP subsystem
+// is stopped.
 func (svr *Server) Serve() error {
 	go svr.rxPackets()
 	doneChan := make(chan error)
