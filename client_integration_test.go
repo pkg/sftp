@@ -1164,14 +1164,14 @@ func TestClientWalk(t *testing.T) {
 	makeTree(t)
 	errors := make([]error, 0, 10)
 	clear := true
-	markFn := func(walker *fs.Walker) (err error) {
+	markFn := func(walker *fs.Walker) error {
 		for walker.Step() {
-			err = mark(walker.Path(), walker.Stat(), walker.Err(), &errors, clear)
+			err := mark(walker.Path(), walker.Stat(), walker.Err(), &errors, clear)
 			if err != nil {
-				break
+				return err
 			}
 		}
-		return err
+		return nil
 	}
 	// Expect no errors.
 	err := markFn(sftp.Walk(tree.name))

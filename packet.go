@@ -508,17 +508,18 @@ func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) (err error) {
+func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) error {
+	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	} else if p.Path, b, err = unmarshalStringSafe(b); err != nil {
-		return
+		return err
 	} else if p.Pflags, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	} else if p.Flags, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	}
-	return
+	return nil
 }
 
 type sshFxpReadPacket struct {
@@ -544,17 +545,18 @@ func (p sshFxpReadPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) (err error) {
+func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
+	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	} else if p.Handle, b, err = unmarshalStringSafe(b); err != nil {
-		return
+		return err
 	} else if p.Offset, b, err = unmarshalUint64Safe(b); err != nil {
-		return
+		return err
 	} else if p.Len, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	}
-	return
+	return nil
 }
 
 type sshFxpRenamePacket struct {
@@ -578,15 +580,16 @@ func (p sshFxpRenamePacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpRenamePacket) UnmarshalBinary(b []byte) (err error) {
+func (p *sshFxpRenamePacket) UnmarshalBinary(b []byte) error {
+	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	} else if p.Oldpath, b, err = unmarshalStringSafe(b); err != nil {
-		return
+		return err
 	} else if p.Newpath, b, err = unmarshalStringSafe(b); err != nil {
-		return
+		return err
 	}
-	return
+	return nil
 }
 
 type sshFxpWritePacket struct {
@@ -615,22 +618,22 @@ func (p sshFxpWritePacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) (err error) {
+func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
+	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	} else if p.Handle, b, err = unmarshalStringSafe(b); err != nil {
-		return
+		return err
 	} else if p.Offset, b, err = unmarshalUint64Safe(b); err != nil {
-		return
+		return err
 	} else if p.Length, b, err = unmarshalUint32Safe(b); err != nil {
-		return
+		return err
 	} else if uint32(len(b)) < p.Length {
-		err = errShortPacket
-		return
+		return errShortPacket
 	}
 
 	p.Data = append([]byte{}, b[:p.Length]...)
-	return
+	return nil
 }
 
 type sshFxpMkdirPacket struct {
@@ -654,7 +657,8 @@ func (p sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) (err error) {
+func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) error {
+	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
 	} else if p.Path, b, err = unmarshalStringSafe(b); err != nil {
