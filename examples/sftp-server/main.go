@@ -19,23 +19,19 @@ import (
 func main() {
 
 	var (
-		readOnly      bool
-		debugLevelStr string
-		debugLevel    int
-		debugStderr   bool
-		rootDir       string
+		readOnly    bool
+		debugStderr bool
+		rootDir     string
 	)
 
 	flag.BoolVar(&readOnly, "R", false, "read-only server")
 	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
-	flag.StringVar(&debugLevelStr, "l", "none", "debug level")
 	flag.StringVar(&rootDir, "root", "", "root directory")
 	flag.Parse()
 
 	debugStream := ioutil.Discard
 	if debugStderr {
 		debugStream = os.Stderr
-		debugLevel = 1
 	}
 
 	// An SSH server is represented by a ServerConfig, which holds
@@ -124,7 +120,13 @@ func main() {
 			}
 		}(requests)
 
-		server, err := sftp.NewServer(channel, channel, debugStream, debugLevel, readOnly, rootDir)
+		server, err := sftp.NewServer(
+			channel,
+			channel,
+			rootDir,
+			sftp.WithDebug(debugStream),
+			sftp.ReadOnly(),
+		)
 		if err != nil {
 			log.Fatal(err)
 		}

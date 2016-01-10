@@ -94,7 +94,17 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 		t.Fatal(err)
 	}
 
-	server, err := NewServer(txPipeRd, rxPipeWr, os.Stderr, 0, readonly, ".")
+	options := []ServerOption{WithDebug(os.Stderr)}
+	if readonly {
+		options = append(options, ReadOnly())
+	}
+
+	server, err := NewServer(
+		txPipeRd,
+		rxPipeWr,
+		".",
+		options...,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
