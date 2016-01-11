@@ -114,7 +114,7 @@ func NewServer(in io.Reader, out io.WriteCloser, rootDir string, options ...Serv
 type ServerOption func(*Server) error
 
 // WithDebug enables Server debugging output to the supplied io.Writer.
-func WithDebug(w io.Writer) func(*Server) error {
+func WithDebug(w io.Writer) ServerOption {
 	return func(s *Server) error {
 		s.debugStream = w
 		return nil
@@ -122,7 +122,7 @@ func WithDebug(w io.Writer) func(*Server) error {
 }
 
 // ReadOnly configures a Server to serve files in read-only mode.
-func ReadOnly() func(*Server) error {
+func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
 		return nil
