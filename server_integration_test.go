@@ -462,7 +462,7 @@ func TestServerMkdirRmdir(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, ".")
 	defer listenerGo.Close()
 
-	tmpDir := "/tmp/" + randName()
+	tmpDir := filepath.Join(os.TempDir(), randName())
 	defer os.RemoveAll(tmpDir)
 
 	// mkdir remote
@@ -489,7 +489,7 @@ func TestServerSymlink(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, ".")
 	defer listenerGo.Close()
 
-	link := "/tmp/" + randName()
+	link := filepath.Join(os.TempDir(), randName())
 	defer os.RemoveAll(link)
 
 	// now create a symbolic link within the new directory
@@ -509,8 +509,8 @@ func TestServerPut(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, ".")
 	defer listenerGo.Close()
 
-	tmpFileLocal := "/tmp/" + randName()
-	tmpFileRemote := "/tmp/" + randName()
+	tmpFileLocal := filepath.Join(os.TempDir(), randName())
+	tmpFileRemote := filepath.Join(os.TempDir(), randName())
 	defer os.RemoveAll(tmpFileLocal)
 	defer os.RemoveAll(tmpFileRemote)
 
@@ -546,7 +546,7 @@ func TestServerRelativePut(t *testing.T) {
 	defer listenerGo.Close()
 
 	fn := randName()
-	tmpFileLocal := filepath.Join("/tmp", fn)
+	tmpFileLocal := filepath.Join(os.TempDir(), fn)
 	defer os.RemoveAll(tmpFileLocal)
 
 	t.Logf("put: local %v", tmpFileLocal)
@@ -574,8 +574,8 @@ func TestServerGet(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, ".")
 	defer listenerGo.Close()
 
-	tmpFileLocal := "/tmp/" + randName()
-	tmpFileRemote := "/tmp/" + randName()
+	tmpFileLocal := filepath.Join(os.TempDir(), randName())
+	tmpFileRemote := filepath.Join(os.TempDir(), randName())
 	defer os.RemoveAll(tmpFileLocal)
 	defer os.RemoveAll(tmpFileRemote)
 
@@ -596,7 +596,7 @@ func TestServerGet(t *testing.T) {
 	if tmpFileLocalData, err := ioutil.ReadFile(tmpFileLocal); err != nil {
 		t.Fatal(err)
 	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
-		t.Fatal("contents of file incorrect after put")
+		t.Fatal("contents of file incorrect after get")
 	}
 }
 
@@ -611,7 +611,7 @@ func TestServerRelativeGet(t *testing.T) {
 	defer listenerGo.Close()
 
 	fn := randName()
-	tmpFileLocal := filepath.Join("/tmp", fn)
+	tmpFileLocal := filepath.Join(os.TempDir(), fn)
 	defer os.RemoveAll(tmpFileLocal)
 
 	t.Logf("get: local %v remote %v ", tmpFileLocal, fn)
@@ -709,13 +709,16 @@ func TestServerPutRecursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpDirRemote := "/tmp/" + randName()
+	tmpDirRemote, err := ioutil.TempDir("", "sftp")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.RemoveAll(tmpDirRemote)
 
 	t.Logf("put recursive: local %v remote %v", dirLocal, tmpDirRemote)
 
 	// push this directory (source code etc) recursively to the server
-	if output, err := runSftpClient(t, "mkdir "+tmpDirRemote+"\r\nput -r -P "+dirLocal+"/ "+tmpDirRemote+"/", "/", hostGo, portGo); err != nil {
+	if output, err := runSftpClient(t, "put -r -P "+dirLocal+"/ "+tmpDirRemote+"/", "/", hostGo, portGo); err != nil {
 		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
 	}
 
@@ -730,13 +733,16 @@ func TestServerGetRecursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpDirLocal := "/tmp/" + randName()
+	tmpDirLocal, err := ioutil.TempDir("", "sftp")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.RemoveAll(tmpDirLocal)
 
 	t.Logf("get recursive: local %v remote %v", tmpDirLocal, dirRemote)
 
 	// pull this directory (source code etc) recursively from the server
-	if output, err := runSftpClient(t, "lmkdir "+tmpDirLocal+"\r\nget -r -P "+dirRemote+"/ "+tmpDirLocal+"/", "/", hostGo, portGo); err != nil {
+	if output, err := runSftpClient(t, "get -r -P "+dirRemote+"/ "+tmpDirLocal+"/", "/", hostGo, portGo); err != nil {
 		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
 	}
 
