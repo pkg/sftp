@@ -30,7 +30,6 @@ func main() {
 	svr, _ := sftp.NewServer(
 		os.Stdin,
 		os.Stdout,
-		"",
 		sftp.WithDebug(debugStream),
 		sftp.ReadOnly(),
 	)
