@@ -29,7 +29,6 @@ type Server struct {
 	outMutex      *sync.Mutex
 	debugStream   io.Writer
 	readOnly      bool
-	rootDir       string
 	lastID        uint32
 	pktChan       chan rxPacket
 	openFiles     map[string]*os.File
@@ -74,26 +73,16 @@ type serverRespondablePacket interface {
 }
 
 // NewServer creates a new Server instance around the provided streams, serving
-// content from the directory specified by rootDir.  Optionally, ServerOption
+// content from the root of the filesystem.  Optionally, ServerOption
 // functions may be specified to further configure the Server.
 //
 // A subsequent call to Serve() is required to begin serving files over SFTP.
-func NewServer(in io.Reader, out io.WriteCloser, rootDir string, options ...ServerOption) (*Server, error) {
-	if rootDir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return nil, err
-		}
-
-		rootDir = wd
-	}
-
+func NewServer(in io.Reader, out io.WriteCloser, options ...ServerOption) (*Server, error) {
 	s := &Server{
 		in:            in,
 		out:           out,
 		outMutex:      &sync.Mutex{},
 		debugStream:   ioutil.Discard,
-		rootDir:       rootDir,
 		pktChan:       make(chan rxPacket, sftpServerWorkerCount),
 		openFiles:     map[string]*os.File{},
 		openFilesLock: &sync.RWMutex{},

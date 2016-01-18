@@ -102,7 +102,6 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 	server, err := NewServer(
 		txPipeRd,
 		rxPipeWr,
-		".",
 		options...,
 	)
 	if err != nil {
