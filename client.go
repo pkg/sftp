@@ -694,6 +694,37 @@ func (c *Client) Mkdir(path string) error {
 	}
 }
 
+func (c *Client) MkdirAll(path string) error {
+	dir, err := c.Stat(path)
+	if err == nil {
+		if dir.IsDir() {
+			return nil
+		}
+	}
+	i := len(path)
+	for i > 0 && os.IsPathSeparator(path[i-1]) { // Skip trailing path separator.
+		i--
+	}
+	j := i
+	for j > 0 && !os.IsPathSeparator(path[j-1]) { // Scan backward over element.
+		j--
+	}
+	if j > 1 {
+		// Create parent
+		err = c.MkdirAll(path[0 : j-1])
+		if err != nil {
+			return err
+		}
+	}
+	err = c.Mkdir(path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 // applyOptions applies options functions to the Client.
 // If an error is encountered, option processing ceases.
 func (c *Client) applyOptions(opts ...func(*Client) error) error {
