@@ -171,6 +171,8 @@ func (svr *Server) sftpServerWorker() error {
 		case ssh_FXP_SYMLINK:
 			pkt = &sshFxpSymlinkPacket{}
 			readonly = false
+		case ssh_FXP_EXTENDED:
+			pkt = &sshFxpExtendedPacket{}
 		default:
 			return errors.Errorf("unhandled packet type: %s", p.pktType)
 		}
@@ -182,6 +184,8 @@ func (svr *Server) sftpServerWorker() error {
 		switch pkt := pkt.(type) {
 		case *sshFxpOpenPacket:
 			readonly = pkt.readonly()
+		case *sshFxpExtendedPacket:
+			readonly = pkt.SpecificPacket.readonly()
 		}
 
 		// If server is operating read-only and a write operation is requested,
