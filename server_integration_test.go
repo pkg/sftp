@@ -112,6 +112,7 @@ func basicServerConfig() *ssh.ServerConfig {
 
 type sshServer struct {
 	useSubsystem bool
+	workingDir   string
 	conn         net.Conn
 	config       *ssh.ServerConfig
 	sshConn      *ssh.ServerConn
@@ -119,7 +120,7 @@ type sshServer struct {
 	newReqs      <-chan *ssh.Request
 }
 
-func sshServerFromConn(conn net.Conn, useSubsystem bool, config *ssh.ServerConfig) (*sshServer, error) {
+func sshServerFromConn(conn net.Conn, useSubsystem bool, workingDir string, config *ssh.ServerConfig) (*sshServer, error) {
 	// From a standard TCP connection to an encrypted SSH connection
 	sshConn, newChans, newReqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
@@ -128,6 +129,7 @@ func sshServerFromConn(conn net.Conn, useSubsystem bool, config *ssh.ServerConfi
 
 	svr := &sshServer{
 		useSubsystem: useSubsystem,
+		workingDir:   workingDir,
 		conn:         conn,
 		config:       config,
 		sshConn:      sshConn,
@@ -296,7 +298,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 	if !chsvr.svr.useSubsystem {
 		// use the openssh sftp server backend; this is to test the ssh code, not the sftp code,
 		// or is used for comparison between our sftp subsystem and the openssh sftp subsystem
-		cmd := exec.Command(*testSftp, "-e", "-l", "DEBUG") // log to stderr
+		cmd := exec.Command(*testSftp, "-e", "-l", "DEBUG", "-d", chsvr.svr.workingDir) // log to stderr
 		cmd.Stdin = chsvr.ch
 		cmd.Stdout = chsvr.ch
 		cmd.Stderr = sftpServerDebugStream
@@ -310,6 +312,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 		chsvr.ch,
 		chsvr.ch,
 		WithDebug(sftpServerDebugStream),
+		//TODO enable once support is there: WorkingDir(chsvr.svr.workingDir),
 	)
 	if err != nil {
 		return err
@@ -327,7 +330,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 }
 
 // starts an ssh server to test. returns: host string and port
-func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, string, int) {
+func testServer(t *testing.T, useSubsystem bool, readonly bool, workingDir string) (net.Listener, string, int) {
 	if !*testIntegration {
 		t.Skip("skipping integration test")
 	}
@@ -356,7 +359,7 @@ func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, s
 
 			go func() {
 				defer conn.Close()
-				sshSvr, err := sshServerFromConn(conn, useSubsystem, basicServerConfig())
+				sshSvr, err := sshServerFromConn(conn, useSubsystem, workingDir, basicServerConfig())
 				if err != nil {
 					t.Error(err)
 					return
@@ -438,8 +441,8 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 }
 
 func TestServerCompareSubsystems(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
-	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
+	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY, "")
 	defer listenerGo.Close()
 	defer listenerOp.Close()
 
@@ -511,7 +514,7 @@ func randName() string {
 }
 
 func TestServerMkdirRmdir(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
 	tmpDir := "/tmp/" + randName()
@@ -538,7 +541,7 @@ func TestServerMkdirRmdir(t *testing.T) {
 }
 
 func TestServerSymlink(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
 	link := "/tmp/" + randName()
@@ -558,7 +561,7 @@ func TestServerSymlink(t *testing.T) {
 }
 
 func TestServerPut(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
 	tmpFileLocal := "/tmp/" + randName()
@@ -588,7 +591,7 @@ func TestServerPut(t *testing.T) {
 }
 
 func TestServerGet(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
 	tmpFileLocal := "/tmp/" + randName()
@@ -684,7 +687,7 @@ func compareDirectoriesRecursive(t *testing.T, aroot, broot string) {
 }
 
 func TestServerPutRecursive(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
 	dirLocal, err := os.Getwd()
@@ -705,7 +708,7 @@ func TestServerPutRecursive(t *testing.T) {
 }
 
 func TestServerGetRecursive(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
 	dirRemote, err := os.Getwd()
