@@ -126,7 +126,14 @@ func sshServerFromConn(conn net.Conn, useSubsystem bool, config *ssh.ServerConfi
 		return nil, err
 	}
 
-	svr := &sshServer{useSubsystem, conn, config, sshConn, newChans, newReqs}
+	svr := &sshServer{
+		useSubsystem: useSubsystem,
+		conn:         conn,
+		config:       config,
+		sshConn:      sshConn,
+		newChans:     newChans,
+		newReqs:      newReqs,
+	}
 	svr.listenChannels()
 	return svr, nil
 }
