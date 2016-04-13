@@ -16,10 +16,12 @@ func main() {
 	var (
 		readOnly    bool
 		debugStderr bool
+		startDir    string
 	)
 
 	flag.BoolVar(&readOnly, "R", false, "read-only server")
 	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
+	flag.StringVar(&startDir, "d", "", "alternate starting directory")
 	flag.Parse()
 
 	debugStream := ioutil.Discard
@@ -32,6 +34,7 @@ func main() {
 		os.Stdout,
 		sftp.WithDebug(debugStream),
 		sftp.ReadOnly(),
+		sftp.WorkingDir(startDir),
 	)
 	if err := svr.Serve(); err != nil {
 		fmt.Fprintf(debugStream, "sftp server completed with error: %v", err)
