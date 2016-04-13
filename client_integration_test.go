@@ -4,6 +4,7 @@ package sftp
 // enable with -integration
 
 import (
+	crand "crypto/rand"
 	"crypto/sha1"
 	"flag"
 	"io"
@@ -995,17 +996,9 @@ func readHash(t *testing.T, r io.Reader) (string, int64) {
 // writeN writes n bytes of random data to w and returns the
 // hash of that data.
 func writeN(t *testing.T, w io.Writer, n int64) string {
-	rand, err := os.Open("/dev/urandom")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rand.Close()
-
 	h := sha1.New()
-
 	mw := io.MultiWriter(w, h)
-
-	written, err := io.CopyN(mw, rand, n)
+	written, err := io.CopyN(mw, crand.Reader, n)
 	if err != nil {
 		t.Fatal(err)
 	}
