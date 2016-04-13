@@ -509,33 +509,37 @@ func randData(length int) []byte {
 	return data
 }
 
-func randName() string {
-	return "sftp." + hex.EncodeToString(randData(16))
+func tempdir(t *testing.T) string {
+	tmp, err := ioutil.TempDir("", "sftp-test-")
+	if err != nil {
+		t.Fatalf("cannot create tempdir: %v", err)
+	}
+	return tmp
 }
 
 func TestServerMkdirRmdir(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
-	tmpDir := "/tmp/" + randName()
-	defer os.RemoveAll(tmpDir)
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
 
 	// mkdir remote
-	if _, err := runSftpClient(t, "mkdir "+tmpDir, "/", hostGo, portGo); err != nil {
+	if _, err := runSftpClient(t, "mkdir testdir", tmp, hostGo, portGo); err != nil {
 		t.Fatal(err)
 	}
 
 	// directory should now exist
-	if _, err := os.Stat(tmpDir); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, "testdir")); err != nil {
 		t.Fatal(err)
 	}
 
 	// now remove the directory
-	if _, err := runSftpClient(t, "rmdir "+tmpDir, "/", hostGo, portGo); err != nil {
+	if _, err := runSftpClient(t, "rmdir testdir", tmp, hostGo, portGo); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(tmpDir); err == nil {
+	if _, err := os.Stat(filepath.Join(tmp, "testdir")); err == nil {
 		t.Fatal("should have error after deleting the directory")
 	}
 }
@@ -544,16 +548,16 @@ func TestServerSymlink(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
-	link := "/tmp/" + randName()
-	defer os.RemoveAll(link)
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
 
 	// now create a symbolic link within the new directory
-	if output, err := runSftpClient(t, "symlink /bin/sh "+link, "/", hostGo, portGo); err != nil {
+	if output, err := runSftpClient(t, "symlink /bin/sh testlink", tmp, hostGo, portGo); err != nil {
 		t.Fatalf("failed: %v %v", err, string(output))
 	}
 
 	// symlink should now exist
-	if stat, err := os.Lstat(link); err != nil {
+	if stat, err := os.Lstat(filepath.Join(tmp, "testlink")); err != nil {
 		t.Fatal(err)
 	} else if (stat.Mode() & os.ModeSymlink) != os.ModeSymlink {
 		t.Fatalf("is not a symlink: %v", stat.Mode())
@@ -564,10 +568,11 @@ func TestServerPut(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
-	tmpFileLocal := "/tmp/" + randName()
-	tmpFileRemote := "/tmp/" + randName()
-	defer os.RemoveAll(tmpFileLocal)
-	defer os.RemoveAll(tmpFileRemote)
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
+
+	tmpFileLocal := filepath.Join(tmp, "local")
+	tmpFileRemote := filepath.Join(tmp, "remote")
 
 	t.Logf("put: local %v remote %v", tmpFileLocal, tmpFileRemote)
 
@@ -594,10 +599,11 @@ func TestServerGet(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
-	tmpFileLocal := "/tmp/" + randName()
-	tmpFileRemote := "/tmp/" + randName()
-	defer os.RemoveAll(tmpFileLocal)
-	defer os.RemoveAll(tmpFileRemote)
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
+
+	tmpFileLocal := filepath.Join(tmp, "local")
+	tmpFileRemote := filepath.Join(tmp, "remote")
 
 	t.Logf("get: local %v remote %v", tmpFileLocal, tmpFileRemote)
 
@@ -621,11 +627,12 @@ func TestServerGet(t *testing.T) {
 }
 
 func TestServerGetWithWorkingDir(t *testing.T) {
-	tmpFileLocal := "/tmp/" + randName()
-	tmpDirRemote := "/tmp/" + randName()
-	filenameRemote := randName()
-	defer os.RemoveAll(tmpFileLocal)
-	defer os.RemoveAll(tmpDirRemote)
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
+
+	tmpFileLocal := filepath.Join(tmp, "local")
+	tmpDirRemote := filepath.Join(tmp, "remote")
+	filenameRemote := "testfile"
 
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, tmpDirRemote)
 	defer listenerGo.Close()
@@ -724,12 +731,14 @@ func TestServerPutRecursive(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
+
 	dirLocal, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpDirRemote := "/tmp/" + randName()
-	defer os.RemoveAll(tmpDirRemote)
+	tmpDirRemote := filepath.Join(tmp, "remote")
 
 	t.Logf("put recursive: local %v remote %v", dirLocal, tmpDirRemote)
 
@@ -745,12 +754,14 @@ func TestServerGetRecursive(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, "")
 	defer listenerGo.Close()
 
+	tmp := tempdir(t)
+	defer os.RemoveAll(tmp)
+
 	dirRemote, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpDirLocal := "/tmp/" + randName()
-	defer os.RemoveAll(tmpDirLocal)
+	tmpDirLocal := filepath.Join(tmp, "local")
 
 	t.Logf("get recursive: local %v remote %v", tmpDirLocal, dirRemote)
 
