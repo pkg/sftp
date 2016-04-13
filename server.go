@@ -29,6 +29,7 @@ type Server struct {
 	outMutex      *sync.Mutex
 	debugStream   io.Writer
 	readOnly      bool
+	workingDir    string
 	lastID        uint32
 	pktChan       chan rxPacket
 	openFiles     map[string]*os.File
@@ -36,6 +37,13 @@ type Server struct {
 	handleCount   int
 	maxTxPacket   uint32
 	workerCount   int
+}
+
+func (svr *Server) path(p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(svr.workingDir, p)
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -114,6 +122,15 @@ func WithDebug(w io.Writer) ServerOption {
 func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
+		return nil
+	}
+}
+
+// WorkingDir configures a Server to interpret paths relative to the
+// given directory.
+func WorkingDir(path string) ServerOption {
+	return func(s *Server) error {
+		s.workingDir = path
 		return nil
 	}
 }
@@ -257,7 +274,7 @@ func (p sshFxpLstatPacket) readonly() bool { return true }
 
 func (p sshFxpLstatPacket) respond(svr *Server) error {
 	// stat the requested file
-	info, err := os.Lstat(p.Path)
+	info, err := os.Lstat(svr.path(p.Path))
 	if err != nil {
 		return svr.sendPacket(statusFromError(p.ID, err))
 	}
@@ -272,7 +289,7 @@ func (p sshFxpStatPacket) readonly() bool { return true }
 
 func (p sshFxpStatPacket) respond(svr *Server) error {
 	// stat the requested file
-	info, err := os.Stat(p.Path)
+	info, err := os.Stat(svr.path(p.Path))
 	if err != nil {
 		return svr.sendPacket(statusFromError(p.ID, err))
 	}
@@ -306,35 +323,35 @@ func (p sshFxpMkdirPacket) readonly() bool { return false }
 
 func (p sshFxpMkdirPacket) respond(svr *Server) error {
 	// TODO FIXME: ignore flags field
-	err := os.Mkdir(p.Path, 0755)
+	err := os.Mkdir(svr.path(p.Path), 0755)
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
 func (p sshFxpRmdirPacket) readonly() bool { return false }
 
 func (p sshFxpRmdirPacket) respond(svr *Server) error {
-	err := os.Remove(p.Path)
+	err := os.Remove(svr.path(p.Path))
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
 func (p sshFxpRemovePacket) readonly() bool { return false }
 
 func (p sshFxpRemovePacket) respond(svr *Server) error {
-	err := os.Remove(p.Filename)
+	err := os.Remove(svr.path(p.Filename))
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
 func (p sshFxpRenamePacket) readonly() bool { return false }
 
 func (p sshFxpRenamePacket) respond(svr *Server) error {
-	err := os.Rename(p.Oldpath, p.Newpath)
+	err := os.Rename(svr.path(p.Oldpath), svr.path(p.Newpath))
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
 func (p sshFxpSymlinkPacket) readonly() bool { return false }
 
 func (p sshFxpSymlinkPacket) respond(svr *Server) error {
-	err := os.Symlink(p.Targetpath, p.Linkpath)
+	err := os.Symlink(svr.path(p.Targetpath), svr.path(p.Linkpath))
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
@@ -343,7 +360,7 @@ var emptyFileStat = []interface{}{uint32(0)}
 func (p sshFxpReadlinkPacket) readonly() bool { return true }
 
 func (p sshFxpReadlinkPacket) respond(svr *Server) error {
-	f, err := os.Readlink(p.Path)
+	f, err := os.Readlink(svr.path(p.Path))
 	if err != nil {
 		return svr.sendPacket(statusFromError(p.ID, err))
 	}
@@ -361,7 +378,7 @@ func (p sshFxpReadlinkPacket) respond(svr *Server) error {
 func (p sshFxpRealpathPacket) readonly() bool { return true }
 
 func (p sshFxpRealpathPacket) respond(svr *Server) error {
-	f, err := filepath.Abs(p.Path)
+	f, err := filepath.Abs(svr.path(p.Path))
 	if err != nil {
 		return svr.sendPacket(statusFromError(p.ID, err))
 	}
@@ -428,7 +445,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(p.Path, osFlags, 0644)
+	f, err := os.OpenFile(svr.path(p.Path), osFlags, 0644)
 	if err != nil {
 		return svr.sendPacket(statusFromError(p.ID, err))
 	}
@@ -513,17 +530,18 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 	b := p.Attrs.([]byte)
 	var err error
 
-	debug("setstat name \"%s\"", p.Path)
+	path := svr.path(p.Path)
+	debug("setstat name \"%s\"", path)
 	if (p.Flags & ssh_FILEXFER_ATTR_SIZE) != 0 {
 		var size uint64
 		if size, b, err = unmarshalUint64Safe(b); err == nil {
-			err = os.Truncate(p.Path, int64(size))
+			err = os.Truncate(path, int64(size))
 		}
 	}
 	if (p.Flags & ssh_FILEXFER_ATTR_PERMISSIONS) != 0 {
 		var mode uint32
 		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = os.Chmod(p.Path, os.FileMode(mode))
+			err = os.Chmod(path, os.FileMode(mode))
 		}
 	}
 	if (p.Flags & ssh_FILEXFER_ATTR_ACMODTIME) != 0 {
@@ -534,7 +552,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		} else {
 			atimeT := time.Unix(int64(atime), 0)
 			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(p.Path, atimeT, mtimeT)
+			err = os.Chtimes(path, atimeT, mtimeT)
 		}
 	}
 	if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
@@ -543,7 +561,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		if uid, b, err = unmarshalUint32Safe(b); err != nil {
 		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
 		} else {
-			err = os.Chown(p.Path, int(uid), int(gid))
+			err = os.Chown(path, int(uid), int(gid))
 		}
 	}
 

@@ -312,7 +312,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 		chsvr.ch,
 		chsvr.ch,
 		WithDebug(sftpServerDebugStream),
-		//TODO enable once support is there: WorkingDir(chsvr.svr.workingDir),
+		WorkingDir(chsvr.svr.workingDir),
 	)
 	if err != nil {
 		return err
@@ -609,6 +609,40 @@ func TestServerGet(t *testing.T) {
 
 	// sftp the file to the server
 	if output, err := runSftpClient(t, "get "+tmpFileRemote+" "+tmpFileLocal, "/", hostGo, portGo); err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// tmpFile2 should now exist, with the same contents
+	if tmpFileLocalData, err := ioutil.ReadFile(tmpFileLocal); err != nil {
+		t.Fatal(err)
+	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
+		t.Fatal("contents of file incorrect after put")
+	}
+}
+
+func TestServerGetWithWorkingDir(t *testing.T) {
+	tmpFileLocal := "/tmp/" + randName()
+	tmpDirRemote := "/tmp/" + randName()
+	filenameRemote := randName()
+	defer os.RemoveAll(tmpFileLocal)
+	defer os.RemoveAll(tmpDirRemote)
+
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY, tmpDirRemote)
+	defer listenerGo.Close()
+
+	t.Logf("get: local %v remote %v in %v", tmpFileLocal, filenameRemote, tmpDirRemote)
+
+	// create a file with random contents. This will be the remote file pulled from the server
+	if err := os.Mkdir(tmpDirRemote, 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmpFileRemoteData := randData(10 * 1024 * 1024)
+	if err := ioutil.WriteFile(filepath.Join(tmpDirRemote, filenameRemote), tmpFileRemoteData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// sftp the file to the server
+	if output, err := runSftpClient(t, "get "+filenameRemote+" "+tmpFileLocal, "", hostGo, portGo); err != nil {
 		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
 	}
 
