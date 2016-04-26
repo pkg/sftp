@@ -318,7 +318,7 @@ type sshFxpStatPacket struct {
 func (p sshFxpStatPacket) id() uint32 { return p.ID }
 
 func (p sshFxpStatPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_LSTAT, p.ID, p.Path)
+	return marshalIDString(ssh_FXP_STAT, p.ID, p.Path)
 }
 
 func (p *sshFxpStatPacket) UnmarshalBinary(b []byte) error {
