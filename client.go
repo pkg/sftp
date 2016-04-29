@@ -611,6 +611,11 @@ func (c *Client) Rename(oldname, newname string) error {
 	}
 }
 
+// Realpath requests the canonical name (absolute path, symlinks resolved) of a requested path
+func (c *Client) Realpath(path string) (string, error) {
+	return c.realpath(path)
+}
+
 func (c *Client) realpath(path string) (string, error) {
 	id := c.nextID()
 	typ, data, err := c.sendRequest(sshFxpRealpathPacket{

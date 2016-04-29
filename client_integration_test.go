@@ -578,6 +578,47 @@ func TestClientReadLink(t *testing.T) {
 	}
 }
 
+func TestClientRealpath(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	realName, err := filepath.EvalSymlinks(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	realName, err = filepath.Abs(realName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	realName = filepath.Clean(realName)
+	linkName := realName + ".softlink"
+
+	// create a symlink that points at sftptest
+	if err := os.Symlink(realName, linkName); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(linkName)
+
+	// compare names
+	want := realName
+	got, err := sftp.Realpath(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// check that realpath is valid
+	if want != got {
+		t.Fatalf("Realpath(%q): got %v", want, got)
+	}
+}
+
 func TestClientSymlink(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()

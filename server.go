@@ -361,7 +361,12 @@ func (p sshFxpReadlinkPacket) respond(svr *Server) error {
 func (p sshFxpRealpathPacket) readonly() bool { return true }
 
 func (p sshFxpRealpathPacket) respond(svr *Server) error {
-	f, err := filepath.Abs(p.Path)
+	f, err := filepath.EvalSymlinks(p.Path)
+	if err != nil {
+		return svr.sendPacket(statusFromError(p.ID, err))
+	}
+
+	f, err = filepath.Abs(f)
 	if err != nil {
 		return svr.sendPacket(statusFromError(p.ID, err))
 	}

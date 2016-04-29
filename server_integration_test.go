@@ -503,6 +503,63 @@ func TestServerSymlink(t *testing.T) {
 	}
 }
 
+func TestServerRealpath(t *testing.T) {
+	// create servers of each variant
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY)
+	defer listenerGo.Close()
+	defer listenerOp.Close()
+
+	// create clients for each server
+	clientConfig := ssh.ClientConfig{
+		Config: ssh.Config{		},
+		User: "test",
+		Auth: []ssh.AuthMethod{ssh.Password("")},
+	}
+	clientConfigGo := clientConfig
+	clientConfigOp := clientConfig
+	sshClientGo, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", hostGo, portGo), &clientConfigGo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshClientOp, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", hostOp, portOp), &clientConfigOp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sftpClientGo, err := NewClient(sshClientGo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sftpClientOp, err := NewClient(sshClientOp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create a file, and a convoluted path under it
+	dir, err := ioutil.TempDir("", "sftptestServerRealpath")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	f1 := path.Join(dir, "a", "b", "b.txt")
+	f1strange := strings.Join([]string{dir, "a", "b", "c", "d", "e", "..", "..", "..", "b.txt"}, string(os.PathSeparator))
+	if err := os.MkdirAll(path.Join(dir, "a", "b", "c", "d", "e"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(f1, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// compare output from go and openssh
+	if outputGo, err := sftpClientGo.Realpath(f1strange); err != nil {
+		t.Fatalf("failed: %v %v", err, string(outputGo))
+	} else if outputOp, err := sftpClientOp.Realpath(f1strange); err != nil {
+		t.Fatalf("failed: %v %v", err, string(outputOp))
+	} else if outputGo != outputOp {
+		t.Fatalf("output differs:\ngo: '%v'\nop: '%v'\n", outputGo, outputOp)
+	}
+}
+
 func TestServerPut(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
 	defer listenerGo.Close()
