@@ -54,7 +54,6 @@ func NewServer(in io.Reader, out io.WriteCloser, options ...ServerOption) (*Serv
 		outMutex:    &sync.Mutex{},
 		debugStream: ioutil.Discard,
 		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
-		storage:     NewFileBackend(),
 		maxTxPacket: 1 << 15,
 		workerCount: sftpServerWorkerCount,
 	}
@@ -63,6 +62,11 @@ func NewServer(in io.Reader, out io.WriteCloser, options ...ServerOption) (*Serv
 		if err := o(s); err != nil {
 			return nil, err
 		}
+	}
+
+	// Default backend
+	if s.storage == nil {
+		s.storage = NewFileBackend()
 	}
 
 	return s, nil
@@ -83,6 +87,14 @@ func WithDebug(w io.Writer) ServerOption {
 func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
+		return nil
+	}
+}
+
+// WithStorage configures a storage backend for a Server
+func WithStorage(b StorageBackend) ServerOption {
+	return func(s *Server) error {
+		s.storage = b
 		return nil
 	}
 }

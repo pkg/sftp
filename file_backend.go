@@ -6,18 +6,20 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"io"
 )
 
 type LocalFile interface {
+	io.ReaderAt
+	io.WriterAt
+	io.Closer
+
 	Name() string
-	ReadAt(b []byte, off int64) (n int, err error)
-	WriteAt(b []byte, off int64) (n int, err error)
 	Readdir(n int) (fi []os.FileInfo, err error)
 	Truncate(size int64) error
 	Chmod(mode os.FileMode) error
 	Chown(uid, gid int) error
 	Stat() (os.FileInfo, error)
-	Close() error
 }
 
 type StorageBackend interface {
