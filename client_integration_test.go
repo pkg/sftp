@@ -465,6 +465,66 @@ func TestClientFileStat(t *testing.T) {
 	}
 }
 
+func TestClientStatLink(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	realName := f.Name()
+	linkName := f.Name() + ".softlink"
+
+	// create a symlink that points at sftptest
+	if err := os.Symlink(realName, linkName); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(linkName)
+
+	// compare Lstat of links
+	wantLstat, err := os.Lstat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStat, err := os.Stat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gotLstat, err := sftp.Lstat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotStat, err := sftp.Stat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// check that stat is not lstat from os package
+	if sameFile(wantLstat, wantStat) {
+		t.Fatalf("Lstat / Stat(%q): both %#v %#v", f.Name(), wantLstat, wantStat)
+	}
+
+	// compare Lstat of links
+	if !sameFile(wantLstat, gotLstat) {
+		t.Fatalf("Lstat(%q): want %#v, got %#v", f.Name(), wantLstat, gotLstat)
+	}
+
+	// compare Stat of links
+	if !sameFile(wantStat, gotStat) {
+		t.Fatalf("Stat(%q): want %#v, got %#v", f.Name(), wantStat, gotStat)
+	}
+
+	// check that stat is not lstat
+	if sameFile(gotLstat, gotStat) {
+		t.Fatalf("Lstat / Stat(%q): both %#v %#v", f.Name(), gotLstat, gotStat)
+	}
+}
+
 func TestClientRemove(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()
