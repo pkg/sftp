@@ -13,7 +13,7 @@ import (
 var _ fs.FileSystem = new(Client)
 
 // assert that *File implements io.ReadWriteCloser
-var _ io.ReadWriteCloser = new(File)
+var _ io.ReadWriteCloser = new(RemoteFile)
 
 func TestNormaliseError(t *testing.T) {
 	var (

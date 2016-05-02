@@ -105,7 +105,7 @@ func (c *Client) Close() error {
 // Create creates the named file mode 0666 (before umask), truncating it if
 // it already exists. If successful, methods on the returned File can be
 // used for I/O; the associated file descriptor has mode O_RDWR.
-func (c *Client) Create(path string) (*File, error) {
+func (c *Client) Create(path string) (*RemoteFile, error) {
 	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
 }
 
@@ -417,18 +417,18 @@ func (c *Client) Truncate(path string, size int64) error {
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
-func (c *Client) Open(path string) (*File, error) {
+func (c *Client) Open(path string) (*RemoteFile, error) {
 	return c.open(path, flags(os.O_RDONLY))
 }
 
 // OpenFile is the generalized open call; most users will use Open or
 // Create instead. It opens the named file with specified flag (O_RDONLY
 // etc.). If successful, methods on the returned File can be used for I/O.
-func (c *Client) OpenFile(path string, f int) (*File, error) {
+func (c *Client) OpenFile(path string, f int) (*RemoteFile, error) {
 	return c.open(path, flags(f))
 }
 
-func (c *Client) open(path string, pflags uint32) (*File, error) {
+func (c *Client) open(path string, pflags uint32) (*RemoteFile, error) {
 	id := c.nextID()
 	typ, data, err := c.sendRequest(sshFxpOpenPacket{
 		ID:     id,
@@ -445,7 +445,7 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
-		return &File{c: c, path: path, handle: handle}, nil
+		return &RemoteFile{c: c, path: path, handle: handle}, nil
 	case ssh_FXP_STATUS:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
@@ -706,7 +706,7 @@ func (c *Client) applyOptions(opts ...func(*Client) error) error {
 }
 
 // File represents a remote file.
-type File struct {
+type RemoteFile struct {
 	c      *Client
 	path   string
 	handle string
@@ -715,12 +715,12 @@ type File struct {
 
 // Close closes the File, rendering it unusable for I/O. It returns an
 // error, if any.
-func (f *File) Close() error {
+func (f *RemoteFile) Close() error {
 	return f.c.close(f.handle)
 }
 
 // Name returns the name of the file as presented to Open or Create.
-func (f *File) Name() string {
+func (f *RemoteFile) Name() string {
 	return f.path
 }
 
@@ -729,7 +729,7 @@ const maxConcurrentRequests = 64
 // Read reads up to len(b) bytes from the File. It returns the number of
 // bytes read and an error, if any. EOF is signaled by a zero count with
 // err set to io.EOF.
-func (f *File) Read(b []byte) (int, error) {
+func (f *RemoteFile) Read(b []byte) (int, error) {
 	// Split the read into multiple maxPacket sized concurrent reads
 	// bounded by maxConcurrentRequests. This allows reads with a suitably
 	// large buffer to transfer data at a much faster rate due to
@@ -826,7 +826,7 @@ func (f *File) Read(b []byte) (int, error) {
 
 // WriteTo writes the file to w. The return value is the number of bytes
 // written. Any error encountered during the write is also returned.
-func (f *File) WriteTo(w io.Writer) (int64, error) {
+func (f *RemoteFile) WriteTo(w io.Writer) (int64, error) {
 	fi, err := f.Stat()
 	if err != nil {
 		return 0, err
@@ -950,7 +950,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 
 // Stat returns the FileInfo structure describing file. If there is an
 // error.
-func (f *File) Stat() (os.FileInfo, error) {
+func (f *RemoteFile) Stat() (os.FileInfo, error) {
 	fs, err := f.c.fstat(f.handle)
 	if err != nil {
 		return nil, err
@@ -961,7 +961,7 @@ func (f *File) Stat() (os.FileInfo, error) {
 // Write writes len(b) bytes to the File. It returns the number of bytes
 // written and an error, if any. Write returns a non-nil error when n !=
 // len(b).
-func (f *File) Write(b []byte) (int, error) {
+func (f *RemoteFile) Write(b []byte) (int, error) {
 	// Split the write into multiple maxPacket sized concurrent writes
 	// bounded by maxConcurrentRequests. This allows writes with a suitably
 	// large buffer to transfer data at a much faster rate due to
@@ -1028,7 +1028,7 @@ func (f *File) Write(b []byte) (int, error) {
 // ReadFrom reads data from r until EOF and writes it to the file. The return
 // value is the number of bytes read. Any error except io.EOF encountered
 // during the read is also returned.
-func (f *File) ReadFrom(r io.Reader) (int64, error) {
+func (f *RemoteFile) ReadFrom(r io.Reader) (int64, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
@@ -1097,7 +1097,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 // Seek implements io.Seeker by setting the client offset for the next Read or
 // Write. It returns the next offset read. Seeking before or after the end of
 // the file is undefined. Seeking relative to the end calls Stat.
-func (f *File) Seek(offset int64, whence int) (int64, error) {
+func (f *RemoteFile) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case os.SEEK_SET:
 		f.offset = uint64(offset)
@@ -1116,12 +1116,12 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 // Chown changes the uid/gid of the current file.
-func (f *File) Chown(uid, gid int) error {
+func (f *RemoteFile) Chown(uid, gid int) error {
 	return f.c.Chown(f.path, uid, gid)
 }
 
 // Chmod changes the permissions of the current file.
-func (f *File) Chmod(mode os.FileMode) error {
+func (f *RemoteFile) Chmod(mode os.FileMode) error {
 	return f.c.Chmod(f.path, mode)
 }
 
@@ -1129,7 +1129,7 @@ func (f *File) Chmod(mode os.FileMode) error {
 // that if the size is less than its current size it will be truncated to fit,
 // the SFTP protocol does not specify what behavior the server should do when setting
 // size greater than the current size.
-func (f *File) Truncate(size int64) error {
+func (f *RemoteFile) Truncate(size int64) error {
 	return f.c.Truncate(f.path, size)
 }
 
