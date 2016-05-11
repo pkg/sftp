@@ -65,10 +65,10 @@ func (svr *Server) getHandle(handle string) (*os.File, bool) {
 	return f, ok
 }
 
-type serverRespondablePacket interface {
+type ServerRespondablePacket interface {
 	encoding.BinaryUnmarshaler
 	id() uint32
-	respond(svr *Server) error
+	Respond(svr *Server) error
 	readonly() bool
 }
 
@@ -119,7 +119,7 @@ func ReadOnly() ServerOption {
 }
 
 type rxPacket struct {
-	pktType  fxp
+	pktType  Fxpkt
 	pktBytes []byte
 }
 
@@ -131,7 +131,7 @@ func (svr *Server) rxPackets() error {
 		pktType, pktBytes, err := recvPacket(svr.in)
 		switch err {
 		case nil:
-			svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
+			svr.pktChan <- rxPacket{Fxpkt(pktType), pktBytes}
 		case io.EOF:
 			return nil
 		default:
@@ -154,11 +154,11 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 		// If server is operating read-only and a write operation is requested,
 		// return permission denied
 		if !dPkt.readonly() && svr.readOnly {
-			_ = svr.sendPacket(statusFromError(dPkt.id(), syscall.EPERM))
+			_ = svr.SendPacket(StatusFromError(dPkt.id(), syscall.EPERM))
 			continue
 		}
 
-		_ = dPkt.respond(svr)
+		_ = dPkt.Respond(svr)
 	}
 	doneChan <- nil
 }
@@ -185,47 +185,47 @@ func (svr *Server) Serve() error {
 	return svr.out.Close()
 }
 
-func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondablePacket, error) {
-	var pkt serverRespondablePacket
+func (svr *Server) decodePacket(pktType Fxpkt, pktBytes []byte) (ServerRespondablePacket, error) {
+	var pkt ServerRespondablePacket
 	switch pktType {
-	case ssh_FXP_INIT:
-		pkt = &sshFxInitPacket{}
-	case ssh_FXP_LSTAT:
-		pkt = &sshFxpLstatPacket{}
-	case ssh_FXP_OPEN:
-		pkt = &sshFxpOpenPacket{}
-	case ssh_FXP_CLOSE:
-		pkt = &sshFxpClosePacket{}
-	case ssh_FXP_READ:
-		pkt = &sshFxpReadPacket{}
-	case ssh_FXP_WRITE:
-		pkt = &sshFxpWritePacket{}
-	case ssh_FXP_FSTAT:
-		pkt = &sshFxpFstatPacket{}
-	case ssh_FXP_SETSTAT:
-		pkt = &sshFxpSetstatPacket{}
-	case ssh_FXP_FSETSTAT:
-		pkt = &sshFxpFsetstatPacket{}
-	case ssh_FXP_OPENDIR:
-		pkt = &sshFxpOpendirPacket{}
-	case ssh_FXP_READDIR:
-		pkt = &sshFxpReaddirPacket{}
-	case ssh_FXP_REMOVE:
-		pkt = &sshFxpRemovePacket{}
-	case ssh_FXP_MKDIR:
-		pkt = &sshFxpMkdirPacket{}
-	case ssh_FXP_RMDIR:
-		pkt = &sshFxpRmdirPacket{}
-	case ssh_FXP_REALPATH:
-		pkt = &sshFxpRealpathPacket{}
-	case ssh_FXP_STAT:
-		pkt = &sshFxpStatPacket{}
-	case ssh_FXP_RENAME:
-		pkt = &sshFxpRenamePacket{}
-	case ssh_FXP_READLINK:
-		pkt = &sshFxpReadlinkPacket{}
-	case ssh_FXP_SYMLINK:
-		pkt = &sshFxpSymlinkPacket{}
+	case SSH_FXP_INIT:
+		pkt = &SshFxInitPacket{}
+	case SSH_FXP_LSTAT:
+		pkt = &SshFxpLstatPacket{}
+	case SSH_FXP_OPEN:
+		pkt = &SshFxpOpenPacket{}
+	case SSH_FXP_CLOSE:
+		pkt = &SshFxpClosePacket{}
+	case SSH_FXP_READ:
+		pkt = &SshFxpReadPacket{}
+	case SSH_FXP_WRITE:
+		pkt = &SshFxpWritePacket{}
+	case SSH_FXP_FSTAT:
+		pkt = &SshFxpFstatPacket{}
+	case SSH_FXP_SETSTAT:
+		pkt = &SshFxpSetstatPacket{}
+	case SSH_FXP_FSETSTAT:
+		pkt = &SshFxpFsetstatPacket{}
+	case SSH_FXP_OPENDIR:
+		pkt = &SshFxpOpendirPacket{}
+	case SSH_FXP_READDIR:
+		pkt = &SshFxpReaddirPacket{}
+	case SSH_FXP_REMOVE:
+		pkt = &SshFxpRemovePacket{}
+	case SSH_FXP_MKDIR:
+		pkt = &SshFxpMkdirPacket{}
+	case SSH_FXP_RMDIR:
+		pkt = &SshFxpRmdirPacket{}
+	case SSH_FXP_REALPATH:
+		pkt = &SshFxpRealpathPacket{}
+	case SSH_FXP_STAT:
+		pkt = &SshFxpStatPacket{}
+	case SSH_FXP_RENAME:
+		pkt = &SshFxpRenamePacket{}
+	case SSH_FXP_READLINK:
+		pkt = &SshFxpReadlinkPacket{}
+	case SSH_FXP_SYMLINK:
+		pkt = &SshFxpSymlinkPacket{}
 	default:
 		return nil, fmt.Errorf("unhandled packet type: %s", pktType)
 	}
@@ -233,124 +233,124 @@ func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondable
 	return pkt, err
 }
 
-func (p sshFxInitPacket) respond(svr *Server) error {
-	return svr.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
+func (p SshFxInitPacket) Respond(svr *Server) error {
+	return svr.SendPacket(SshFxVersionPacket{sftpProtocolVersion, nil})
 }
 
 // The init packet has no ID, so we just return a zero-value ID
-func (p sshFxInitPacket) id() uint32     { return 0 }
-func (p sshFxInitPacket) readonly() bool { return true }
+func (p SshFxInitPacket) id() uint32     { return 0 }
+func (p SshFxInitPacket) readonly() bool { return true }
 
-type sshFxpStatResponse struct {
+type SshFxpStatResponse struct {
 	ID   uint32
 	info os.FileInfo
 }
 
-func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
-	b := []byte{ssh_FXP_ATTRS}
+func (p SshFxpStatResponse) MarshalBinary() ([]byte, error) {
+	b := []byte{SSH_FXP_ATTRS}
 	b = marshalUint32(b, p.ID)
 	b = marshalFileInfo(b, p.info)
 	return b, nil
 }
 
-func (p sshFxpLstatPacket) readonly() bool { return true }
+func (p SshFxpLstatPacket) readonly() bool { return true }
 
-func (p sshFxpLstatPacket) respond(svr *Server) error {
+func (p SshFxpLstatPacket) Respond(svr *Server) error {
 	// stat the requested file
 	info, err := os.Lstat(p.Path)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
-	return svr.sendPacket(sshFxpStatResponse{
+	return svr.SendPacket(SshFxpStatResponse{
 		ID:   p.ID,
 		info: info,
 	})
 }
 
-func (p sshFxpStatPacket) readonly() bool { return true }
+func (p SshFxpStatPacket) readonly() bool { return true }
 
-func (p sshFxpStatPacket) respond(svr *Server) error {
+func (p SshFxpStatPacket) Respond(svr *Server) error {
 	// stat the requested file
 	info, err := os.Stat(p.Path)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
-	return svr.sendPacket(sshFxpStatResponse{
+	return svr.SendPacket(SshFxpStatResponse{
 		ID:   p.ID,
 		info: info,
 	})
 }
 
-func (p sshFxpFstatPacket) readonly() bool { return true }
+func (p SshFxpFstatPacket) readonly() bool { return true }
 
-func (p sshFxpFstatPacket) respond(svr *Server) error {
+func (p SshFxpFstatPacket) Respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendPacket(statusFromError(p.ID, syscall.EBADF))
+		return svr.SendPacket(StatusFromError(p.ID, syscall.EBADF))
 	}
 
 	info, err := f.Stat()
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
-	return svr.sendPacket(sshFxpStatResponse{
+	return svr.SendPacket(SshFxpStatResponse{
 		ID:   p.ID,
 		info: info,
 	})
 }
 
-func (p sshFxpMkdirPacket) readonly() bool { return false }
+func (p SshFxpMkdirPacket) readonly() bool { return false }
 
-func (p sshFxpMkdirPacket) respond(svr *Server) error {
+func (p SshFxpMkdirPacket) Respond(svr *Server) error {
 	// TODO FIXME: ignore flags field
 	err := os.Mkdir(p.Path, 0755)
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
-func (p sshFxpRmdirPacket) readonly() bool { return false }
+func (p SshFxpRmdirPacket) readonly() bool { return false }
 
-func (p sshFxpRmdirPacket) respond(svr *Server) error {
+func (p SshFxpRmdirPacket) Respond(svr *Server) error {
 	err := os.Remove(p.Path)
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
-func (p sshFxpRemovePacket) readonly() bool { return false }
+func (p SshFxpRemovePacket) readonly() bool { return false }
 
-func (p sshFxpRemovePacket) respond(svr *Server) error {
+func (p SshFxpRemovePacket) Respond(svr *Server) error {
 	err := os.Remove(p.Filename)
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
-func (p sshFxpRenamePacket) readonly() bool { return false }
+func (p SshFxpRenamePacket) readonly() bool { return false }
 
-func (p sshFxpRenamePacket) respond(svr *Server) error {
+func (p SshFxpRenamePacket) Respond(svr *Server) error {
 	err := os.Rename(p.Oldpath, p.Newpath)
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
-func (p sshFxpSymlinkPacket) readonly() bool { return false }
+func (p SshFxpSymlinkPacket) readonly() bool { return false }
 
-func (p sshFxpSymlinkPacket) respond(svr *Server) error {
+func (p SshFxpSymlinkPacket) Respond(svr *Server) error {
 	err := os.Symlink(p.Targetpath, p.Linkpath)
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
 var emptyFileStat = []interface{}{uint32(0)}
 
-func (p sshFxpReadlinkPacket) readonly() bool { return true }
+func (p SshFxpReadlinkPacket) readonly() bool { return true }
 
-func (p sshFxpReadlinkPacket) respond(svr *Server) error {
+func (p SshFxpReadlinkPacket) Respond(svr *Server) error {
 	f, err := os.Readlink(p.Path)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
-	return svr.sendPacket(sshFxpNamePacket{
+	return svr.SendPacket(SshFxpNamePacket{
 		ID: p.ID,
-		NameAttrs: []sshFxpNameAttr{{
+		NameAttrs: []SshFxpNameAttr{{
 			Name:     f,
 			LongName: f,
 			Attrs:    emptyFileStat,
@@ -358,19 +358,19 @@ func (p sshFxpReadlinkPacket) respond(svr *Server) error {
 	})
 }
 
-func (p sshFxpRealpathPacket) readonly() bool { return true }
+func (p SshFxpRealpathPacket) readonly() bool { return true }
 
-func (p sshFxpRealpathPacket) respond(svr *Server) error {
+func (p SshFxpRealpathPacket) Respond(svr *Server) error {
 	f, err := filepath.Abs(p.Path)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
 	f = filepath.Clean(f)
 
-	return svr.sendPacket(sshFxpNamePacket{
+	return svr.SendPacket(SshFxpNamePacket{
 		ID: p.ID,
-		NameAttrs: []sshFxpNameAttr{{
+		NameAttrs: []SshFxpNameAttr{{
 			Name:     f,
 			LongName: f,
 			Attrs:    emptyFileStat,
@@ -378,21 +378,21 @@ func (p sshFxpRealpathPacket) respond(svr *Server) error {
 	})
 }
 
-func (p sshFxpOpendirPacket) readonly() bool { return true }
+func (p SshFxpOpendirPacket) readonly() bool { return true }
 
-func (p sshFxpOpendirPacket) respond(svr *Server) error {
-	return sshFxpOpenPacket{
+func (p SshFxpOpendirPacket) Respond(svr *Server) error {
+	return SshFxpOpenPacket{
 		ID:     p.ID,
 		Path:   p.Path,
-		Pflags: ssh_FXF_READ,
-	}.respond(svr)
+		Pflags: SSH_FXF_READ,
+	}.Respond(svr)
 }
 
-func (p sshFxpOpenPacket) readonly() bool {
-	return !p.hasPflags(ssh_FXF_WRITE)
+func (p SshFxpOpenPacket) readonly() bool {
+	return !p.hasPflags(SSH_FXF_WRITE)
 }
 
-func (p sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
+func (p SshFxpOpenPacket) hasPflags(flags ...uint32) bool {
 	for _, f := range flags {
 		if p.Pflags&f == 0 {
 			return false
@@ -402,59 +402,59 @@ func (p sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
 	return true
 }
 
-func (p sshFxpOpenPacket) respond(svr *Server) error {
+func (p SshFxpOpenPacket) Respond(svr *Server) error {
 	var osFlags int
-	if p.hasPflags(ssh_FXF_READ, ssh_FXF_WRITE) {
+	if p.hasPflags(SSH_FXF_READ, SSH_FXF_WRITE) {
 		osFlags |= os.O_RDWR
-	} else if p.hasPflags(ssh_FXF_WRITE) {
+	} else if p.hasPflags(SSH_FXF_WRITE) {
 		osFlags |= os.O_WRONLY
-	} else if p.hasPflags(ssh_FXF_READ) {
+	} else if p.hasPflags(SSH_FXF_READ) {
 		osFlags |= os.O_RDONLY
 	} else {
 		// how are they opening?
-		return svr.sendPacket(statusFromError(p.ID, syscall.EINVAL))
+		return svr.SendPacket(StatusFromError(p.ID, syscall.EINVAL))
 	}
 
-	if p.hasPflags(ssh_FXF_APPEND) {
+	if p.hasPflags(SSH_FXF_APPEND) {
 		osFlags |= os.O_APPEND
 	}
-	if p.hasPflags(ssh_FXF_CREAT) {
+	if p.hasPflags(SSH_FXF_CREAT) {
 		osFlags |= os.O_CREATE
 	}
-	if p.hasPflags(ssh_FXF_TRUNC) {
+	if p.hasPflags(SSH_FXF_TRUNC) {
 		osFlags |= os.O_TRUNC
 	}
-	if p.hasPflags(ssh_FXF_EXCL) {
+	if p.hasPflags(SSH_FXF_EXCL) {
 		osFlags |= os.O_EXCL
 	}
 
 	f, err := os.OpenFile(p.Path, osFlags, 0644)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
 	handle := svr.nextHandle(f)
-	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
+	return svr.SendPacket(SshFxpHandlePacket{p.ID, handle})
 }
 
-func (p sshFxpClosePacket) readonly() bool { return true }
+func (p SshFxpClosePacket) readonly() bool { return true }
 
-func (p sshFxpClosePacket) respond(svr *Server) error {
-	return svr.sendPacket(statusFromError(p.ID, svr.closeHandle(p.Handle)))
+func (p SshFxpClosePacket) Respond(svr *Server) error {
+	return svr.SendPacket(StatusFromError(p.ID, svr.closeHandle(p.Handle)))
 }
 
-func (p sshFxpReadPacket) readonly() bool { return true }
+func (p SshFxpReadPacket) readonly() bool { return true }
 
-func (p sshFxpReadPacket) respond(svr *Server) error {
+func (p SshFxpReadPacket) Respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendPacket(statusFromError(p.ID, syscall.EBADF))
+		return svr.SendPacket(StatusFromError(p.ID, syscall.EBADF))
 	}
 
 	if p.Len > svr.maxTxPacket {
 		p.Len = svr.maxTxPacket
 	}
-	ret := sshFxpDataPacket{
+	ret := SshFxpDataPacket{
 		ID:     p.ID,
 		Length: p.Len,
 		Data:   make([]byte, p.Len),
@@ -462,53 +462,53 @@ func (p sshFxpReadPacket) respond(svr *Server) error {
 
 	n, err := f.ReadAt(ret.Data, int64(p.Offset))
 	if err != nil && (err != io.EOF || n == 0) {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
 	ret.Length = uint32(n)
-	return svr.sendPacket(ret)
+	return svr.SendPacket(ret)
 }
 
-func (p sshFxpWritePacket) readonly() bool { return false }
+func (p SshFxpWritePacket) readonly() bool { return false }
 
-func (p sshFxpWritePacket) respond(svr *Server) error {
+func (p SshFxpWritePacket) Respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendPacket(statusFromError(p.ID, syscall.EBADF))
+		return svr.SendPacket(StatusFromError(p.ID, syscall.EBADF))
 	}
 
 	_, err := f.WriteAt(p.Data, int64(p.Offset))
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
-func (p sshFxpReaddirPacket) readonly() bool { return true }
+func (p SshFxpReaddirPacket) readonly() bool { return true }
 
-func (p sshFxpReaddirPacket) respond(svr *Server) error {
+func (p SshFxpReaddirPacket) Respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendPacket(statusFromError(p.ID, syscall.EBADF))
+		return svr.SendPacket(StatusFromError(p.ID, syscall.EBADF))
 	}
 
 	dirname := f.Name()
 	dirents, err := f.Readdir(128)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.SendPacket(StatusFromError(p.ID, err))
 	}
 
-	ret := sshFxpNamePacket{ID: p.ID}
+	ret := SshFxpNamePacket{ID: p.ID}
 	for _, dirent := range dirents {
-		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
+		ret.NameAttrs = append(ret.NameAttrs, SshFxpNameAttr{
 			Name:     dirent.Name(),
 			LongName: runLs(dirname, dirent),
 			Attrs:    []interface{}{dirent},
 		})
 	}
-	return svr.sendPacket(ret)
+	return svr.SendPacket(ret)
 }
 
-func (p sshFxpSetstatPacket) readonly() bool { return false }
+func (p SshFxpSetstatPacket) readonly() bool { return false }
 
-func (p sshFxpSetstatPacket) respond(svr *Server) error {
+func (p SshFxpSetstatPacket) Respond(svr *Server) error {
 	// additional unmarshalling is required for each possibility here
 	b := p.Attrs.([]byte)
 	var err error
@@ -547,15 +547,15 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		}
 	}
 
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
-func (p sshFxpFsetstatPacket) readonly() bool { return false }
+func (p SshFxpFsetstatPacket) readonly() bool { return false }
 
-func (p sshFxpFsetstatPacket) respond(svr *Server) error {
+func (p SshFxpFsetstatPacket) Respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendPacket(statusFromError(p.ID, syscall.EBADF))
+		return svr.SendPacket(StatusFromError(p.ID, syscall.EBADF))
 	}
 
 	// additional unmarshalling is required for each possibility here
@@ -596,49 +596,49 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 		}
 	}
 
-	return svr.sendPacket(statusFromError(p.ID, err))
+	return svr.SendPacket(StatusFromError(p.ID, err))
 }
 
 // translateErrno translates a syscall error number to a SFTP error code.
 func translateErrno(errno syscall.Errno) uint32 {
 	switch errno {
 	case 0:
-		return ssh_FX_OK
+		return SSH_FX_OK
 	case syscall.ENOENT:
-		return ssh_FX_NO_SUCH_FILE
+		return SSH_FX_NO_SUCH_FILE
 	case syscall.EPERM:
-		return ssh_FX_PERMISSION_DENIED
+		return SSH_FX_PERMISSION_DENIED
 	}
 
-	return ssh_FX_FAILURE
+	return SSH_FX_FAILURE
 }
 
-func statusFromError(id uint32, err error) sshFxpStatusPacket {
-	ret := sshFxpStatusPacket{
+func StatusFromError(id uint32, err error) SshFxpStatusPacket {
+	ret := SshFxpStatusPacket{
 		ID: id,
 		StatusError: StatusError{
-			// ssh_FX_OK                = 0
-			// ssh_FX_EOF               = 1
-			// ssh_FX_NO_SUCH_FILE      = 2 ENOENT
-			// ssh_FX_PERMISSION_DENIED = 3
-			// ssh_FX_FAILURE           = 4
-			// ssh_FX_BAD_MESSAGE       = 5
-			// ssh_FX_NO_CONNECTION     = 6
-			// ssh_FX_CONNECTION_LOST   = 7
-			// ssh_FX_OP_UNSUPPORTED    = 8
-			Code: ssh_FX_OK,
+			// SSH_FX_OK                = 0
+			// SSH_FX_EOF               = 1
+			// SSH_FX_NO_SUCH_FILE      = 2 ENOENT
+			// SSH_FX_PERMISSION_DENIED = 3
+			// SSH_FX_FAILURE           = 4
+			// SSH_FX_BAD_MESSAGE       = 5
+			// SSH_FX_NO_CONNECTION     = 6
+			// SSH_FX_CONNECTION_LOST   = 7
+			// SSH_FX_OP_UNSUPPORTED    = 8
+			Code: SSH_FX_OK,
 		},
 	}
 	if err != nil {
-		debug("statusFromError: error is %T %#v", err, err)
-		ret.StatusError.Code = ssh_FX_FAILURE
+		debug("StatusFromError: error is %T %#v", err, err)
+		ret.StatusError.Code = SSH_FX_FAILURE
 		ret.StatusError.msg = err.Error()
 		if err == io.EOF {
-			ret.StatusError.Code = ssh_FX_EOF
+			ret.StatusError.Code = SSH_FX_EOF
 		} else if errno, ok := err.(syscall.Errno); ok {
 			ret.StatusError.Code = translateErrno(errno)
 		} else if pathError, ok := err.(*os.PathError); ok {
-			debug("statusFromError: error is %T %#v", pathError.Err, pathError.Err)
+			debug("StatusFromError: error is %T %#v", pathError.Err, pathError.Err)
 			if errno, ok := pathError.Err.(syscall.Errno); ok {
 				ret.StatusError.Code = translateErrno(errno)
 			}

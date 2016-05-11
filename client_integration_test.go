@@ -405,8 +405,8 @@ func TestClientCreateFailed(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	f2, err := sftp.Create(f.Name())
-	if err1, ok := err.(*StatusError); !ok || err1.Code != ssh_FX_PERMISSION_DENIED {
-		t.Fatalf("Create: want: %v, got %#v", ssh_FX_PERMISSION_DENIED, err)
+	if err1, ok := err.(*StatusError); !ok || err1.Code != SSH_FX_PERMISSION_DENIED {
+		t.Fatalf("Create: want: %v, got %#v", SSH_FX_PERMISSION_DENIED, err)
 	}
 	if err == nil {
 		f2.Close()
