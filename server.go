@@ -31,6 +31,7 @@ type Server struct {
 	readOnly      bool
 	lastID        uint32
 	pktChan       chan rxPacket
+	responder     Responder
 	openFiles     map[string]*os.File
 	openFilesLock *sync.RWMutex
 	handleCount   int
@@ -65,6 +66,8 @@ func (svr *Server) getHandle(handle string) (*os.File, bool) {
 	return f, ok
 }
 
+type Responder func(Fxpkt) (ServerRespondablePacket, error)
+
 type ServerRespondablePacket interface {
 	encoding.BinaryUnmarshaler
 	id() uint32
@@ -96,6 +99,11 @@ func NewServer(in io.Reader, out io.WriteCloser, options ...ServerOption) (*Serv
 		}
 	}
 
+	if s.responder == nil {
+		fmt.Fprintf(s.debugStream, "using default responder")
+		UseResponder(FilesystemResponder)(s)
+	}
+
 	return s, nil
 }
 
@@ -114,6 +122,14 @@ func WithDebug(w io.Writer) ServerOption {
 func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
+		return nil
+	}
+}
+
+// Configure Responder function to use as packet builder
+func UseResponder(r Responder) ServerOption {
+	return func(s *Server) error {
+		s.responder = r
 		return nil
 	}
 }
@@ -186,50 +202,11 @@ func (svr *Server) Serve() error {
 }
 
 func (svr *Server) decodePacket(pktType Fxpkt, pktBytes []byte) (ServerRespondablePacket, error) {
-	var pkt ServerRespondablePacket
-	switch pktType {
-	case SSH_FXP_INIT:
-		pkt = &SshFxInitPacket{}
-	case SSH_FXP_LSTAT:
-		pkt = &SshFxpLstatPacket{}
-	case SSH_FXP_OPEN:
-		pkt = &SshFxpOpenPacket{}
-	case SSH_FXP_CLOSE:
-		pkt = &SshFxpClosePacket{}
-	case SSH_FXP_READ:
-		pkt = &SshFxpReadPacket{}
-	case SSH_FXP_WRITE:
-		pkt = &SshFxpWritePacket{}
-	case SSH_FXP_FSTAT:
-		pkt = &SshFxpFstatPacket{}
-	case SSH_FXP_SETSTAT:
-		pkt = &SshFxpSetstatPacket{}
-	case SSH_FXP_FSETSTAT:
-		pkt = &SshFxpFsetstatPacket{}
-	case SSH_FXP_OPENDIR:
-		pkt = &SshFxpOpendirPacket{}
-	case SSH_FXP_READDIR:
-		pkt = &SshFxpReaddirPacket{}
-	case SSH_FXP_REMOVE:
-		pkt = &SshFxpRemovePacket{}
-	case SSH_FXP_MKDIR:
-		pkt = &SshFxpMkdirPacket{}
-	case SSH_FXP_RMDIR:
-		pkt = &SshFxpRmdirPacket{}
-	case SSH_FXP_REALPATH:
-		pkt = &SshFxpRealpathPacket{}
-	case SSH_FXP_STAT:
-		pkt = &SshFxpStatPacket{}
-	case SSH_FXP_RENAME:
-		pkt = &SshFxpRenamePacket{}
-	case SSH_FXP_READLINK:
-		pkt = &SshFxpReadlinkPacket{}
-	case SSH_FXP_SYMLINK:
-		pkt = &SshFxpSymlinkPacket{}
-	default:
-		return nil, fmt.Errorf("unhandled packet type: %s", pktType)
+	// var pkt ServerRespondablePacket
+	pkt, err := svr.responder(pktType)
+	if err == nil {
+		err = pkt.UnmarshalBinary(pktBytes)
 	}
-	err := pkt.UnmarshalBinary(pktBytes)
 	return pkt, err
 }
 
