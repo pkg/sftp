@@ -117,9 +117,9 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 		return fmt.Errorf("marshal2(%#v): binary marshaller failed", err)
 	}
 	if debugDumpTxPacketBytes {
-		debug("send packet: %s %d bytes %x", fxp(bb[0]), len(bb), bb[1:])
+		debug("send packet: %s %d bytes %x", Fxpkt(bb[0]), len(bb), bb[1:])
 	} else if debugDumpTxPacket {
-		debug("send packet: %s %d bytes", fxp(bb[0]), len(bb))
+		debug("send packet: %s %d bytes", Fxpkt(bb[0]), len(bb))
 	}
 	l := uint32(len(bb))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
@@ -131,7 +131,7 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	return err
 }
 
-func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
+func (svr *Server) SendPacket(m encoding.BinaryMarshaler) error {
 	// any responder can call sendPacket(); actual socket access must be serialized
 	svr.outMutex.Lock()
 	defer svr.outMutex.Unlock()
@@ -150,9 +150,9 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 		return 0, nil, err
 	}
 	if debugDumpRxPacketBytes {
-		debug("recv packet: %s %d bytes %x", fxp(b[0]), l, b[1:])
+		debug("recv packet: %s %d bytes %x", Fxpkt(b[0]), l, b[1:])
 	} else if debugDumpRxPacket {
-		debug("recv packet: %s %d bytes", fxp(b[0]), l)
+		debug("recv packet: %s %d bytes", Fxpkt(b[0]), l)
 	}
 	return b[0], b[1:], nil
 }
@@ -181,19 +181,19 @@ func unmarshalExtensionPair(b []byte) (extensionPair, []byte, error) {
 // Manually writing the marshalling logic wins us a lot of time and
 // allocation.
 
-type sshFxInitPacket struct {
+type SshFxInitPacket struct {
 	Version    uint32
 	Extensions []extensionPair
 }
 
-func (p sshFxInitPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxInitPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 // byte + uint32
 	for _, e := range p.Extensions {
 		l += 4 + len(e.Name) + 4 + len(e.Data)
 	}
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_INIT)
+	b = append(b, SSH_FXP_INIT)
 	b = marshalUint32(b, p.Version)
 	for _, e := range p.Extensions {
 		b = marshalString(b, e.Name)
@@ -202,7 +202,7 @@ func (p sshFxInitPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxInitPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxInitPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.Version, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -218,21 +218,21 @@ func (p *sshFxInitPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxVersionPacket struct {
+type SshFxVersionPacket struct {
 	Version    uint32
 	Extensions []struct {
 		Name, Data string
 	}
 }
 
-func (p sshFxVersionPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxVersionPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 // byte + uint32
 	for _, e := range p.Extensions {
 		l += 4 + len(e.Name) + 4 + len(e.Data)
 	}
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_VERSION)
+	b = append(b, SSH_FXP_VERSION)
 	b = marshalUint32(b, p.Version)
 	for _, e := range p.Extensions {
 		b = marshalString(b, e.Name)
@@ -265,148 +265,148 @@ func unmarshalIDString(b []byte, id *uint32, str *string) error {
 	return nil
 }
 
-type sshFxpReaddirPacket struct {
+type SshFxpReaddirPacket struct {
 	ID     uint32
 	Handle string
 }
 
-func (p sshFxpReaddirPacket) id() uint32 { return p.ID }
+func (p SshFxpReaddirPacket) id() uint32 { return p.ID }
 
-func (p sshFxpReaddirPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_READDIR, p.ID, p.Handle)
+func (p SshFxpReaddirPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_READDIR, p.ID, p.Handle)
 }
 
-func (p *sshFxpReaddirPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpReaddirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Handle)
 }
 
-type sshFxpOpendirPacket struct {
+type SshFxpOpendirPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpOpendirPacket) id() uint32 { return p.ID }
+func (p SshFxpOpendirPacket) id() uint32 { return p.ID }
 
-func (p sshFxpOpendirPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_OPENDIR, p.ID, p.Path)
+func (p SshFxpOpendirPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_OPENDIR, p.ID, p.Path)
 }
 
-func (p *sshFxpOpendirPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpOpendirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
-type sshFxpLstatPacket struct {
+type SshFxpLstatPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpLstatPacket) id() uint32 { return p.ID }
+func (p SshFxpLstatPacket) id() uint32 { return p.ID }
 
-func (p sshFxpLstatPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_LSTAT, p.ID, p.Path)
+func (p SshFxpLstatPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_LSTAT, p.ID, p.Path)
 }
 
-func (p *sshFxpLstatPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpLstatPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
-type sshFxpStatPacket struct {
+type SshFxpStatPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpStatPacket) id() uint32 { return p.ID }
+func (p SshFxpStatPacket) id() uint32 { return p.ID }
 
-func (p sshFxpStatPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_STAT, p.ID, p.Path)
+func (p SshFxpStatPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_STAT, p.ID, p.Path)
 }
 
-func (p *sshFxpStatPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpStatPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
-type sshFxpFstatPacket struct {
+type SshFxpFstatPacket struct {
 	ID     uint32
 	Handle string
 }
 
-func (p sshFxpFstatPacket) id() uint32 { return p.ID }
+func (p SshFxpFstatPacket) id() uint32 { return p.ID }
 
-func (p sshFxpFstatPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_FSTAT, p.ID, p.Handle)
+func (p SshFxpFstatPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_FSTAT, p.ID, p.Handle)
 }
 
-func (p *sshFxpFstatPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpFstatPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Handle)
 }
 
-type sshFxpClosePacket struct {
+type SshFxpClosePacket struct {
 	ID     uint32
 	Handle string
 }
 
-func (p sshFxpClosePacket) id() uint32 { return p.ID }
+func (p SshFxpClosePacket) id() uint32 { return p.ID }
 
-func (p sshFxpClosePacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_CLOSE, p.ID, p.Handle)
+func (p SshFxpClosePacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_CLOSE, p.ID, p.Handle)
 }
 
-func (p *sshFxpClosePacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpClosePacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Handle)
 }
 
-type sshFxpRemovePacket struct {
+type SshFxpRemovePacket struct {
 	ID       uint32
 	Filename string
 }
 
-func (p sshFxpRemovePacket) id() uint32 { return p.ID }
+func (p SshFxpRemovePacket) id() uint32 { return p.ID }
 
-func (p sshFxpRemovePacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_REMOVE, p.ID, p.Filename)
+func (p SshFxpRemovePacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_REMOVE, p.ID, p.Filename)
 }
 
-func (p *sshFxpRemovePacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpRemovePacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Filename)
 }
 
-type sshFxpRmdirPacket struct {
+type SshFxpRmdirPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpRmdirPacket) id() uint32 { return p.ID }
+func (p SshFxpRmdirPacket) id() uint32 { return p.ID }
 
-func (p sshFxpRmdirPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_RMDIR, p.ID, p.Path)
+func (p SshFxpRmdirPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_RMDIR, p.ID, p.Path)
 }
 
-func (p *sshFxpRmdirPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpRmdirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
-type sshFxpSymlinkPacket struct {
+type SshFxpSymlinkPacket struct {
 	ID         uint32
 	Targetpath string
 	Linkpath   string
 }
 
-func (p sshFxpSymlinkPacket) id() uint32 { return p.ID }
+func (p SshFxpSymlinkPacket) id() uint32 { return p.ID }
 
-func (p sshFxpSymlinkPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpSymlinkPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Targetpath) +
 		4 + len(p.Linkpath)
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_SYMLINK)
+	b = append(b, SSH_FXP_SYMLINK)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Targetpath)
 	b = marshalString(b, p.Linkpath)
 	return b, nil
 }
 
-func (p *sshFxpSymlinkPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpSymlinkPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -418,43 +418,43 @@ func (p *sshFxpSymlinkPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpReadlinkPacket struct {
+type SshFxpReadlinkPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpReadlinkPacket) id() uint32 { return p.ID }
+func (p SshFxpReadlinkPacket) id() uint32 { return p.ID }
 
-func (p sshFxpReadlinkPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_READLINK, p.ID, p.Path)
+func (p SshFxpReadlinkPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_READLINK, p.ID, p.Path)
 }
 
-func (p *sshFxpReadlinkPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpReadlinkPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
-type sshFxpRealpathPacket struct {
+type SshFxpRealpathPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpRealpathPacket) id() uint32 { return p.ID }
+func (p SshFxpRealpathPacket) id() uint32 { return p.ID }
 
-func (p sshFxpRealpathPacket) MarshalBinary() ([]byte, error) {
-	return marshalIDString(ssh_FXP_REALPATH, p.ID, p.Path)
+func (p SshFxpRealpathPacket) MarshalBinary() ([]byte, error) {
+	return marshalIDString(SSH_FXP_REALPATH, p.ID, p.Path)
 }
 
-func (p *sshFxpRealpathPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpRealpathPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
-type sshFxpNameAttr struct {
+type SshFxpNameAttr struct {
 	Name     string
 	LongName string
 	Attrs    []interface{}
 }
 
-func (p sshFxpNameAttr) MarshalBinary() ([]byte, error) {
+func (p SshFxpNameAttr) MarshalBinary() ([]byte, error) {
 	b := []byte{}
 	b = marshalString(b, p.Name)
 	b = marshalString(b, p.LongName)
@@ -464,14 +464,14 @@ func (p sshFxpNameAttr) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-type sshFxpNamePacket struct {
+type SshFxpNamePacket struct {
 	ID        uint32
-	NameAttrs []sshFxpNameAttr
+	NameAttrs []SshFxpNameAttr
 }
 
-func (p sshFxpNamePacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpNamePacket) MarshalBinary() ([]byte, error) {
 	b := []byte{}
-	b = append(b, ssh_FXP_NAME)
+	b = append(b, SSH_FXP_NAME)
 	b = marshalUint32(b, p.ID)
 	b = marshalUint32(b, uint32(len(p.NameAttrs)))
 	for _, na := range p.NameAttrs {
@@ -485,22 +485,22 @@ func (p sshFxpNamePacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-type sshFxpOpenPacket struct {
+type SshFxpOpenPacket struct {
 	ID     uint32
 	Path   string
 	Pflags uint32
 	Flags  uint32 // ignored
 }
 
-func (p sshFxpOpenPacket) id() uint32 { return p.ID }
+func (p SshFxpOpenPacket) id() uint32 { return p.ID }
 
-func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 +
 		4 + len(p.Path) +
 		4 + 4
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_OPEN)
+	b = append(b, SSH_FXP_OPEN)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Pflags)
@@ -508,7 +508,7 @@ func (p sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpOpenPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -522,22 +522,22 @@ func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpReadPacket struct {
+type SshFxpReadPacket struct {
 	ID     uint32
 	Handle string
 	Offset uint64
 	Len    uint32
 }
 
-func (p sshFxpReadPacket) id() uint32 { return p.ID }
+func (p SshFxpReadPacket) id() uint32 { return p.ID }
 
-func (p sshFxpReadPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpReadPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Handle) +
 		8 + 4 // uint64 + uint32
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_READ)
+	b = append(b, SSH_FXP_READ)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Handle)
 	b = marshalUint64(b, p.Offset)
@@ -545,7 +545,7 @@ func (p sshFxpReadPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpReadPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -559,28 +559,28 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpRenamePacket struct {
+type SshFxpRenamePacket struct {
 	ID      uint32
 	Oldpath string
 	Newpath string
 }
 
-func (p sshFxpRenamePacket) id() uint32 { return p.ID }
+func (p SshFxpRenamePacket) id() uint32 { return p.ID }
 
-func (p sshFxpRenamePacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpRenamePacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Oldpath) +
 		4 + len(p.Newpath)
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_RENAME)
+	b = append(b, SSH_FXP_RENAME)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Oldpath)
 	b = marshalString(b, p.Newpath)
 	return b, nil
 }
 
-func (p *sshFxpRenamePacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpRenamePacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -592,7 +592,7 @@ func (p *sshFxpRenamePacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpWritePacket struct {
+type SshFxpWritePacket struct {
 	ID     uint32
 	Handle string
 	Offset uint64
@@ -600,16 +600,16 @@ type sshFxpWritePacket struct {
 	Data   []byte
 }
 
-func (p sshFxpWritePacket) id() uint32 { return p.ID }
+func (p SshFxpWritePacket) id() uint32 { return p.ID }
 
-func (p sshFxpWritePacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpWritePacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Handle) +
 		8 + 4 + // uint64 + uint32
 		len(p.Data)
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_WRITE)
+	b = append(b, SSH_FXP_WRITE)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Handle)
 	b = marshalUint64(b, p.Offset)
@@ -618,7 +618,7 @@ func (p sshFxpWritePacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpWritePacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -636,28 +636,28 @@ func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpMkdirPacket struct {
+type SshFxpMkdirPacket struct {
 	ID    uint32
 	Path  string
 	Flags uint32 // ignored
 }
 
-func (p sshFxpMkdirPacket) id() uint32 { return p.ID }
+func (p SshFxpMkdirPacket) id() uint32 { return p.ID }
 
-func (p sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Path) +
 		4 // uint32
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_MKDIR)
+	b = append(b, SSH_FXP_MKDIR)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Flags)
 	return b, nil
 }
 
-func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpMkdirPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -669,30 +669,30 @@ func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpSetstatPacket struct {
+type SshFxpSetstatPacket struct {
 	ID    uint32
 	Path  string
 	Flags uint32
 	Attrs interface{}
 }
 
-type sshFxpFsetstatPacket struct {
+type SshFxpFsetstatPacket struct {
 	ID     uint32
 	Handle string
 	Flags  uint32
 	Attrs  interface{}
 }
 
-func (p sshFxpSetstatPacket) id() uint32  { return p.ID }
-func (p sshFxpFsetstatPacket) id() uint32 { return p.ID }
+func (p SshFxpSetstatPacket) id() uint32  { return p.ID }
+func (p SshFxpFsetstatPacket) id() uint32 { return p.ID }
 
-func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Path) +
 		4 // uint32 + uint64
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_SETSTAT)
+	b = append(b, SSH_FXP_SETSTAT)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Flags)
@@ -700,13 +700,13 @@ func (p sshFxpSetstatPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p sshFxpFsetstatPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpFsetstatPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Handle) +
 		4 // uint32 + uint64
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_FSETSTAT)
+	b = append(b, SSH_FXP_FSETSTAT)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Handle)
 	b = marshalUint32(b, p.Flags)
@@ -714,7 +714,7 @@ func (p sshFxpFsetstatPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (p *sshFxpSetstatPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpSetstatPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -727,7 +727,7 @@ func (p *sshFxpSetstatPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-func (p *sshFxpFsetstatPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpFsetstatPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -740,45 +740,45 @@ func (p *sshFxpFsetstatPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpHandlePacket struct {
+type SshFxpHandlePacket struct {
 	ID     uint32
 	Handle string
 }
 
-func (p sshFxpHandlePacket) MarshalBinary() ([]byte, error) {
-	b := []byte{ssh_FXP_HANDLE}
+func (p SshFxpHandlePacket) MarshalBinary() ([]byte, error) {
+	b := []byte{SSH_FXP_HANDLE}
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Handle)
 	return b, nil
 }
 
-type sshFxpStatusPacket struct {
+type SshFxpStatusPacket struct {
 	ID uint32
 	StatusError
 }
 
-func (p sshFxpStatusPacket) MarshalBinary() ([]byte, error) {
-	b := []byte{ssh_FXP_STATUS}
+func (p SshFxpStatusPacket) MarshalBinary() ([]byte, error) {
+	b := []byte{SSH_FXP_STATUS}
 	b = marshalUint32(b, p.ID)
 	b = marshalStatus(b, p.StatusError)
 	return b, nil
 }
 
-type sshFxpDataPacket struct {
+type SshFxpDataPacket struct {
 	ID     uint32
 	Length uint32
 	Data   []byte
 }
 
-func (p sshFxpDataPacket) MarshalBinary() ([]byte, error) {
-	b := []byte{ssh_FXP_DATA}
+func (p SshFxpDataPacket) MarshalBinary() ([]byte, error) {
+	b := []byte{SSH_FXP_DATA}
 	b = marshalUint32(b, p.ID)
 	b = marshalUint32(b, p.Length)
 	b = append(b, p.Data[:p.Length]...)
 	return b, nil
 }
 
-func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) error {
+func (p *SshFxpDataPacket) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
@@ -793,20 +793,20 @@ func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type sshFxpStatvfsPacket struct {
+type SshFxpStatvfsPacket struct {
 	ID   uint32
 	Path string
 }
 
-func (p sshFxpStatvfsPacket) id() uint32 { return p.ID }
+func (p SshFxpStatvfsPacket) id() uint32 { return p.ID }
 
-func (p sshFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
+func (p SshFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + // type(byte) + uint32
 		len(p.Path) +
 		len("statvfs@openssh.com")
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_EXTENDED)
+	b = append(b, SSH_FXP_EXTENDED)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, "statvfs@openssh.com")
 	b = marshalString(b, p.Path)
