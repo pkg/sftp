@@ -2,11 +2,12 @@ package sftp
 
 import (
 	"encoding"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -114,7 +115,7 @@ func unmarshalStringSafe(b []byte) (string, []byte, error) {
 func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	bb, err := m.MarshalBinary()
 	if err != nil {
-		return fmt.Errorf("marshal2(%#v): binary marshaller failed", err)
+		return errors.Wrap(err, "binary marshaller failed")
 	}
 	if debugDumpTxPacketBytes {
 		debug("send packet: %s %d bytes %x", fxp(bb[0]), len(bb), bb[1:])
