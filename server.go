@@ -214,11 +214,17 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 		// If server is operating read-only and a write operation is requested,
 		// return permission denied
 		if !readonly && svr.readOnly {
-			_ = svr.sendPacket(statusFromError(pkt.id(), syscall.EPERM))
+			if err := svr.sendPacket(statusFromError(pkt.id(), syscall.EPERM)); err != nil {
+				doneChan <- err
+				return
+			}
 			continue
 		}
 
-		_ = pkt.respond(svr) // TODO(dfc) fix ignored error
+		if err := pkt.respond(svr); err != nil {
+			doneChan <- err
+			return
+		}
 
 	}
 	doneChan <- nil
