@@ -69,7 +69,6 @@ type serverRespondablePacket interface {
 	encoding.BinaryUnmarshaler
 	id() uint32
 	respond(svr *Server) error
-	readonly() bool
 }
 
 // NewServer creates a new Server instance around the provided streams, serving
@@ -143,22 +142,84 @@ func (svr *Server) rxPackets() error {
 
 // Up to N parallel servers
 func (svr *Server) sftpServerWorker(doneChan chan error) {
-	for pkt := range svr.pktChan {
-		dPkt, err := svr.decodePacket(pkt.pktType, pkt.pktBytes)
-		if err != nil {
+	for p := range svr.pktChan {
+		var pkt serverRespondablePacket
+		var readonly = true
+		switch p.pktType {
+		case ssh_FXP_INIT:
+			pkt = &sshFxInitPacket{}
+		case ssh_FXP_LSTAT:
+			pkt = &sshFxpLstatPacket{}
+		case ssh_FXP_OPEN:
+			pkt = &sshFxpOpenPacket{}
+			// readonly handled specially below
+		case ssh_FXP_CLOSE:
+			pkt = &sshFxpClosePacket{}
+		case ssh_FXP_READ:
+			pkt = &sshFxpReadPacket{}
+		case ssh_FXP_WRITE:
+			pkt = &sshFxpWritePacket{}
+			readonly = false
+		case ssh_FXP_FSTAT:
+			pkt = &sshFxpFstatPacket{}
+		case ssh_FXP_SETSTAT:
+			pkt = &sshFxpSetstatPacket{}
+			readonly = false
+		case ssh_FXP_FSETSTAT:
+			pkt = &sshFxpFsetstatPacket{}
+			readonly = false
+		case ssh_FXP_OPENDIR:
+			pkt = &sshFxpOpendirPacket{}
+		case ssh_FXP_READDIR:
+			pkt = &sshFxpReaddirPacket{}
+		case ssh_FXP_REMOVE:
+			pkt = &sshFxpRemovePacket{}
+			readonly = false
+		case ssh_FXP_MKDIR:
+			pkt = &sshFxpMkdirPacket{}
+			readonly = false
+		case ssh_FXP_RMDIR:
+			pkt = &sshFxpRmdirPacket{}
+			readonly = false
+		case ssh_FXP_REALPATH:
+			pkt = &sshFxpRealpathPacket{}
+		case ssh_FXP_STAT:
+			pkt = &sshFxpStatPacket{}
+		case ssh_FXP_RENAME:
+			pkt = &sshFxpRenamePacket{}
+			readonly = false
+		case ssh_FXP_READLINK:
+			pkt = &sshFxpReadlinkPacket{}
+		case ssh_FXP_SYMLINK:
+			pkt = &sshFxpSymlinkPacket{}
+			readonly = false
+		default:
+			err := fmt.Errorf("unhandled packet type: %s", p.pktType)
+			fmt.Fprintf(svr.debugStream, "decodePacket error: %v\n", err)
+			doneChan <- err
+			return
+		}
+		if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
 			fmt.Fprintf(svr.debugStream, "decodePacket error: %v\n", err)
 			doneChan <- err
 			return
 		}
 
+		// handle SFP_OPENDIR specially
+		switch pkt := pkt.(type) {
+		case *sshFxpOpenPacket:
+			readonly = pkt.readonly()
+		}
+
 		// If server is operating read-only and a write operation is requested,
 		// return permission denied
-		if !dPkt.readonly() && svr.readOnly {
-			_ = svr.sendPacket(statusFromError(dPkt.id(), syscall.EPERM))
+		if !readonly && svr.readOnly {
+			_ = svr.sendPacket(statusFromError(pkt.id(), syscall.EPERM))
 			continue
 		}
 
-		_ = dPkt.respond(svr)
+		_ = pkt.respond(svr) // TODO(dfc) fix ignored error
+
 	}
 	doneChan <- nil
 }
@@ -185,61 +246,12 @@ func (svr *Server) Serve() error {
 	return svr.out.Close()
 }
 
-func (svr *Server) decodePacket(pktType fxp, pktBytes []byte) (serverRespondablePacket, error) {
-	var pkt serverRespondablePacket
-	switch pktType {
-	case ssh_FXP_INIT:
-		pkt = &sshFxInitPacket{}
-	case ssh_FXP_LSTAT:
-		pkt = &sshFxpLstatPacket{}
-	case ssh_FXP_OPEN:
-		pkt = &sshFxpOpenPacket{}
-	case ssh_FXP_CLOSE:
-		pkt = &sshFxpClosePacket{}
-	case ssh_FXP_READ:
-		pkt = &sshFxpReadPacket{}
-	case ssh_FXP_WRITE:
-		pkt = &sshFxpWritePacket{}
-	case ssh_FXP_FSTAT:
-		pkt = &sshFxpFstatPacket{}
-	case ssh_FXP_SETSTAT:
-		pkt = &sshFxpSetstatPacket{}
-	case ssh_FXP_FSETSTAT:
-		pkt = &sshFxpFsetstatPacket{}
-	case ssh_FXP_OPENDIR:
-		pkt = &sshFxpOpendirPacket{}
-	case ssh_FXP_READDIR:
-		pkt = &sshFxpReaddirPacket{}
-	case ssh_FXP_REMOVE:
-		pkt = &sshFxpRemovePacket{}
-	case ssh_FXP_MKDIR:
-		pkt = &sshFxpMkdirPacket{}
-	case ssh_FXP_RMDIR:
-		pkt = &sshFxpRmdirPacket{}
-	case ssh_FXP_REALPATH:
-		pkt = &sshFxpRealpathPacket{}
-	case ssh_FXP_STAT:
-		pkt = &sshFxpStatPacket{}
-	case ssh_FXP_RENAME:
-		pkt = &sshFxpRenamePacket{}
-	case ssh_FXP_READLINK:
-		pkt = &sshFxpReadlinkPacket{}
-	case ssh_FXP_SYMLINK:
-		pkt = &sshFxpSymlinkPacket{}
-	default:
-		return nil, fmt.Errorf("unhandled packet type: %s", pktType)
-	}
-	err := pkt.UnmarshalBinary(pktBytes)
-	return pkt, err
-}
-
 func (p sshFxInitPacket) respond(svr *Server) error {
 	return svr.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 }
 
 // The init packet has no ID, so we just return a zero-value ID
-func (p sshFxInitPacket) id() uint32     { return 0 }
-func (p sshFxInitPacket) readonly() bool { return true }
+func (p sshFxInitPacket) id() uint32 { return 0 }
 
 type sshFxpStatResponse struct {
 	ID   uint32
@@ -252,8 +264,6 @@ func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
 	b = marshalFileInfo(b, p.info)
 	return b, nil
 }
-
-func (p sshFxpLstatPacket) readonly() bool { return true }
 
 func (p sshFxpLstatPacket) respond(svr *Server) error {
 	// stat the requested file
@@ -268,8 +278,6 @@ func (p sshFxpLstatPacket) respond(svr *Server) error {
 	})
 }
 
-func (p sshFxpStatPacket) readonly() bool { return true }
-
 func (p sshFxpStatPacket) respond(svr *Server) error {
 	// stat the requested file
 	info, err := os.Stat(p.Path)
@@ -282,8 +290,6 @@ func (p sshFxpStatPacket) respond(svr *Server) error {
 		info: info,
 	})
 }
-
-func (p sshFxpFstatPacket) readonly() bool { return true }
 
 func (p sshFxpFstatPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
@@ -302,36 +308,26 @@ func (p sshFxpFstatPacket) respond(svr *Server) error {
 	})
 }
 
-func (p sshFxpMkdirPacket) readonly() bool { return false }
-
 func (p sshFxpMkdirPacket) respond(svr *Server) error {
 	// TODO FIXME: ignore flags field
 	err := os.Mkdir(p.Path, 0755)
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
-func (p sshFxpRmdirPacket) readonly() bool { return false }
-
 func (p sshFxpRmdirPacket) respond(svr *Server) error {
 	err := os.Remove(p.Path)
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
-
-func (p sshFxpRemovePacket) readonly() bool { return false }
 
 func (p sshFxpRemovePacket) respond(svr *Server) error {
 	err := os.Remove(p.Filename)
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
 
-func (p sshFxpRenamePacket) readonly() bool { return false }
-
 func (p sshFxpRenamePacket) respond(svr *Server) error {
 	err := os.Rename(p.Oldpath, p.Newpath)
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
-
-func (p sshFxpSymlinkPacket) readonly() bool { return false }
 
 func (p sshFxpSymlinkPacket) respond(svr *Server) error {
 	err := os.Symlink(p.Targetpath, p.Linkpath)
@@ -339,8 +335,6 @@ func (p sshFxpSymlinkPacket) respond(svr *Server) error {
 }
 
 var emptyFileStat = []interface{}{uint32(0)}
-
-func (p sshFxpReadlinkPacket) readonly() bool { return true }
 
 func (p sshFxpReadlinkPacket) respond(svr *Server) error {
 	f, err := os.Readlink(p.Path)
@@ -357,8 +351,6 @@ func (p sshFxpReadlinkPacket) respond(svr *Server) error {
 		}},
 	})
 }
-
-func (p sshFxpRealpathPacket) readonly() bool { return true }
 
 func (p sshFxpRealpathPacket) respond(svr *Server) error {
 	f, err := filepath.Abs(p.Path)
@@ -377,8 +369,6 @@ func (p sshFxpRealpathPacket) respond(svr *Server) error {
 		}},
 	})
 }
-
-func (p sshFxpOpendirPacket) readonly() bool { return true }
 
 func (p sshFxpOpendirPacket) respond(svr *Server) error {
 	return sshFxpOpenPacket{
@@ -437,13 +427,9 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
 }
 
-func (p sshFxpClosePacket) readonly() bool { return true }
-
 func (p sshFxpClosePacket) respond(svr *Server) error {
 	return svr.sendPacket(statusFromError(p.ID, svr.closeHandle(p.Handle)))
 }
-
-func (p sshFxpReadPacket) readonly() bool { return true }
 
 func (p sshFxpReadPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
@@ -469,8 +455,6 @@ func (p sshFxpReadPacket) respond(svr *Server) error {
 	return svr.sendPacket(ret)
 }
 
-func (p sshFxpWritePacket) readonly() bool { return false }
-
 func (p sshFxpWritePacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
@@ -480,8 +464,6 @@ func (p sshFxpWritePacket) respond(svr *Server) error {
 	_, err := f.WriteAt(p.Data, int64(p.Offset))
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
-
-func (p sshFxpReaddirPacket) readonly() bool { return true }
 
 func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
@@ -505,8 +487,6 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	}
 	return svr.sendPacket(ret)
 }
-
-func (p sshFxpSetstatPacket) readonly() bool { return false }
 
 func (p sshFxpSetstatPacket) respond(svr *Server) error {
 	// additional unmarshalling is required for each possibility here
@@ -549,8 +529,6 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 
 	return svr.sendPacket(statusFromError(p.ID, err))
 }
-
-func (p sshFxpFsetstatPacket) readonly() bool { return false }
 
 func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
