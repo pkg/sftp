@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -14,7 +12,7 @@ import (
 	"time"
 
 	"github.com/kr/fs"
-
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -22,7 +20,7 @@ import (
 func MaxPacket(size int) func(*Client) error {
 	return func(c *Client) error {
 		if size < 1<<15 {
-			return fmt.Errorf("size must be greater or equal to 32k")
+			return errors.Errorf("size must be greater or equal to 32k")
 		}
 		c.maxPacket = size
 		return nil
@@ -172,7 +170,7 @@ func (c *Client) recv() {
 			// This is an unexpected occurrence. Send the error
 			// back to all listeners so that they terminate
 			// gracefully.
-			c.broadcastErr(fmt.Errorf("sid: %v not fond", sid))
+			c.broadcastErr(errors.Errorf("sid: %v not fond", sid))
 			return
 		}
 		ch <- result{typ: typ, data: data}
@@ -784,7 +782,7 @@ func (f *File) Read(b []byte) (int, error) {
 			reqID, data := unmarshalUint32(res.data)
 			req, ok := reqs[reqID]
 			if !ok {
-				firstErr = offsetErr{offset: 0, err: fmt.Errorf("sid: %v not found", reqID)}
+				firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
 				break
 			}
 			delete(reqs, reqID)
@@ -885,7 +883,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 			reqID, data := unmarshalUint32(res.data)
 			req, ok := reqs[reqID]
 			if !ok {
-				firstErr = offsetErr{offset: 0, err: fmt.Errorf("sid: %v not found", reqID)}
+				firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
 				break
 			}
 			delete(reqs, reqID)

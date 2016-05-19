@@ -13,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -134,8 +136,7 @@ func (svr *Server) rxPackets() error {
 		case io.EOF:
 			return nil
 		default:
-			fmt.Fprintf(svr.debugStream, "recvPacket error: %v\n", err)
-			return err
+			return errors.Wrap(err, "revcPacket error")
 		}
 	}
 }
@@ -194,14 +195,11 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 			pkt = &sshFxpSymlinkPacket{}
 			readonly = false
 		default:
-			err := fmt.Errorf("unhandled packet type: %s", p.pktType)
-			fmt.Fprintf(svr.debugStream, "decodePacket error: %v\n", err)
-			doneChan <- err
+			doneChan <- errors.Errorf("unhandled packet type: %s", p.pktType)
 			return
 		}
 		if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
-			fmt.Fprintf(svr.debugStream, "decodePacket error: %v\n", err)
-			doneChan <- err
+			doneChan <- errors.Wrap(err, "decodePacket error")
 			return
 		}
 
@@ -215,14 +213,14 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 		// return permission denied
 		if !readonly && svr.readOnly {
 			if err := svr.sendPacket(statusFromError(pkt.id(), syscall.EPERM)); err != nil {
-				doneChan <- err
+				doneChan <- errors.Wrap(err, "failed to send read only packet response")
 				return
 			}
 			continue
 		}
 
 		if err := pkt.respond(svr); err != nil {
-			doneChan <- err
+			doneChan <- errors.Wrap(err, "pkt.respond failed")
 			return
 		}
 
