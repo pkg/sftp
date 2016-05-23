@@ -199,7 +199,7 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 			return
 		}
 		if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
-			doneChan <- errors.Wrap(err, "decodePacket error")
+			doneChan <- err
 			return
 		}
 
