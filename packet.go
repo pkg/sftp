@@ -132,13 +132,6 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	return err
 }
 
-func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
-	// any responder can call sendPacket(); actual socket access must be serialized
-	svr.outMutex.Lock()
-	defer svr.outMutex.Unlock()
-	return sendPacket(svr.out, m)
-}
-
 func recvPacket(r io.Reader) (uint8, []byte, error) {
 	var b = []byte{0, 0, 0, 0}
 	if _, err := io.ReadFull(r, b); err != nil {
