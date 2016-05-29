@@ -120,25 +120,8 @@ type rxPacket struct {
 	pktBytes []byte
 }
 
-// Unmarshal a single logical packet from the secure channel
-func (svr *Server) rxPackets() error {
-	defer close(svr.pktChan)
-
-	for {
-		pktType, pktBytes, err := recvPacket(svr.in)
-		switch err {
-		case nil:
-			svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
-		case io.EOF:
-			return nil
-		default:
-			return errors.Wrap(err, "revcPacket error")
-		}
-	}
-}
-
 // Up to N parallel servers
-func (svr *Server) sftpServerWorker(doneChan chan error) {
+func (svr *Server) sftpServerWorker() error {
 	for p := range svr.pktChan {
 		var pkt serverRespondablePacket
 		var readonly = true
@@ -191,12 +174,10 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 			pkt = &sshFxpSymlinkPacket{}
 			readonly = false
 		default:
-			doneChan <- errors.Errorf("unhandled packet type: %s", p.pktType)
-			return
+			return errors.Errorf("unhandled packet type: %s", p.pktType)
 		}
 		if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
-			doneChan <- err
-			return
+			return err
 		}
 
 		// handle SFP_OPENDIR specially
@@ -209,41 +190,53 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 		// return permission denied
 		if !readonly && svr.readOnly {
 			if err := svr.sendPacket(statusFromError(pkt.id(), syscall.EPERM)); err != nil {
-				doneChan <- errors.Wrap(err, "failed to send read only packet response")
-				return
+				return errors.Wrap(err, "failed to send read only packet response")
 			}
 			continue
 		}
 
 		if err := pkt.respond(svr); err != nil {
-			doneChan <- errors.Wrap(err, "pkt.respond failed")
-			return
+			return errors.Wrap(err, "pkt.respond failed")
 		}
 
 	}
-	doneChan <- nil
+	return nil
 }
 
 // Serve serves SFTP connections until the streams stop or the SFTP subsystem
 // is stopped.
 func (svr *Server) Serve() error {
-	go svr.rxPackets()
-	doneChan := make(chan error)
+	var wg sync.WaitGroup
+	wg.Add(sftpServerWorkerCount)
 	for i := 0; i < sftpServerWorkerCount; i++ {
-		go svr.sftpServerWorker(doneChan)
+		go func() {
+			defer wg.Done()
+			if err := svr.sftpServerWorker(); err != nil {
+				svr.out.Close() // shuts down recvPacket
+			}
+		}()
 	}
-	for i := 0; i < sftpServerWorkerCount; i++ {
-		if err := <-doneChan; err != nil {
-			// abort early and shut down the session on un-decodable packets
+
+	var err error
+	for {
+		var pktType uint8
+		var pktBytes []byte
+		pktType, pktBytes, err = recvPacket(svr.in)
+		if err != nil {
 			break
 		}
+		svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
 	}
+
+	close(svr.pktChan) // shuts down sftpServerWorkers
+	wg.Wait()          // wait for all workers to exit
+
 	// close any still-open files
 	for handle, file := range svr.openFiles {
-		fmt.Fprintf(svr.debugStream, "sftp server file with handle '%v' left open: %v\n", handle, file.Name())
+		fmt.Fprintf(svr.debugStream, "sftp server file with handle %q left open: %v\n", handle, file.Name())
 		file.Close()
 	}
-	return svr.out.Close()
+	return err // error from recvPacket
 }
 
 func (p sshFxInitPacket) respond(svr *Server) error {
