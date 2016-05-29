@@ -6,6 +6,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 
@@ -28,8 +29,12 @@ func main() {
 	}
 
 	svr, _ := sftp.NewServer(
-		os.Stdin,
-		os.Stdout,
+		struct {
+			io.Reader
+			io.WriteCloser
+		}{os.Stdin,
+			os.Stdout,
+		},
 		sftp.WithDebug(debugStream),
 		sftp.ReadOnly(),
 	)

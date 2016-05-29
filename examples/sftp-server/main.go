@@ -120,7 +120,6 @@ func main() {
 
 		server, err := sftp.NewServer(
 			channel,
-			channel,
 			sftp.WithDebug(debugStream),
 			sftp.ReadOnly(),
 		)

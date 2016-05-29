@@ -28,16 +28,15 @@ const (
 type Server struct {
 	in            io.Reader
 	out           io.WriteCloser
-	outMutex      *sync.Mutex
+	outMutex      sync.Mutex
 	debugStream   io.Writer
 	readOnly      bool
 	lastID        uint32
 	pktChan       chan rxPacket
 	openFiles     map[string]*os.File
-	openFilesLock *sync.RWMutex
+	openFilesLock sync.RWMutex
 	handleCount   int
 	maxTxPacket   uint32
-	workerCount   int
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -78,17 +77,14 @@ type serverRespondablePacket interface {
 // functions may be specified to further configure the Server.
 //
 // A subsequent call to Serve() is required to begin serving files over SFTP.
-func NewServer(in io.Reader, out io.WriteCloser, options ...ServerOption) (*Server, error) {
+func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error) {
 	s := &Server{
-		in:            in,
-		out:           out,
-		outMutex:      &sync.Mutex{},
-		debugStream:   ioutil.Discard,
-		pktChan:       make(chan rxPacket, sftpServerWorkerCount),
-		openFiles:     map[string]*os.File{},
-		openFilesLock: &sync.RWMutex{},
-		maxTxPacket:   1 << 15,
-		workerCount:   sftpServerWorkerCount,
+		in:          rwc.(io.Reader),
+		out:         rwc.(io.WriteCloser),
+		debugStream: ioutil.Discard,
+		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
+		openFiles:   make(map[string]*os.File),
+		maxTxPacket: 1 << 15,
 	}
 
 	for _, o := range options {
@@ -233,10 +229,10 @@ func (svr *Server) sftpServerWorker(doneChan chan error) {
 func (svr *Server) Serve() error {
 	go svr.rxPackets()
 	doneChan := make(chan error)
-	for i := 0; i < svr.workerCount; i++ {
+	for i := 0; i < sftpServerWorkerCount; i++ {
 		go svr.sftpServerWorker(doneChan)
 	}
-	for i := 0; i < svr.workerCount; i++ {
+	for i := 0; i < sftpServerWorkerCount; i++ {
 		if err := <-doneChan; err != nil {
 			// abort early and shut down the session on un-decodable packets
 			break
