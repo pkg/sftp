@@ -99,11 +99,12 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 		options = append(options, ReadOnly())
 	}
 
-	server, err := NewServer(
-		txPipeRd,
-		rxPipeWr,
-		options...,
-	)
+	rwc := struct {
+		io.Reader
+		io.WriteCloser
+	}{txPipeRd, rxPipeWr}
+
+	server, err := NewServer(rwc, options...)
 	if err != nil {
 		t.Fatal(err)
 	}
