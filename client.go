@@ -1164,7 +1164,10 @@ func unmarshalStatus(id uint32, data []byte) error {
 		return &unexpectedIDErr{id, sid}
 	}
 	code, data := unmarshalUint32(data)
-	msg, data := unmarshalString(data)
+	msg, data, err := unmarshalStringSafe(data)
+	if err != nil {
+		return err
+	}
 	lang, _, _ := unmarshalStringSafe(data)
 	return &StatusError{
 		Code: code,
