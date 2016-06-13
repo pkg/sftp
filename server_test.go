@@ -48,13 +48,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	defer client.Close()
 	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
 	_, _, err := client.sendRequest(badPacket)
-	if err != nil {
-		t.Log(err)
-	} else {
+	if err == nil {
 		t.Fatal("expected error from bad packet")
 	}
-
-	// try to stat a file; the client should have shut down.
-	filePath := "/etc/passwd"
-	_, err = client.Stat(filePath)
 }
