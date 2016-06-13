@@ -54,11 +54,10 @@ func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 // the system's ssh client program (e.g. via exec.Command).
 func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error) (*Client, error) {
 	sftp := &Client{
-		w:          wr,
-		r:          rd,
-		maxPacket:  1 << 15,
-		inflight:   make(map[uint32]chan<- result),
-		recvClosed: make(chan struct{}),
+		w:         wr,
+		r:         rd,
+		maxPacket: 1 << 15,
+		inflight:  make(map[uint32]chan<- result),
 	}
 	if err := sftp.applyOptions(opts...); err != nil {
 		wr.Close()
@@ -72,6 +71,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		wr.Close()
 		return nil, err
 	}
+	sftp.wg.Add(1)
 	go sftp.recv()
 	return sftp, nil
 }
@@ -88,15 +88,16 @@ type Client struct {
 	maxPacket int // max packet size read or written.
 	nextid    uint32
 
-	mu         sync.Mutex               // ensures only on request is in flight to the server at once
-	inflight   map[uint32]chan<- result // outstanding requests
-	recvClosed chan struct{}            // remote end has closed the connection
+	mu       sync.Mutex               // ensures only on request is in flight to the server at once
+	inflight map[uint32]chan<- result // outstanding requests
+
+	wg sync.WaitGroup
 }
 
 // Close closes the SFTP session.
 func (c *Client) Close() error {
 	err := c.w.Close()
-	<-c.recvClosed
+	c.wg.Wait()
 	return err
 }
 
@@ -153,7 +154,7 @@ func (c *Client) broadcastErr(err error) {
 // recv continuously reads from the server and forwards responses to the
 // appropriate channel.
 func (c *Client) recv() {
-	defer close(c.recvClosed)
+	defer c.wg.Done()
 	for {
 		typ, data, err := recvPacket(c.r)
 		if err != nil {
