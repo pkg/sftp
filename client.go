@@ -665,10 +665,11 @@ func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
 func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.mu.Lock()
 	c.inflight[p.id()] = ch
-	if err := sendPacket(c.w, p); err != nil {
+	err := sendPacket(c.w, p)
+	if err != nil {
 		delete(c.inflight, p.id())
-		ch <- result{err: err}
 	}
+	ch <- result{err: err}
 	c.mu.Unlock()
 }
 
