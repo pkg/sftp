@@ -1,7 +1,9 @@
 package sftp
 
 import (
+	"bytes"
 	"encoding"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +13,8 @@ import (
 )
 
 var (
-	errShortPacket = errors.New("packet too short")
+	errShortPacket           = errors.New("packet too short")
+	errUnknownExtendedPacket = errors.New("unknown extended packet")
 )
 
 const (
@@ -831,4 +834,70 @@ func (p *StatVFS) TotalSpace() uint64 {
 // FreeSpace calculates the amount of free space in a filesystem.
 func (p *StatVFS) FreeSpace() uint64 {
 	return p.Frsize * p.Bfree
+}
+
+// Convert to ssh_FXP_EXTENDED_REPLY packet binary format
+func (p *StatVFS) MarshalBinary() ([]byte, error) {
+	buf := &bytes.Buffer{}
+	buf.Write([]byte{ssh_FXP_EXTENDED_REPLY})
+	if err := binary.Write(buf, binary.BigEndian, p); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+type sshFxpExtendedPacket struct {
+	ID              uint32
+	ExtendedRequest string
+	SpecificPacket  interface {
+		serverRespondablePacket
+		readonly() bool
+	}
+}
+
+func (p sshFxpExtendedPacket) id() uint32     { return p.ID }
+func (p sshFxpExtendedPacket) readonly() bool { return p.SpecificPacket.readonly() }
+
+func (p sshFxpExtendedPacket) respond(svr *Server) error {
+	return p.SpecificPacket.respond(svr)
+}
+
+func (p *sshFxpExtendedPacket) UnmarshalBinary(b []byte) error {
+	var err error
+	bOrig := b
+	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.ExtendedRequest, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	}
+
+	// specific unmarshalling
+	switch p.ExtendedRequest {
+	case "statvfs@openssh.com":
+		p.SpecificPacket = &sshFxpExtendedPacketStatVFS{}
+	default:
+		return errUnknownExtendedPacket
+	}
+
+	return p.SpecificPacket.UnmarshalBinary(bOrig)
+}
+
+type sshFxpExtendedPacketStatVFS struct {
+	ID              uint32
+	ExtendedRequest string
+	Path            string
+}
+
+func (p sshFxpExtendedPacketStatVFS) id() uint32     { return p.ID }
+func (p sshFxpExtendedPacketStatVFS) readonly() bool { return true }
+func (p *sshFxpExtendedPacketStatVFS) UnmarshalBinary(b []byte) error {
+	var err error
+	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.ExtendedRequest, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Path, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	}
+	return nil
 }
