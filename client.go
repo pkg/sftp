@@ -54,8 +54,12 @@ func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 // the system's ssh client program (e.g. via exec.Command).
 func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error) (*Client, error) {
 	sftp := &Client{
-		w:         wr,
-		r:         rd,
+		conn: conn{
+			ReadWriteCloser: struct {
+				io.Reader
+				io.WriteCloser
+			}{rd, wr},
+		},
 		maxPacket: 1 << 15,
 		inflight:  make(map[uint32]chan<- result),
 	}
@@ -82,8 +86,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 //
 // Client implements the github.com/kr/fs.FileSystem interface.
 type Client struct {
-	w io.WriteCloser
-	r io.Reader
+	conn
 
 	maxPacket int // max packet size read or written.
 	nextid    uint32
@@ -96,7 +99,7 @@ type Client struct {
 
 // Close closes the SFTP session.
 func (c *Client) Close() error {
-	err := c.w.Close()
+	err := c.conn.Close()
 	c.wg.Wait()
 	return err
 }
@@ -111,7 +114,7 @@ func (c *Client) Create(path string) (*File, error) {
 const sftpProtocolVersion = 3 // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 
 func (c *Client) sendInit() error {
-	return sendPacket(c.w, sshFxInitPacket{
+	return c.sendPacket(sshFxInitPacket{
 		Version: sftpProtocolVersion, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 	})
 }
@@ -122,7 +125,7 @@ func (c *Client) nextID() uint32 {
 }
 
 func (c *Client) recvVersion() error {
-	typ, data, err := recvPacket(c.r)
+	typ, data, err := c.recvPacket()
 	if err != nil {
 		return err
 	}
@@ -156,7 +159,7 @@ func (c *Client) broadcastErr(err error) {
 func (c *Client) recv() {
 	defer c.wg.Done()
 	for {
-		typ, data, err := recvPacket(c.r)
+		typ, data, err := c.recvPacket()
 		if err != nil {
 			// Return the error to all listeners.
 			c.broadcastErr(err)
@@ -666,7 +669,7 @@ func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
 func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.mu.Lock()
 	c.inflight[p.id()] = ch
-	if err := sendPacket(c.w, p); err != nil {
+	if err := c.sendPacket(p); err != nil {
 		delete(c.inflight, p.id())
 		ch <- result{err: err}
 	}

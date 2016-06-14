@@ -26,8 +26,7 @@ const (
 // This implementation currently supports most of sftp server protocol version 3,
 // as specified at http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 type Server struct {
-	rwc           io.ReadWriteCloser
-	outMutex      sync.Mutex
+	conn
 	debugStream   io.Writer
 	readOnly      bool
 	pktChan       chan rxPacket
@@ -77,7 +76,9 @@ type serverRespondablePacket interface {
 // A subsequent call to Serve() is required to begin serving files over SFTP.
 func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error) {
 	s := &Server{
-		rwc:         rwc,
+		conn: conn{
+			ReadWriteCloser: rwc,
+		},
 		debugStream: ioutil.Discard,
 		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
 		openFiles:   make(map[string]*os.File),
@@ -213,7 +214,7 @@ func (svr *Server) Serve() error {
 		go func() {
 			defer wg.Done()
 			if err := svr.sftpServerWorker(); err != nil {
-				svr.rwc.Close() // shuts down recvPacket
+				svr.conn.Close() // shuts down recvPacket
 			}
 		}()
 	}
@@ -222,7 +223,7 @@ func (svr *Server) Serve() error {
 	for {
 		var pktType uint8
 		var pktBytes []byte
-		pktType, pktBytes, err = recvPacket(svr.rwc)
+		pktType, pktBytes, err = svr.recvPacket()
 		if err != nil {
 			break
 		}
@@ -238,13 +239,6 @@ func (svr *Server) Serve() error {
 		file.Close()
 	}
 	return err // error from recvPacket
-}
-
-func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
-	// any responder can call sendPacket(); actual socket access must be serialized
-	svr.outMutex.Lock()
-	defer svr.outMutex.Unlock()
-	return sendPacket(svr.rwc, m)
 }
 
 type id interface {
