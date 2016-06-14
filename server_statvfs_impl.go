@@ -12,12 +12,12 @@ import (
 func (p sshFxpExtendedPacketStatVFS) respond(svr *Server) error {
 	stat := &syscall.Statfs_t{}
 	if err := syscall.Statfs(p.Path, stat); err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.sendPacket(statusFromError(p, err))
 	}
 
 	retPkt, err := statvfsFromStatfst(stat)
 	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
+		return svr.sendPacket(statusFromError(p, err))
 	}
 	retPkt.ID = p.ID
 
