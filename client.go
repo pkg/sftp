@@ -88,10 +88,10 @@ type Client struct {
 	maxPacket int // max packet size read or written.
 	nextid    uint32
 
-	mu       sync.Mutex               // ensures only on request is in flight to the server at once
-	inflight map[uint32]chan<- result // outstanding requests
-
 	wg sync.WaitGroup
+
+	mu       sync.Mutex               // protects following fields
+	inflight map[uint32]chan<- result // outstanding requests
 }
 
 // Close closes the SFTP session.

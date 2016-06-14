@@ -256,10 +256,7 @@ func unmarshalIDString(b []byte, id *uint32, str *string) error {
 		return err
 	}
 	*str, b, err = unmarshalStringSafe(b)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 type sshFxpReaddirPacket struct {
@@ -838,12 +835,10 @@ func (p *StatVFS) FreeSpace() uint64 {
 
 // Convert to ssh_FXP_EXTENDED_REPLY packet binary format
 func (p *StatVFS) MarshalBinary() ([]byte, error) {
-	buf := &bytes.Buffer{}
+	var buf bytes.Buffer
 	buf.Write([]byte{ssh_FXP_EXTENDED_REPLY})
-	if err := binary.Write(buf, binary.BigEndian, p); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	err := binary.Write(&buf, binary.BigEndian, p)
+	return buf.Bytes(), err
 }
 
 type sshFxpExtendedPacket struct {
