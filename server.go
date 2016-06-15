@@ -216,7 +216,7 @@ func handlePacket(s *Server, p interface{}) error {
 		// stat the requested file
 		info, err := os.Stat(p.Path)
 		if err != nil {
-			return s.sendPacket(statusFromError(p, err))
+			return s.sendError(p, err)
 		}
 		return s.sendPacket(sshFxpStatResponse{
 			ID:   p.ID,
@@ -226,7 +226,7 @@ func handlePacket(s *Server, p interface{}) error {
 		// stat the requested file
 		info, err := os.Lstat(p.Path)
 		if err != nil {
-			return s.sendPacket(statusFromError(p, err))
+			return s.sendError(p, err)
 		}
 		return s.sendPacket(sshFxpStatResponse{
 			ID:   p.ID,
@@ -235,12 +235,12 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
 		if !ok {
-			return s.sendPacket(statusFromError(p, syscall.EBADF))
+			return s.sendError(p, syscall.EBADF)
 		}
 
 		info, err := f.Stat()
 		if err != nil {
-			return s.sendPacket(statusFromError(p, err))
+			return s.sendError(p, err)
 		}
 
 		return s.sendPacket(sshFxpStatResponse{
@@ -250,25 +250,25 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxpMkdirPacket:
 		// TODO FIXME: ignore flags field
 		err := os.Mkdir(p.Path, 0755)
-		return s.sendPacket(statusFromError(p, err))
+		return s.sendError(p, err)
 	case *sshFxpRmdirPacket:
 		err := os.Remove(p.Path)
-		return s.sendPacket(statusFromError(p, err))
+		return s.sendError(p, err)
 	case *sshFxpRemovePacket:
 		err := os.Remove(p.Filename)
-		return s.sendPacket(statusFromError(p, err))
+		return s.sendError(p, err)
 	case *sshFxpRenamePacket:
 		err := os.Rename(p.Oldpath, p.Newpath)
-		return s.sendPacket(statusFromError(p, err))
+		return s.sendError(p, err)
 	case *sshFxpSymlinkPacket:
 		err := os.Symlink(p.Targetpath, p.Linkpath)
-		return s.sendPacket(statusFromError(p, err))
+		return s.sendError(p, err)
 	case *sshFxpClosePacket:
-		return s.sendPacket(statusFromError(p, s.closeHandle(p.Handle)))
+		return s.sendError(p, s.closeHandle(p.Handle))
 	case *sshFxpReadlinkPacket:
 		f, err := os.Readlink(p.Path)
 		if err != nil {
-			return s.sendPacket(statusFromError(p, err))
+			return s.sendError(p, err)
 		}
 
 		return s.sendPacket(sshFxpNamePacket{
@@ -283,7 +283,7 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxpRealpathPacket:
 		f, err := filepath.Abs(p.Path)
 		if err != nil {
-			return s.sendPacket(statusFromError(p, err))
+			return s.sendError(p, err)
 		}
 		f = filepath.Clean(f)
 		return s.sendPacket(sshFxpNamePacket{
@@ -301,10 +301,8 @@ func handlePacket(s *Server, p interface{}) error {
 			Pflags: ssh_FXF_READ,
 		}.respond(s)
 	case serverRespondablePacket:
-		if err := p.respond(s); err != nil {
-			return errors.Wrap(err, "pkt.respond failed")
-		}
-		return nil
+		err := p.respond(s)
+		return errors.Wrap(err, "pkt.respond failed")
 	default:
 		return errors.Errorf("unexpected packet type %T", p)
 	}
