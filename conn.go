@@ -31,7 +31,6 @@ type clientConn struct {
 	wg         sync.WaitGroup
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
-
 }
 
 // Close closes the SFTP session.
@@ -112,4 +111,12 @@ func (c *clientConn) broadcastErr(err error) {
 	for _, ch := range listeners {
 		ch <- result{err: err}
 	}
+}
+
+type serverConn struct {
+	conn
+}
+
+func (s *serverConn) sendError(p id, err error) error {
+	return s.sendPacket(statusFromError(p, err))
 }
