@@ -54,14 +54,16 @@ func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 // the system's ssh client program (e.g. via exec.Command).
 func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error) (*Client, error) {
 	sftp := &Client{
-		conn: conn{
-			ReadWriteCloser: struct {
-				io.Reader
-				io.WriteCloser
-			}{rd, wr},
+		clientConn: clientConn{
+			conn: conn{
+				ReadWriteCloser: struct {
+					io.Reader
+					io.WriteCloser
+				}{rd, wr},
+			},
+			inflight: make(map[uint32]chan<- result),
 		},
 		maxPacket: 1 << 15,
-		inflight:  make(map[uint32]chan<- result),
 	}
 	if err := sftp.applyOptions(opts...); err != nil {
 		wr.Close()
@@ -76,7 +78,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		return nil, err
 	}
 	sftp.wg.Add(1)
-	go sftp.loop()
+	go sftp.loop(&sftp.wg)
 	return sftp, nil
 }
 
@@ -86,20 +88,17 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 //
 // Client implements the github.com/kr/fs.FileSystem interface.
 type Client struct {
-	conn
+	clientConn
 
 	maxPacket int // max packet size read or written.
 	nextid    uint32
 
 	wg sync.WaitGroup
-
-	mu       sync.Mutex               // protects following fields
-	inflight map[uint32]chan<- result // outstanding requests
 }
 
 // Close closes the SFTP session.
 func (c *Client) Close() error {
-	err := c.conn.Close()
+	err := c.clientConn.Close()
 	c.wg.Wait()
 	return err
 }
@@ -139,50 +138,6 @@ func (c *Client) recvVersion() error {
 	}
 
 	return nil
-}
-
-// broadcastErr sends an error to all goroutines waiting for a response.
-func (c *Client) broadcastErr(err error) {
-	c.mu.Lock()
-	listeners := make([]chan<- result, 0, len(c.inflight))
-	for _, ch := range c.inflight {
-		listeners = append(listeners, ch)
-	}
-	c.mu.Unlock()
-	for _, ch := range listeners {
-		ch <- result{err: err}
-	}
-}
-
-func (c *Client) loop() {
-	defer c.wg.Done()
-	err := c.recv()
-	if err != nil {
-		c.broadcastErr(err)
-	}
-}
-
-// recv continuously reads from the server and forwards responses to the
-// appropriate channel.
-func (c *Client) recv() error {
-	for {
-		typ, data, err := c.recvPacket()
-		if err != nil {
-			return err
-		}
-		sid, _ := unmarshalUint32(data)
-		c.mu.Lock()
-		ch, ok := c.inflight[sid]
-		delete(c.inflight, sid)
-		c.mu.Unlock()
-		if !ok {
-			// This is an unexpected occurrence. Send the error
-			// back to all listeners so that they terminate
-			// gracefully.
-			return errors.Errorf("sid: %v not fond", sid)
-		}
-		ch <- result{typ: typ, data: data}
-	}
 }
 
 // Walk returns a new Walker rooted at root.
@@ -668,16 +623,6 @@ func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
 	c.dispatchRequest(ch, p)
 	s := <-ch
 	return s.typ, s.data, s.err
-}
-
-func (c *Client) dispatchRequest(ch chan<- result, p idmarshaler) {
-	c.mu.Lock()
-	c.inflight[p.id()] = ch
-	if err := c.sendPacket(p); err != nil {
-		delete(c.inflight, p.id())
-		ch <- result{err: err}
-	}
-	c.mu.Unlock()
 }
 
 // Mkdir creates the specified directory. An error will be returned if a file or
