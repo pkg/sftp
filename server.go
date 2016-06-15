@@ -26,7 +26,7 @@ const (
 // This implementation currently supports most of sftp server protocol version 3,
 // as specified at http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 type Server struct {
-	conn
+	serverConn
 	debugStream   io.Writer
 	readOnly      bool
 	pktChan       chan rxPacket
@@ -76,9 +76,11 @@ type serverRespondablePacket interface {
 // A subsequent call to Serve() is required to begin serving files over SFTP.
 func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error) {
 	s := &Server{
-		conn: conn{
-			Reader:      rwc,
-			WriteCloser: rwc,
+		serverConn: serverConn{
+			conn: conn{
+				Reader:      rwc,
+				WriteCloser: rwc,
+			},
 		},
 		debugStream: ioutil.Discard,
 		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
@@ -346,10 +348,6 @@ func (svr *Server) Serve() error {
 
 type id interface {
 	id() uint32
-}
-
-func (s *Server) sendError(p id, err error) error {
-	return s.sendPacket(statusFromError(p, err))
 }
 
 // The init packet has no ID, so we just return a zero-value ID
