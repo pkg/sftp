@@ -2,12 +2,10 @@ package sftp
 
 import (
 	"bytes"
-	"encoding"
 	"encoding/binary"
 	"io"
 	"os"
 	"path"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -92,8 +90,6 @@ type Client struct {
 
 	maxPacket int // max packet size read or written.
 	nextid    uint32
-
-	wg sync.WaitGroup
 }
 
 // Create creates the named file mode 0666 (before umask), truncating it if
@@ -597,25 +593,6 @@ func (c *Client) realpath(path string) (string, error) {
 // involving relative paths will be based at this location.
 func (c *Client) Getwd() (string, error) {
 	return c.realpath(".")
-}
-
-// result captures the result of receiving the a packet from the server
-type result struct {
-	typ  byte
-	data []byte
-	err  error
-}
-
-type idmarshaler interface {
-	id() uint32
-	encoding.BinaryMarshaler
-}
-
-func (c *Client) sendRequest(p idmarshaler) (byte, []byte, error) {
-	ch := make(chan result, 1)
-	c.dispatchRequest(ch, p)
-	s := <-ch
-	return s.typ, s.data, s.err
 }
 
 // Mkdir creates the specified directory. An error will be returned if a file or

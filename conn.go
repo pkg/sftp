@@ -71,6 +71,25 @@ func (c *clientConn) recv() error {
 	}
 }
 
+// result captures the result of receiving the a packet from the server
+type result struct {
+	typ  byte
+	data []byte
+	err  error
+}
+
+type idmarshaler interface {
+	id() uint32
+	encoding.BinaryMarshaler
+}
+
+func (c *clientConn) sendRequest(p idmarshaler) (byte, []byte, error) {
+	ch := make(chan result, 1)
+	c.dispatchRequest(ch, p)
+	s := <-ch
+	return s.typ, s.data, s.err
+}
+
 func (c *clientConn) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.Lock()
 	c.inflight[p.id()] = ch
