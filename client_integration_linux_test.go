@@ -39,8 +39,4 @@ func TestClientStatVFS(t *testing.T) {
 	if vfs.Namemax != uint64(s.Namelen) {
 		t.Fatal("f_namemax does not match, expected: %v, got: %v", s.Namelen, vfs.Namemax)
 	}
-
-	if vfs.Bavail != s.Bavail {
-		t.Fatal("f_bavail does not match, expeced: %v, got: %v", s.Bavail, vfs.Bavail)
-	}
 }
