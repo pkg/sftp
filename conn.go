@@ -83,7 +83,7 @@ type idmarshaler interface {
 	encoding.BinaryMarshaler
 }
 
-func (c *clientConn) sendRequest(p idmarshaler) (byte, []byte, error) {
+func (c *clientConn) sendPacket(p idmarshaler) (byte, []byte, error) {
 	ch := make(chan result, 1)
 	c.dispatchRequest(ch, p)
 	s := <-ch
@@ -93,7 +93,7 @@ func (c *clientConn) sendRequest(p idmarshaler) (byte, []byte, error) {
 func (c *clientConn) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.Lock()
 	c.inflight[p.id()] = ch
-	if err := c.sendPacket(p); err != nil {
+	if err := c.conn.sendPacket(p); err != nil {
 		delete(c.inflight, p.id())
 		ch <- result{err: err}
 	}
