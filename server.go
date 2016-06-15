@@ -77,7 +77,8 @@ type serverRespondablePacket interface {
 func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error) {
 	s := &Server{
 		conn: conn{
-			ReadWriteCloser: rwc,
+			Reader:      rwc,
+			WriteCloser: rwc,
 		},
 		debugStream: ioutil.Discard,
 		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
