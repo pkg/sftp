@@ -15,12 +15,7 @@ func clientServerPair(t *testing.T) (*Client, *Server) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		err := server.Serve()
-		if err != nil {
-			t.Errorf("%+v\n", err)
-		}
-	}()
+	go server.Serve()
 	client, err := NewClientPipe(cr, cw)
 	if err != nil {
 		t.Fatalf("%+v\n", err)
