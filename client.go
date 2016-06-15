@@ -77,8 +77,8 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		wr.Close()
 		return nil, err
 	}
-	sftp.wg.Add(1)
-	go sftp.loop(&sftp.wg)
+	sftp.clientConn.wg.Add(1)
+	go sftp.loop()
 	return sftp, nil
 }
 
@@ -94,13 +94,6 @@ type Client struct {
 	nextid    uint32
 
 	wg sync.WaitGroup
-}
-
-// Close closes the SFTP session.
-func (c *Client) Close() error {
-	err := c.clientConn.Close()
-	c.wg.Wait()
-	return err
 }
 
 // Create creates the named file mode 0666 (before umask), truncating it if

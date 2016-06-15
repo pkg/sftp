@@ -27,13 +27,21 @@ func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
 
 type clientConn struct {
 	conn
+	wg         sync.WaitGroup
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
 
 }
 
-func (c *clientConn) loop(wg *sync.WaitGroup) {
-	defer wg.Done()
+// Close closes the SFTP session.
+func (c *clientConn) Close() error {
+	err := c.conn.Close()
+	c.wg.Wait()
+	return err
+}
+
+func (c *clientConn) loop() {
+	defer c.wg.Done()
 	err := c.recv()
 	if err != nil {
 		c.broadcastErr(err)
