@@ -302,6 +302,30 @@ func handlePacket(s *Server, p interface{}) error {
 			Path:   p.Path,
 			Pflags: ssh_FXF_READ,
 		}.respond(s)
+	case *sshFxpReadPacket:
+		f, ok := s.getHandle(p.Handle)
+		if !ok {
+			return s.sendError(p, syscall.EBADF)
+		}
+
+		data := make([]byte, clamp(p.Len, s.maxTxPacket))
+		n, err := f.ReadAt(data, int64(p.Offset))
+		if err != nil && (err != io.EOF || n == 0) {
+			return s.sendError(p, err)
+		}
+		return s.sendPacket(sshFxpDataPacket{
+			ID:     p.ID,
+			Length: uint32(n),
+			Data:   data[:n],
+		})
+	case *sshFxpWritePacket:
+		f, ok := s.getHandle(p.Handle)
+		if !ok {
+			return s.sendError(p, syscall.EBADF)
+		}
+
+		_, err := f.WriteAt(p.Data, int64(p.Offset))
+		return s.sendError(p, err)
 	case serverRespondablePacket:
 		err := p.respond(s)
 		return errors.Wrap(err, "pkt.respond failed")
@@ -413,40 +437,6 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 
 	handle := svr.nextHandle(f)
 	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
-}
-
-func (p sshFxpReadPacket) respond(svr *Server) error {
-	f, ok := svr.getHandle(p.Handle)
-	if !ok {
-		return svr.sendError(p, syscall.EBADF)
-	}
-
-	if p.Len > svr.maxTxPacket {
-		p.Len = svr.maxTxPacket
-	}
-	ret := sshFxpDataPacket{
-		ID:     p.ID,
-		Length: p.Len,
-		Data:   make([]byte, p.Len),
-	}
-
-	n, err := f.ReadAt(ret.Data, int64(p.Offset))
-	if err != nil && (err != io.EOF || n == 0) {
-		return svr.sendError(p, err)
-	}
-
-	ret.Length = uint32(n)
-	return svr.sendPacket(ret)
-}
-
-func (p sshFxpWritePacket) respond(svr *Server) error {
-	f, ok := svr.getHandle(p.Handle)
-	if !ok {
-		return svr.sendError(p, syscall.EBADF)
-	}
-
-	_, err := f.WriteAt(p.Data, int64(p.Offset))
-	return svr.sendError(p, err)
 }
 
 func (p sshFxpReaddirPacket) respond(svr *Server) error {
@@ -607,4 +597,11 @@ func statusFromError(p id, err error) sshFxpStatusPacket {
 		}
 	}
 	return ret
+}
+
+func clamp(v, max uint32) uint32 {
+	if v > max {
+		return max
+	}
+	return v
 }
