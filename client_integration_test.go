@@ -1161,10 +1161,6 @@ func TestClientWrite(t *testing.T) {
 
 // taken from github.com/kr/fs/walk_test.go
 
-type PathTest struct {
-	path, result string
-}
-
 type Node struct {
 	name    string
 	entries []*Node // nil if the entry is a file

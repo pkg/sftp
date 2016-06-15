@@ -30,7 +30,6 @@ type Server struct {
 	outMutex      sync.Mutex
 	debugStream   io.Writer
 	readOnly      bool
-	lastID        uint32
 	pktChan       chan rxPacket
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex

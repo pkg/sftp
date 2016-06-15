@@ -1,11 +1,6 @@
 package sftp
 
-import (
-	"errors"
-	"testing"
-)
-
-var errClientRecvFinished = errors.New("client recv finished")
+import "testing"
 
 func clientServerPair(t *testing.T) (*Client, *Server) {
 	c, s := netPipe(t)
