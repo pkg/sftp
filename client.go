@@ -76,7 +76,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 		return nil, err
 	}
 	sftp.wg.Add(1)
-	go sftp.recv()
+	go sftp.loop()
 	return sftp, nil
 }
 
@@ -154,16 +154,21 @@ func (c *Client) broadcastErr(err error) {
 	}
 }
 
+func (c *Client) loop() {
+	defer c.wg.Done()
+	err := c.recv()
+	if err != nil {
+		c.broadcastErr(err)
+	}
+}
+
 // recv continuously reads from the server and forwards responses to the
 // appropriate channel.
-func (c *Client) recv() {
-	defer c.wg.Done()
+func (c *Client) recv() error {
 	for {
 		typ, data, err := c.recvPacket()
 		if err != nil {
-			// Return the error to all listeners.
-			c.broadcastErr(err)
-			return
+			return err
 		}
 		sid, _ := unmarshalUint32(data)
 		c.mu.Lock()
@@ -174,8 +179,7 @@ func (c *Client) recv() {
 			// This is an unexpected occurrence. Send the error
 			// back to all listeners so that they terminate
 			// gracefully.
-			c.broadcastErr(errors.Errorf("sid: %v not fond", sid))
-			return
+			return errors.Errorf("sid: %v not fond", sid)
 		}
 		ch <- result{typ: typ, data: data}
 	}
