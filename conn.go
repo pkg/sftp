@@ -11,7 +11,8 @@ import (
 // conn implements a bidirectional channel on which client and server
 // connections are multiplexed.
 type conn struct {
-	io.ReadWriteCloser
+	io.Reader
+	io.WriteCloser
 	sync.Mutex // used to serialise writes to sendPacket
 }
 

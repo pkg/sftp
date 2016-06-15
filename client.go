@@ -54,10 +54,8 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error)
 	sftp := &Client{
 		clientConn: clientConn{
 			conn: conn{
-				ReadWriteCloser: struct {
-					io.Reader
-					io.WriteCloser
-				}{rd, wr},
+				Reader:      rd,
+				WriteCloser: wr,
 			},
 			inflight: make(map[uint32]chan<- result),
 		},
