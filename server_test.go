@@ -1,17 +1,29 @@
 package sftp
 
-import "testing"
+import (
+	"io"
+	"testing"
+)
 
 func clientServerPair(t *testing.T) (*Client, *Server) {
-	c, s := netPipe(t)
-	server, err := NewServer(s)
+	cr, sw := io.Pipe()
+	sr, cw := io.Pipe()
+	server, err := NewServer(struct {
+		io.Reader
+		io.WriteCloser
+	}{sr, sw})
 	if err != nil {
 		t.Fatal(err)
 	}
-	go server.Serve()
-	client, err := NewClientPipe(c, c)
+	go func() {
+		err := server.Serve()
+		if err != nil {
+			t.Errorf("%+v\n", err)
+		}
+	}()
+	client, err := NewClientPipe(cr, cw)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v\n", err)
 	}
 	return client, server
 }
@@ -46,4 +58,12 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from bad packet")
 	}
+
+	// try to stat a file; the client should have shut down.
+	filePath := "/etc/passwd"
+	_, err = client.Stat(filePath)
+	if err == nil {
+		t.Fatal("expected error from closed connection")
+	}
+
 }

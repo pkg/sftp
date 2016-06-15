@@ -118,7 +118,7 @@ func unmarshalStringSafe(b []byte) (string, []byte, error) {
 func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	bb, err := m.MarshalBinary()
 	if err != nil {
-		return errors.Wrap(err, "binary marshaller failed")
+		return errors.Errorf("binary marshaller failed: %v", err)
 	}
 	if debugDumpTxPacketBytes {
 		debug("send packet: %s %d bytes %x", fxp(bb[0]), len(bb), bb[1:])
@@ -129,10 +129,13 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
 	_, err = w.Write(hdr)
 	if err != nil {
-		return err
+		return errors.Errorf("failed to send packet header: %v", err)
 	}
 	_, err = w.Write(bb)
-	return err
+	if err != nil {
+		return errors.Errorf("failed to send packet body: %v", err)
+	}
+	return nil
 }
 
 func recvPacket(r io.Reader) (uint8, []byte, error) {

@@ -220,9 +220,9 @@ func (svr *Server) Serve() error {
 	}
 
 	var err error
+	var pktType uint8
+	var pktBytes []byte
 	for {
-		var pktType uint8
-		var pktBytes []byte
 		pktType, pktBytes, err = svr.recvPacket()
 		if err != nil {
 			break

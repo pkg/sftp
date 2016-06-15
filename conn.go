@@ -35,9 +35,8 @@ type clientConn struct {
 
 // Close closes the SFTP session.
 func (c *clientConn) Close() error {
-	err := c.conn.Close()
-	c.wg.Wait()
-	return err
+	defer c.wg.Wait()
+	return c.conn.Close()
 }
 
 func (c *clientConn) loop() {
@@ -51,6 +50,7 @@ func (c *clientConn) loop() {
 // recv continuously reads from the server and forwards responses to the
 // appropriate channel.
 func (c *clientConn) recv() error {
+	defer c.conn.Close()
 	for {
 		typ, data, err := c.recvPacket()
 		if err != nil {
