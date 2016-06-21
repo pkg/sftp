@@ -499,93 +499,28 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 }
 
 func (p sshFxpSetstatPacket) respond(svr *Server) error {
-	// additional unmarshalling is required for each possibility here
-	b := p.Attrs.([]byte)
-	var err error
-
 	debug("setstat name \"%s\"", p.Path)
 	if (p.Flags & ssh_FILEXFER_ATTR_SIZE) != 0 {
-		var size uint64
-		if size, b, err = unmarshalUint64Safe(b); err == nil {
-			err = os.Truncate(p.Path, int64(size))
-		}
+		return svr.sendError(p, syscall.ENOSYS)
 	}
-	if (p.Flags & ssh_FILEXFER_ATTR_PERMISSIONS) != 0 {
-		var mode uint32
-		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = os.Chmod(p.Path, os.FileMode(mode))
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_ACMODTIME) != 0 {
-		var atime uint32
-		var mtime uint32
-		if atime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if mtime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			atimeT := time.Unix(int64(atime), 0)
-			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(p.Path, atimeT, mtimeT)
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
-		var uid uint32
-		var gid uint32
-		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			err = os.Chown(p.Path, int(uid), int(gid))
-		}
-	}
+	// Silently ignore other actions
 
-	return svr.sendError(p, err)
+	return svr.sendError(p, nil)
 }
 
 func (p sshFxpFsetstatPacket) respond(svr *Server) error {
-	panic("Not implemented!")
-	/*f, ok := svr.getHandle(p.Handle)
-	if !ok {
+	f, ok := svr.getHandle(p.Handle)
+	if !ok || f.IsDir {
 		return svr.sendError(p, syscall.EBADF)
 	}
 
-	// additional unmarshalling is required for each possibility here
-	b := p.Attrs.([]byte)
-	var err error
-
-	debug("fsetstat name \"%s\"", f.Name())
+	debug("fsetstat name \"%s\"", f.Path)
 	if (p.Flags & ssh_FILEXFER_ATTR_SIZE) != 0 {
-		var size uint64
-		if size, b, err = unmarshalUint64Safe(b); err == nil {
-			err = f.Truncate(int64(size))
-		}
+		return svr.sendError(p, syscall.ENOSYS)
 	}
-	if (p.Flags & ssh_FILEXFER_ATTR_PERMISSIONS) != 0 {
-		var mode uint32
-		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = f.Chmod(os.FileMode(mode))
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_ACMODTIME) != 0 {
-		var atime uint32
-		var mtime uint32
-		if atime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if mtime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			atimeT := time.Unix(int64(atime), 0)
-			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(f.Name(), atimeT, mtimeT)
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
-		var uid uint32
-		var gid uint32
-		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			err = f.Chown(int(uid), int(gid))
-		}
-	}
+	// Silently ignore other actions
 
-	return svr.sendError(p, err)*/
+	return svr.sendError(p, nil)
 }
 
 // translateErrno translates a syscall error number to a SFTP error code.
