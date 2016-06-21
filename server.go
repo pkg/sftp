@@ -99,6 +99,7 @@ func (svr *Server) closeHandle(handle string) error {
 		_ = f
 		// TODO: Implement close operations.
 		//return f.Close()
+		return nil
 	}
 
 	return syscall.EBADF
@@ -264,8 +265,9 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxInitPacket:
 		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 	case *sshFxpStatPacket:
+
 		// stat the requested file
-		info, err := os.Stat(p.Path)
+		info, err := s.driver.Stat(p.Path)
 		if err != nil {
 			return s.sendError(p, err)
 		}
@@ -275,7 +277,7 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 	case *sshFxpLstatPacket:
 		// stat the requested file
-		info, err := os.Lstat(p.Path)
+		info, err := s.driver.Stat(p.Path)
 		if err != nil {
 			return s.sendError(p, err)
 		}
@@ -285,11 +287,11 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
-		if !ok {
+		if !ok || f.IsDir {
 			return s.sendError(p, syscall.EBADF)
 		}
 
-		info, err := f.TempHandle.Stat()
+		info, err := s.driver.Stat(f.Path)
 		if err != nil {
 			return s.sendError(p, err)
 		}
@@ -474,56 +476,26 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 }
 
 func (p sshFxpReaddirPacket) respond(svr *Server) error {
-	/*f, ok := svr.getHandle(p.Handle)
-	if !ok {
+	f, ok := svr.getHandle(p.Handle)
+	if !ok || !f.IsDir {
 		return svr.sendError(p, syscall.EBADF)
 	}
 
-	dirname := f.Name()
-	dirents, err := f.Readdir(128)
+	files, err := svr.driver.ListDir(f.Path)
 	if err != nil {
 		return svr.sendError(p, err)
 	}
 
 	ret := sshFxpNamePacket{ID: p.ID}
-	for _, dirent := range dirents {
-		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
-			Name:     dirent.Name(),
-			LongName: runLs(dirname, dirent),
-			Attrs:    []interface{}{dirent},
-		})
-	}
-	return svr.sendPacket(ret)*/
-	panic("Not implemented.")	
-	/*
-	fmt.Println("Read dir handle", p.Handle)
-	f, ok := svr.getHandle(p.Handle)
-	if !ok {
-		return svr.sendError(p, syscall.EBADF)
-	}
-
-
-	ret := sshFxpNamePacket{ID: p.ID}
-	if f.Position > 0 {
-		return svr.sendPacket(ret)
-	}
-
-	files, err := svr.driver.ListDir(f.Path)
-	if err != nil {
-		return svr.sendPacket(statusFromError(p.ID, err))
-	}
-
-	f.Position = len(files)
-
-	for _, dirent := range files {
+	for _, dirent := range files[f.Position:] {
 		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 			Name:     dirent.Name(),
 			LongName: runLs(f.Path, dirent),
 			Attrs:    []interface{}{dirent},
 		})
 	}
-
-	return svr.sendPacket(ret)*/
+	f.Position = len(files[f.Position:])
+	return svr.sendPacket(ret)
 }
 
 func (p sshFxpSetstatPacket) respond(svr *Server) error {
