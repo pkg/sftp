@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/pkg/errors"
 )
@@ -22,41 +21,14 @@ const (
 )
 
 type ServerDriver interface {
-	// params  - a file path
-	// returns - a time indicating when the requested path was last modified
-	//         - an error if the file doesn't exist or the user lacks
-	//           permissions
-	Stat(string) (os.FileInfo, error)
-
-	// params  - path, function on file or subdir found
-	// returns - error
-	//           path
-	// ListDir(string, func(FileInfo) error) error
-	ListDir(string) ([]os.FileInfo, error)
-
-	// params  - path
-	// returns - true if the directory was deleted
-	DeleteDir(string) error
-
-	// params  - path
-	// returns - true if the file was deleted
-	DeleteFile(string) error
-
-	// params  - from_path, to_path
-	// returns - true if the file was renamed
-	Rename(string, string) error
-
-	// params  - path
-	// returns - true if the new directory was created
-	MakeDir(string) error
-
-	// params  - path
-	// returns - a string containing the file data to send to the client
-	GetFile(string) (io.ReadCloser, error)
-
-	// params  - desination path, an io.Reader containing the file data
-	// returns - true if the data was successfully persisted
-	PutFile(string, io.Reader, bool) (int64, error)
+	Stat(path string) (os.FileInfo, error)
+	ListDir(path string) ([]os.FileInfo, error)
+	DeleteDir(path string) error
+	DeleteFile(path string) error
+	Rename(oldPath string, newPath string) error
+	MakeDir(path string) error
+	GetFile(path string) (io.ReadCloser, error)
+	PutFile(path string, reader io.Reader) (error)
 }
 
 // Server is an SSH File Transfer Protocol (sftp) server.
@@ -76,9 +48,9 @@ type Server struct {
 }
 
 type fileHandle struct {
-	Path        string
-	IsDir       bool
-	Position    int
+	Path       string
+	IsDir      bool
+	Position   int
 	TempHandle *os.File
 }
 
@@ -96,10 +68,19 @@ func (svr *Server) closeHandle(handle string) error {
 	defer svr.openFilesLock.Unlock()
 	if f, ok := svr.openFiles[handle]; ok {
 		delete(svr.openFiles, handle)
-		_ = f
-		// TODO: Implement close operations.
-		//return f.Close()
-		return nil
+		if (f.IsDir) {
+			return nil
+		}
+
+		defer func() {
+			tmpName := f.TempHandle.Name()
+			f.TempHandle.Close()
+			os.Remove(tmpName)
+		}()
+		if _, err := f.TempHandle.Seek(0, 0); err != nil {
+			return err
+		}
+		return svr.driver.PutFile(f.Path, f.TempHandle)
 	}
 
 	return syscall.EBADF
@@ -439,40 +420,46 @@ func (p sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
 }
 
 func (p sshFxpOpenPacket) respond(svr *Server) error {
-	var osFlags int
-	if p.hasPflags(ssh_FXF_READ, ssh_FXF_WRITE) {
-		osFlags |= os.O_RDWR
-	} else if p.hasPflags(ssh_FXF_WRITE) {
-		osFlags |= os.O_WRONLY
-	} else if p.hasPflags(ssh_FXF_READ) {
-		osFlags |= os.O_RDONLY
-	} else {
-		// how are they opening?
+	if !p.hasPflags(ssh_FXF_READ) && !p.hasPflags(ssh_FXF_WRITE) {
 		return svr.sendError(p, syscall.EINVAL)
 	}
 
-	if p.hasPflags(ssh_FXF_APPEND) {
-		osFlags |= os.O_APPEND
-	}
-	if p.hasPflags(ssh_FXF_CREAT) {
-		osFlags |= os.O_CREATE
-	}
-	if p.hasPflags(ssh_FXF_TRUNC) {
-		osFlags |= os.O_TRUNC
-	}
-	if p.hasPflags(ssh_FXF_EXCL) {
-		osFlags |= os.O_EXCL
-	}
-
-	f, err := os.OpenFile(p.Path, osFlags, 0644)
+	tmpfile, err := ioutil.TempFile("", "sftp")
 	if err != nil {
 		return svr.sendError(p, err)
 	}
-	_ = f
 
-	panic("Not implemented.")
-	//handle := svr.nextHandle(f)
-	//return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
+	if p.hasPflags(ssh_FXF_CREAT) {
+		if p.hasPflags(ssh_FXF_EXCL) {
+			_, err := svr.driver.Stat(p.Path)
+			if err == nil {
+				return svr.sendError(p, syscall.EEXIST)
+			}
+		}
+	}
+
+	if !(p.hasPflags(ssh_FXF_CREAT) && p.hasPflags(ssh_FXF_TRUNC)) {
+		fileReader, err := svr.driver.GetFile(p.Path)
+		if err != nil {
+			// TODO: Check if the error was actually 'file not found'
+			if !p.hasPflags(ssh_FXF_CREAT) {
+				return svr.sendError(p, err)
+			}
+		} else {
+			reader := io.TeeReader(fileReader, tmpfile)
+			ioutil.ReadAll(reader)
+			fileReader.Close()
+			tmpfile.Seek(0, 0)
+		}
+	}
+
+	handle := svr.nextHandle(&fileHandle{
+		Path:        p.Path,
+		IsDir:       false,
+		Position:    0,
+		TempHandle:  tmpfile,
+	})
+	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
 }
 
 func (p sshFxpReaddirPacket) respond(svr *Server) error {
@@ -532,6 +519,8 @@ func translateErrno(errno syscall.Errno) uint32 {
 		return ssh_FX_NO_SUCH_FILE
 	case syscall.EPERM:
 		return ssh_FX_PERMISSION_DENIED
+	case syscall.ENOSYS:
+		return ssh_FX_OP_UNSUPPORTED
 	}
 
 	return ssh_FX_FAILURE
