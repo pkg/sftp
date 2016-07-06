@@ -128,7 +128,7 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 		options = append(options, ReadOnly())
 	}
 
-	server, err := NewServer(c1, options...)
+	server, err := NewServer(c1, nil, options...)
 	if err != nil {
 		t.Fatal(err)
 	}

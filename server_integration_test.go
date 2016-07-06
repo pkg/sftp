@@ -296,6 +296,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 
 	sftpServer, err := NewServer(
 		chsvr.ch,
+		nil,
 		WithDebug(sftpServerDebugStream),
 	)
 	if err != nil {
