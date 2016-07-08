@@ -31,18 +31,12 @@ var maxTxPacket uint32 = 1 << 15
 
 type handleHandler func(string) string
 
-// XXX this or request.Handle???
 type Handlers struct {
-	Get     io.Reader
-	Put     io.Writer
-	FileCmd FileCmder
-	Rename  Renamer
-	ReadDir ReadDirer
-	Stat    Stater
-	SetStat SetStater
+	FileGet  FileReader
+	FilePut  FileWriter
+	FileCmd  FileCmder
+	FileInfo FileInfoer
 }
-
-/// XXX plus handlers in server struct below
 
 // Server that abstracts the sftp protocol for a http request-like protocol
 type RequestServer struct {
