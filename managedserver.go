@@ -24,8 +24,8 @@ func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver) *ManagedS
 	}
 }
 
-func (m ManagedServer) Start() {
-	fmt.Println("Suddenly, sftp!")
+func (m ManagedServer) Start(port int) {
+	fmt.Println("Starting SFTP server...")
 
 	privateBytes, err := ioutil.ReadFile("id_rsa")
 	if err != nil {
@@ -37,7 +37,7 @@ func (m ManagedServer) Start() {
 		log.Fatal("Failed to parse private key", err)
 	}
 
-	listener, err := net.Listen("tcp", "0.0.0.0:5022")
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
 		log.Fatal("failed to listen for connection", err)
 	}
@@ -86,7 +86,7 @@ func (m ManagedServer) Start() {
 				if err != nil {
 					fmt.Println("could not accept channel", err)
 				}
-				fmt.Println("Channel accepted!")
+				fmt.Println("Channel accepted.")
 
 				go func(in <-chan *ssh.Request) {
 					for req := range in {

@@ -3,7 +3,9 @@ sftp
 
 The `sftp` package provides support for file system operations on remote ssh servers using the SFTP subsystem.
 
-[![UNIX Build Status](https://travis-ci.org/pkg/sftp.svg?branch=master)](https://travis-ci.org/pkg/sftp) [![GoDoc](http://godoc.org/github.com/pkg/sftp?status.svg)](http://godoc.org/github.com/pkg/sftp)
+This is a fork of [github.com/pkg/sftp](http://github.com/pkg/sftp) that changes the server to allow for a plugable backend and adds an
+S3 and file system backend. The file system backend is mostly used for tests and is similar to the previous behavior. Additionally, this
+adds a ManagedServer component that can be used to easily create a server with an arbitrary backend.
 
 usage and examples
 ------------------

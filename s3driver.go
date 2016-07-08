@@ -23,7 +23,6 @@ type S3 interface {
 }
 
 type S3Driver struct {
-	//s3 *s3.S3
 	s3       S3
 	bucket   string
 	homePath string
