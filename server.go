@@ -300,8 +300,7 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxpReadlinkPacket:
 		return s.sendError(p, fmt.Errorf("Not supported"))
 	case *sshFxpRealpathPacket:
-		// TODO: Fix this.
-		f := filepath.Clean(p.Path)
+		f := filepath.Clean("/" + p.Path)
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{
@@ -477,7 +476,7 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	for _, dirent := range files[f.Position:] {
 		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 			Name:     dirent.Name(),
-			LongName: runLs(f.Path, dirent),
+			LongName: dirent.Name(),
 			Attrs:    []interface{}{dirent},
 		})
 	}

@@ -2,7 +2,6 @@ package sftp
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,8 +14,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
+type S3 interface {
+	ListObjectsV2(input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error)
+	DeleteObject(input *s3.DeleteObjectInput) (*s3.DeleteObjectOutput, error)
+	CopyObject(input *s3.CopyObjectInput) (*s3.CopyObjectOutput, error)
+	PutObject(input *s3.PutObjectInput) (*s3.PutObjectOutput, error)
+	GetObject(input *s3.GetObjectInput) (*s3.GetObjectOutput, error)
+}
+
 type S3Driver struct {
-	s3       *s3.S3
+	//s3 *s3.S3
+	s3       S3
 	bucket   string
 	homePath string
 }
@@ -26,7 +34,7 @@ func (d S3Driver) Stat(path string) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-    
+
 	resp, err := d.s3.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:  aws.String(d.bucket),
 		Prefix:  aws.String(localPath),
@@ -56,7 +64,6 @@ func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	prefix = prefix + "/"
 	objects, err := d.s3.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:    aws.String(d.bucket),
 		Prefix:    aws.String(prefix),
@@ -92,7 +99,7 @@ func (d S3Driver) DeleteDir(path string) error {
 	}
 	_, err = d.s3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(d.bucket),
-		Key: aws.String(translatedPath + "/"),
+		Key:    aws.String(translatedPath),
 	})
 	return err
 }
@@ -104,13 +111,13 @@ func (d S3Driver) DeleteFile(path string) error {
 	}
 	_, err = d.s3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(d.bucket),
-		Key: aws.String(translatedPath),
+		Key:    aws.String(translatedPath),
 	})
 	return err
 }
 
 func (d S3Driver) Rename(oldpath string, newpath string) error {
-    translatedOldpath, err := translatePath(d.homePath, oldpath)
+	translatedOldpath, err := translatePath(d.homePath, oldpath)
 	if err != nil {
 		return err
 	}
@@ -120,16 +127,16 @@ func (d S3Driver) Rename(oldpath string, newpath string) error {
 	}
 
 	if _, err := d.s3.CopyObject(&s3.CopyObjectInput{
-		Bucket: aws.String(d.bucket),
+		Bucket:     aws.String(d.bucket),
 		CopySource: aws.String(d.bucket + "/" + translatedOldpath),
-		Key: &translatedNewpath,
+		Key:        &translatedNewpath,
 	}); err != nil {
 		return err
 	}
 
 	if _, err = d.s3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(d.bucket),
-		Key: &translatedOldpath,
+		Key:    &translatedOldpath,
 	}); err != nil {
 		return err
 	}
@@ -138,15 +145,17 @@ func (d S3Driver) Rename(oldpath string, newpath string) error {
 }
 
 func (d S3Driver) MakeDir(path string) error {
-	
 	localPath, err := translatePath(d.homePath, path)
 	if err != nil {
 		return err
 	}
+	if !strings.HasSuffix(localPath, "/") {
+		localPath += "/"
+	}
 
 	_, err = d.s3.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String(d.bucket),
-		Key:    aws.String(localPath + "/"),
+		Key:    aws.String(localPath),
 		Body:   bytes.NewReader([]byte{}),
 	})
 	return err
@@ -186,14 +195,13 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	return err
 }
 
-func translatePath(prefix, path string) (string, error) {
-	cleanPath := filepath.Clean(prefix + "/" + filepath.Clean(path))
-	cleanPath = strings.Replace(cleanPath, "\\", "/", -1)
-	return cleanPath, nil
-	if !strings.HasPrefix(cleanPath, prefix + "/") {
-		return "", fmt.Errorf("Invalid path")
+func translatePath(prefix, path string) (s3Path string, err error) {
+	cleanPath := filepath.Clean("/" + prefix + filepath.Clean("/"+path))
+	// For some reason, filepath.Clean drops trailing /'s, so if there was one we have to put it back
+	if strings.HasSuffix(path, "/") {
+		cleanPath += "/"
 	}
-	return cleanPath, nil
+	return strings.TrimLeft(cleanPath, "/"), nil
 }
 
 func NewS3Driver(bucket, homePath, region, awsAccessKeyID, awsSecretKey string) *S3Driver {
@@ -202,8 +210,8 @@ func NewS3Driver(bucket, homePath, region, awsAccessKeyID, awsSecretKey string) 
 		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, ""))
 	s3 := s3.New(session.New(), config)
 	return &S3Driver{
-		s3: s3,
-        bucket: bucket,
-        homePath: homePath,
+		s3:       s3,
+		bucket:   bucket,
+		homePath: homePath,
 	}
 }
