@@ -140,7 +140,7 @@ func (rs *RequestServer) packetWorker() error {
 			if err != nil { return err }
 			continue
 		case hasPath:
-			handle = rs.nextRequest(NewRequest(pkt.getPath()))
+			handle = rs.nextRequest(newRequest(pkt.getPath(), rs))
 		case hasHandle:
 			handle = pkt.getHandle()
 		}
