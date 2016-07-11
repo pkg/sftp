@@ -8,9 +8,13 @@ import (
 
 // all incoming packets
 type packet interface {
-	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
 	id() uint32
+}
+
+type resp_packet interface {
+	id() uint32
+	encoding.BinaryMarshaler
 }
 
 // interfaces to group types
@@ -48,10 +52,11 @@ func (p sshFxpReaddirPacket) getHandle() string  { return p.Handle }
 // this has a handle, but is only used for close
 func (p sshFxpClosePacket) getHandle() string { return p.Handle }
 
-// for packet struct uniformity, so they all implement packet interface
-func (s *sshFxpExtendedPacket) MarshalBinary() ([]byte, error) {
-	return []byte{}, nil
-}
+// some packets with ID are missing id()
+func (p sshFxpDataPacket) id() uint32   { return p.ID }
+func (p sshFxpStatusPacket) id() uint32 { return p.ID }
+func (p sshFxpStatResponse) id() uint32 { return p.ID }
+func (p sshFxpNamePacket) id() uint32   { return p.ID }
 
 // take raw incoming packet data and build packet objects
 func makePacket(p rxPacket) (packet, error) {
