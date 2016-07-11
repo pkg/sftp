@@ -13,9 +13,8 @@ type response struct {
 	err error
 }
 
-// Valid Method values:
-// Get, Put, SetStat, Rename, Rmdir, Mkdir, Symlink, List, Stat, Readlink
 type Request struct {
+	// Get, Put, SetStat, Rename, Rmdir, Mkdir, Symlink, List, Stat, Readlink
 	Method   string
 	Filepath string
 	Pflags   uint32
@@ -25,11 +24,11 @@ type Request struct {
 	length   uint32
 	pktChan  chan packet
 	rspChan  chan response
-	svr      *RequestServer
+	handlers Handlers
 }
 
-func newRequest(path string, svr *RequestServer) *Request {
-	request := &Request{Filepath: path, svr: svr}
+func newRequest(path string, handlers Handlers) *Request {
+	request := &Request{Filepath: path, handlers: handlers}
 	go request.requestWorker()
 	return request
 }
@@ -42,7 +41,7 @@ func (r *Request) close() {
 func (r *Request) requestWorker() {
 	for pkt := range r.pktChan {
 		r.populate(pkt)
-		handlers := r.svr.Handlers
+		handlers := r.handlers
 		var err error
 		var rpkt resp_packet
 		switch r.Method {

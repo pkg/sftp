@@ -140,19 +140,18 @@ func (rs *RequestServer) packetWorker() error {
 			if err != nil { return err }
 			continue
 		case hasPath:
-			handle = rs.nextRequest(newRequest(pkt.getPath(), rs))
+			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
 		case hasHandle:
 			handle = pkt.getHandle()
 		}
 		request, ok := rs.getRequest(handle)
 		if !ok { return rs.sendError(pkt, syscall.EBADF) }
 
-		select {
-		case request.pktChan <- pkt:
-		case resp := <-request.rspChan:
-			if resp.err != nil { rs.sendError(resp.pkt, err) }
-			rs.sendPacket(resp.pkt)
-		}
+		// send packet to request handler and wait for response
+		request.pktChan <- pkt
+		resp := <-request.rspChan
+		if resp.err != nil { rs.sendError(resp.pkt, err) }
+		rs.sendPacket(resp.pkt)
 	}
 	return nil
 }
