@@ -8,6 +8,7 @@ import (
 
 // all incoming packets
 type packet interface {
+	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
 	id() uint32
 }
@@ -46,6 +47,11 @@ func (p sshFxpReaddirPacket) getHandle() string  { return p.Handle }
 
 // this has a handle, but is only used for close
 func (p sshFxpClosePacket) getHandle() string { return p.Handle }
+
+// for packet struct uniformity, so they all implement packet interface
+func (s *sshFxpExtendedPacket) MarshalBinary() ([]byte, error) {
+	return []byte{}, nil
+}
 
 // take raw incoming packet data and build packet objects
 func makePacket(p rxPacket) (packet, error) {
