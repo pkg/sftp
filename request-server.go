@@ -50,7 +50,7 @@ type RequestServer struct {
 
 // simple factory function
 // one server per user-session
-func NewPacketServer(rwc io.ReadWriteCloser) (*RequestServer, error) {
+func NewRequestServer(rwc io.ReadWriteCloser) (*RequestServer, error) {
 	s := &RequestServer{
 		serverConn: serverConn{
 			conn: conn{
@@ -146,13 +146,6 @@ func (rs *RequestServer) packetWorker() error {
 		}
 		request, ok := rs.getRequest(handle)
 		if !ok { return rs.sendError(pkt, syscall.EBADF) }
-		// XXX need to process request + additional packets
-		// each request should have a worker to handle incoming packets
-		// worker takes packet, derives method, ..
-		// XXX then calls whatever is needed to get interface{} XXX ???
-		// takes interface, matches on it, gets output, ..
-		// converts output to packet level and sends back to client
-
 		request.pktChan <- pkt
 	}
 	return nil

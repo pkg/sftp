@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func clientPacketserverPair(t *testing.T) (*Client, *packetServer) {
+func clientRequestServerPair(t *testing.T) (*Client, *RequestServer) {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
-	server, err := NewPacketServer(struct {
+	server, err := NewRequestServer(struct {
 		io.Reader
 		io.WriteCloser
 	}{sr, sw})
@@ -21,7 +21,7 @@ func clientPacketserverPair(t *testing.T) (*Client, *packetServer) {
 }
 
 func TestPsRequestCache(t *testing.T) {
-	_, ps := clientPacketserverPair(t)
+	_, ps := clientRequestServerPair(t)
 	foo := &Request{Filepath: "foo"}
 	bar := &Request{Filepath: "bar"}
 	ps.nextRequest(foo)
