@@ -52,7 +52,7 @@ func (r *Request) requestWorker() error {
 }
 
 func fileget(h FileReader, r *Request) error {
-	reader, err := h.Filereader(r)
+	reader, err := h.Fileread(r)
 	if err != nil { return r.sendError(syscall.EBADF) }
 	pkt, ok := r.cur_pkt.(*sshFxpReadPacket)
 	if !ok { return r.sendError(syscall.EBADF) }
@@ -68,7 +68,7 @@ func fileget(h FileReader, r *Request) error {
 	})
 }
 func fileput(h FileWriter, r *Request) error {
-	writer, err := h.Filewriter(r)
+	writer, err := h.Filewrite(r)
 	if err != nil { return r.sendError(syscall.EBADF) }
 	pkt, ok := r.cur_pkt.(*sshFxpWritePacket)
 	if !ok { return r.sendError(syscall.EBADF) }

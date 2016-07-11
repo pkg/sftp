@@ -10,12 +10,12 @@ import (
 
 // should return an io.Reader for the filepath
 type FileReader interface {
-	Filereader(*Request) (io.Reader, error)
+	Fileread(*Request) (io.Reader, error)
 }
 
 // should return an io.Writer for the filepath
 type FileWriter interface {
-	Filewriter(*Request) (io.Writer, error)
+	Filewrite(*Request) (io.Writer, error)
 }
 
 // should return an error (rename, remove, setstate, etc.)
