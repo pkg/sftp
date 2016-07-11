@@ -53,7 +53,6 @@ func (r *Request) requestWorker() {
 			rpkt, err = filecmd(handlers.FileCmd, r, pkt.id())
 		case "List", "Stat", "Readlink":
 			rpkt, err = fileinfo(handlers.FileInfo, r, pkt.id())
-		case "Open": // no-op
 		}
 		if err != nil { r.rspChan <- response{nil, err} }
 		r.rspChan <- response{rpkt, nil}
@@ -150,6 +149,13 @@ func (r *Request) populate(p interface{}) {
 	case *sshFxpSymlinkPacket:
 		r.Method = "Symlink"
 		r.Target = p.Linkpath
+	case *sshFxpReadPacket:
+		r.Method = "Get"
+		r.length = p.Len
+	case *sshFxpWritePacket:
+		r.Method = "Put"
+		r.data = p.Data
+		r.length = p.Length
 	// below here method and path are all the data
 	case *sshFxpReaddirPacket:
 		r.Method = "List"
@@ -160,15 +166,7 @@ func (r *Request) populate(p interface{}) {
 		r.Method = "Rmdir"
 	case *sshFxpReadlinkPacket:
 		r.Method = "Readlink"
-	case *sshFxpOpenPacket:
-		r.Method = "Open"
 	// special cases
-	case *sshFxpReadPacket:
-		r.Method = "Get"
-		// data processed elsewhere
-	case *sshFxpWritePacket:
-		r.Method = "Put"
-		// data processed elsewhere
 	case *sshFxpMkdirPacket:
 		r.Method = "Mkdir"
 		//r.Attrs are ignored in ./packet.go

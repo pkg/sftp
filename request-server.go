@@ -139,10 +139,20 @@ func (rs *RequestServer) packetWorker() error {
 			err := rs.sendError(pkt, nil)
 			if err != nil { return err }
 			continue
-		case hasPath:
+		case *sshFxpOpenPacket:
 			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
+			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
+			if err != nil { return err }
+			continue
+		case *sshFxpOpendirPacket:
+			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
+			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
+			if err != nil { return err }
+			continue
 		case hasHandle:
 			handle = pkt.getHandle()
+		case hasPath:
+			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
 		}
 		request, ok := rs.getRequest(handle)
 		if !ok { return rs.sendError(pkt, syscall.EBADF) }
