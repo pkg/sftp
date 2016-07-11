@@ -21,18 +21,18 @@ func clientRequestServerPair(t *testing.T) (*Client, *RequestServer) {
 }
 
 func TestPsRequestCache(t *testing.T) {
-	_, ps := clientRequestServerPair(t)
+	_, rs := clientRequestServerPair(t)
 	foo := &Request{Filepath: "foo"}
 	bar := &Request{Filepath: "bar"}
-	ps.nextRequest(foo)
-	ps.nextRequest(bar)
-	assert.Len(t, ps.openRequests, 2)
-	_foo, ok := ps.getRequest("foo")
+	rs.nextRequest(foo)
+	rs.nextRequest(bar)
+	assert.Len(t, rs.openRequests, 2)
+	_foo, ok := rs.getRequest("foo")
 	assert.Equal(t, foo, _foo)
 	assert.True(t, ok)
-	_, ok = ps.getRequest("zed")
+	_, ok = rs.getRequest("zed")
 	assert.False(t, ok)
-	ps.closeRequest("foo")
-	ps.closeRequest("bar")
-	assert.Len(t, ps.openRequests, 0)
+	rs.closeRequest("foo")
+	rs.closeRequest("bar")
+	assert.Len(t, rs.openRequests, 0)
 }
