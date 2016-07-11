@@ -40,8 +40,8 @@ type Handlers struct {
 
 // Server that abstracts the sftp protocol for a http request-like protocol
 type RequestServer struct {
+	Handlers        *Handlers
 	serverConn
-	handlers        Handlers
 	debugStream     io.Writer
 	pktChan         chan rxPacket
 	openRequests    map[string]*Request

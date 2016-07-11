@@ -36,7 +36,7 @@ func (r *Request) requestWorker() error {
 	for p := range r.pktChan {
 		r.populate(p)
 		r.cur_pkt = p
-		handlers := r.svr.handlers
+		handlers := r.svr.Handlers
 		switch r.Method {
 		case "Get":
 			return fileget(handlers.FileGet, r)
