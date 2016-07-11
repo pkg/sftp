@@ -46,6 +46,7 @@ func (r *Request) requestWorker() error {
 			return filecmd(handlers.FileCmd, r)
 		case "List", "Stat", "Readlink":
 			return fileinfo(handlers.FileInfo, r)
+		case "Open": // no-op
 		}
 	}
 	return nil
@@ -124,6 +125,7 @@ func fileinfo(h FileInfoer, r *Request) error {
 }
 
 func (r *Request) populate(p interface{}) {
+	// r.Filepath set in newRequest()
 	switch p := p.(type) {
 	case *sshFxpSetstatPacket:
 		r.Method = "Setstat"
@@ -149,6 +151,8 @@ func (r *Request) populate(p interface{}) {
 		r.Method = "Rmdir"
 	case *sshFxpReadlinkPacket:
 		r.Method = "Readlink"
+	case *sshFxpOpenPacket:
+		r.Method = "Open"
 	// special cases
 	case *sshFxpReadPacket:
 		r.Method = "Get"
