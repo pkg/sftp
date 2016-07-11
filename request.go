@@ -7,6 +7,12 @@ import (
 	"syscall"
 )
 
+// response passed back to packet handling code
+type response_packet struct {
+	pkt packet
+	err error
+}
+
 // Valid Method values:
 // Get, Put, SetStat, Rename, Rmdir, Mkdir, Symlink, List, Stat, Readlink
 type Request struct {
@@ -16,7 +22,7 @@ type Request struct {
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	pktChan  chan packet
-	cur_pkt  packet
+	rspChan  chan response_packet
 	svr      *RequestServer
 }
 
@@ -26,43 +32,40 @@ func newRequest(path string, svr *RequestServer) *Request {
 	return request
 }
 
-func (r *Request) sendError(err error) error {
-	return r.svr.sendError(r.cur_pkt, err)
+func (r *Request) close() {
+	close(r.pktChan)
+	close(r.rspChan)
 }
 
-func (r *Request) close() { close(r.pktChan) }
-
-func (r *Request) requestWorker() error {
+func (r *Request) requestWorker() {
 	for p := range r.pktChan {
 		r.populate(p)
-		r.cur_pkt = p
 		handlers := r.svr.Handlers
+		var err error
 		switch r.Method {
 		case "Get":
 			pkt := p.(*sshFxpReadPacket)
-			return fileget(handlers.FileGet, r, pkt)
+			err = fileget(handlers.FileGet, r, pkt)
 		case "Put":
 			pkt := p.(*sshFxpWritePacket)
-			return fileput(handlers.FilePut, r, pkt)
+			err = fileput(handlers.FilePut, r, pkt)
 		case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink":
-			return filecmd(handlers.FileCmd, r)
+			err = filecmd(handlers.FileCmd, r)
 		case "List", "Stat", "Readlink":
 			pkt := p.(packet)
-			return fileinfo(handlers.FileInfo, r, pkt)
+			err = fileinfo(handlers.FileInfo, r, pkt)
 		case "Open": // no-op
 		}
+		if err != nil { r.rspChan <- response_packet{nil, err} }
 	}
-	return nil
 }
 
 func fileget(h FileReader, r *Request, pkt *sshFxpReadPacket) error {
 	reader, err := h.Fileread(r)
-	if err != nil { return r.sendError(syscall.EBADF) }
+	if err != nil { return syscall.EBADF }
 	data := make([]byte, clamp(pkt.Len, maxTxPacket))
 	n, err := reader.Read(data)
-	if err != nil && (err != io.EOF || n == 0) {
-		return r.sendError(err)
-	}
+	if err != nil && (err != io.EOF || n == 0) { return err }
 	return r.svr.sendPacket(sshFxpDataPacket{
 		ID:     pkt.ID,
 		Length: uint32(n),
@@ -71,17 +74,17 @@ func fileget(h FileReader, r *Request, pkt *sshFxpReadPacket) error {
 }
 func fileput(h FileWriter, r *Request, pkt *sshFxpWritePacket) error {
 	writer, err := h.Filewrite(r)
-	if err != nil { return r.sendError(syscall.EBADF) }
+	if err != nil { return syscall.EBADF }
 	_, err = writer.Write(pkt.Data)
-	return r.sendError(err)
+	return err
 }
 func filecmd(h FileCmder, r *Request) error {
 	err := h.Filecmd(r)
-	return r.sendError(err)
+	return err
 }
 func fileinfo(h FileInfoer, r *Request, pkt packet) error {
 	finfo, err := h.Fileinfo(r)
-	if err != nil { return r.sendError(err) }
+	if err != nil { return err }
 
 	switch r.Method {
 	case "List":
@@ -97,7 +100,7 @@ func fileinfo(h FileInfoer, r *Request, pkt packet) error {
 	case "Stat":
 		if len(finfo) == 0 {
 			err = &os.PathError{"stat", r.Filepath, syscall.ENOENT}
-			return r.sendError(err)
+			return err
 		}
 		return r.svr.sendPacket(sshFxpStatResponse{
 			ID:   pkt.id(),
@@ -106,7 +109,7 @@ func fileinfo(h FileInfoer, r *Request, pkt packet) error {
 	case "Readlink":
 		if len(finfo) == 0 {
 			err = &os.PathError{"readlink", r.Filepath, syscall.ENOENT}
-			return r.sendError(err)
+			return err
 		}
 		return r.svr.sendPacket(sshFxpNamePacket{
 			ID: pkt.id(),
@@ -117,7 +120,7 @@ func fileinfo(h FileInfoer, r *Request, pkt packet) error {
 			}},
 		})
 	}
-	return r.sendError(err)
+	return err
 }
 
 func (r *Request) populate(p interface{}) {

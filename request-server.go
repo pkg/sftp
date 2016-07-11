@@ -40,7 +40,7 @@ type Handlers struct {
 
 // Server that abstracts the sftp protocol for a http request-like protocol
 type RequestServer struct {
-	Handlers        *Handlers
+	Handlers *Handlers
 	serverConn
 	debugStream     io.Writer
 	pktChan         chan rxPacket
@@ -146,7 +146,13 @@ func (rs *RequestServer) packetWorker() error {
 		}
 		request, ok := rs.getRequest(handle)
 		if !ok { return rs.sendError(pkt, syscall.EBADF) }
-		request.pktChan <- pkt
+
+		select {
+		case request.pktChan <- pkt:
+		case resp := <-request.rspChan:
+			if resp.err != nil { rs.sendError(resp.pkt, err) }
+			rs.sendPacket(resp.pkt)
+		}
 	}
 	return nil
 }
