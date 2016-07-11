@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-type TestFileDriver struct {}
+type TestFileDriver struct{}
 
 func (d TestFileDriver) Stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)

@@ -24,10 +24,10 @@ func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver) *ManagedS
 	}
 }
 
-func (m ManagedServer) Start(port int) {
+func (m ManagedServer) Start(port int, privateKeyPath string) {
 	fmt.Println("Starting SFTP server...")
 
-	privateBytes, err := ioutil.ReadFile("id_rsa")
+	privateBytes, err := ioutil.ReadFile(privateKeyPath)
 	if err != nil {
 		log.Fatal("Failed to load private key", err)
 	}
@@ -52,17 +52,17 @@ func (m ManagedServer) Start(port int) {
 		go func(conn net.Conn) {
 			fmt.Println("Got connection!")
 
-            var driver ServerDriver
+			var driver ServerDriver
 			config := &ssh.ServerConfig{
 				PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
-                    driver = m.driverGenerator(LoginRequest{
-                        Username: c.User(),
-                        Password: string(pass),
-                    })
-                    if driver == nil {
-                        return nil, fmt.Errorf("password rejected for %q", c.User())
-                    }
-                    return nil, nil
+					driver = m.driverGenerator(LoginRequest{
+						Username: c.User(),
+						Password: string(pass),
+					})
+					if driver == nil {
+						return nil, fmt.Errorf("password rejected for %q", c.User())
+					}
+					return nil, nil
 				},
 			}
 			config.AddHostKey(private)
@@ -71,7 +71,7 @@ func (m ManagedServer) Start(port int) {
 			if err != nil {
 				log.Fatal("failed to handshake", err)
 			}
-            fmt.Println("Handshake completed...")
+			fmt.Println("Handshake completed...")
 
 			go ssh.DiscardRequests(requestChan)
 
@@ -111,7 +111,7 @@ func (m ManagedServer) Start(port int) {
 				}
 				if err := server.Serve(); err != nil {
 					fmt.Println("sftp server completed with error:", err)
-                    channel.Close()
+					channel.Close()
 				}
 			}
 
