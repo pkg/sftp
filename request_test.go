@@ -92,34 +92,34 @@ func TestGetMethod(t *testing.T) {
 	request := testRequest("Get")
 	// req.length is 4, so we test reads in 4 byte chunks
 	for _, txt := range []string{"file-", "data."} {
-		resp := request.handleRequest(handlers)
-		assert.Nil(t, resp.err)
-		pkt := resp.pkt.(*sshFxpDataPacket)
-		assert.Equal(t, pkt.id(), uint32(1))
-		assert.Equal(t, string(pkt.Data), txt)
+		pkt, err := request.handleRequest(handlers)
+		assert.Nil(t, err)
+		dpkt := pkt.(*sshFxpDataPacket)
+		assert.Equal(t, dpkt.id(), uint32(1))
+		assert.Equal(t, string(dpkt.Data), txt)
 	}
 }
 
 func TestPutMethod(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
-	resp := request.handleRequest(handlers)
-	assert.Nil(t, resp.err)
+	pkt, err := request.handleRequest(handlers)
+	assert.Nil(t, err)
 	assert.Equal(t, handlers.getOut().String(), "file-data.")
-	statusOk(t, resp.pkt)
+	statusOk(t, pkt)
 }
 
 func TestCmdrMethod(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Mkdir")
-	resp := request.handleRequest(handlers)
-	assert.Nil(t, resp.err)
-	statusOk(t, resp.pkt)
+	pkt, err := request.handleRequest(handlers)
+	assert.Nil(t, err)
+	statusOk(t, pkt)
 
 	handlers.returnError()
-	resp = request.handleRequest(handlers)
-	assert.Nil(t, resp.pkt)
-	assert.Equal(t, resp.err, testError)
+	pkt, err = request.handleRequest(handlers)
+	assert.Nil(t, pkt)
+	assert.Equal(t, err, testError)
 }
 
 func TestInfoListMethod(t *testing.T)     { testInfoMethod(t, "List") }
@@ -127,19 +127,19 @@ func TestInfoReadlinkMethod(t *testing.T) { testInfoMethod(t, "Readlink") }
 func TestInfoStatMethod(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
-	resp := request.handleRequest(handlers)
-	assert.Nil(t, resp.err)
-	pkt := resp.pkt.(*sshFxpStatResponse)
-	assert.Equal(t, pkt.info.Name(), "request_test.go")
+	pkt, err := request.handleRequest(handlers)
+	assert.Nil(t, err)
+	spkt := pkt.(*sshFxpStatResponse)
+	assert.Equal(t, spkt.info.Name(), "request_test.go")
 }
 
 func testInfoMethod(t *testing.T, method string) {
 	handlers := newTestHandlers()
 	request := testRequest(method)
-	resp := request.handleRequest(handlers)
-	assert.Nil(t, resp.err)
-	pkt, ok := resp.pkt.(*sshFxpNamePacket)
+	pkt, err := request.handleRequest(handlers)
+	assert.Nil(t, err)
+	npkt, ok := pkt.(*sshFxpNamePacket)
 	assert.True(t, ok)
-	assert.IsType(t, sshFxpNameAttr{}, pkt.NameAttrs[0])
-	assert.Equal(t, pkt.NameAttrs[0].Name, "request_test.go")
+	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
+	assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
 }
