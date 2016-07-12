@@ -67,7 +67,7 @@ func fileget(h FileReader, r *Request) (resp_packet, error) {
 	return &sshFxpDataPacket{
 		ID:     r.pkt_id,
 		Length: uint32(n),
-		Data:   r.data[:n],
+		Data:   data[:n],
 	}, nil
 }
 
@@ -93,7 +93,7 @@ func fileput(h FileWriter, r *Request) (resp_packet, error) {
 func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 	err := h.Filecmd(r)
 	if err != nil { return nil, err }
-	return sshFxpStatusPacket{
+	return &sshFxpStatusPacket{
 		ID: r.pkt_id,
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
@@ -108,7 +108,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 	switch r.Method {
 	case "List":
 		dirname := path.Base(r.Filepath)
-		ret := sshFxpNamePacket{ID: r.pkt_id}
+		ret := &sshFxpNamePacket{ID: r.pkt_id}
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 				Name:     fi.Name(),
@@ -116,6 +116,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 				Attrs:    []interface{}{fi},
 			})
 		}
+		return ret, nil
 	case "Stat":
 		if len(finfo) == 0 {
 			err = &os.PathError{"stat", r.Filepath, syscall.ENOENT}
@@ -130,7 +131,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 			err = &os.PathError{"readlink", r.Filepath, syscall.ENOENT}
 			return nil, err
 		}
-		return sshFxpNamePacket{
+		return &sshFxpNamePacket{
 			ID: r.pkt_id,
 			NameAttrs: []sshFxpNameAttr{{
 				Name:     finfo[0].Name(),
@@ -144,7 +145,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 
 // populate attributes of request object from packet data
 func (r *Request) populate(p interface{}) {
-	// r.Filepath should be set in newRequest()
+	// r.Filepath should already be set
 	switch p := p.(type) {
 	case *sshFxpSetstatPacket:
 		r.Method = "Setstat"
@@ -173,7 +174,6 @@ func (r *Request) populate(p interface{}) {
 		r.data = p.Data
 		r.length = p.Length
 		r.pkt_id = p.id()
-	// below here method and path are all the data
 	case *sshFxpReaddirPacket:
 		r.Method = "List"
 		r.pkt_id = p.id()
@@ -187,7 +187,6 @@ func (r *Request) populate(p interface{}) {
 	case *sshFxpReadlinkPacket:
 		r.Method = "Readlink"
 		r.pkt_id = p.id()
-	// special cases
 	case *sshFxpMkdirPacket:
 		r.Method = "Mkdir"
 		r.pkt_id = p.id()
