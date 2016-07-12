@@ -40,10 +40,10 @@ type Handlers struct {
 
 // Server that abstracts the sftp protocol for a http request-like protocol
 type RequestServer struct {
-	Handlers *Handlers
 	serverConn
+	Handlers        Handlers
 	debugStream     io.Writer
-	pktChan         chan rxPacket
+	pktChan         chan packet
 	openRequests    map[string]*Request
 	openRequestLock sync.RWMutex
 }
@@ -59,7 +59,7 @@ func NewRequestServer(rwc io.ReadWriteCloser) (*RequestServer, error) {
 			},
 		},
 		debugStream:  ioutil.Discard,
-		pktChan:      make(chan rxPacket, sftpServerWorkerCount),
+		pktChan:      make(chan packet, sftpServerWorkerCount),
 		openRequests: make(map[string]*Request),
 	}
 
@@ -85,7 +85,6 @@ func (rs *RequestServer) closeRequest(handle string) {
 	defer rs.openRequestLock.Unlock()
 	if _, ok := rs.openRequests[handle]; ok {
 		delete(rs.openRequests, handle)
-		// Do Requests need cleanup?
 	}
 }
 
@@ -108,7 +107,9 @@ func (rs *RequestServer) Serve() error {
 	for {
 		pktType, pktBytes, err = rs.recvPacket()
 		if err != nil { break }
-		rs.pktChan <- rxPacket{fxp(pktType), pktBytes}
+		pkt, err := makePacket(rxPacket{fxp(pktType), pktBytes})
+		if err != nil { break }
+		rs.pktChan <- pkt
 	}
 
 	close(rs.pktChan) // shuts down sftpServerWorkers
@@ -116,21 +117,23 @@ func (rs *RequestServer) Serve() error {
 	return err
 }
 
-// make packet
-// handle special cases
-// convert to request
-// call RequestHandler
-// send feedback
 func (rs *RequestServer) packetWorker() error {
-	for p := range rs.pktChan {
-		pkt, err := makePacket(p)
-		if err != nil { return err }
-
+	for pkt := range rs.pktChan {
 		// handle packet specific pre-processing
 		var handle string
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:
 			err := rs.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
+			if err != nil { return err }
+			continue
+		case *sshFxpOpenPacket:
+			handle = rs.nextRequest(newRequest(pkt.getPath()))
+			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
+			if err != nil { return err }
+			continue
+		case *sshFxpOpendirPacket:
+			handle = rs.nextRequest(newRequest(pkt.getPath()))
+			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
 			if err != nil { return err }
 			continue
 		case *sshFxpClosePacket:
@@ -139,28 +142,17 @@ func (rs *RequestServer) packetWorker() error {
 			err := rs.sendError(pkt, nil)
 			if err != nil { return err }
 			continue
-		case *sshFxpOpenPacket:
-			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
-			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
-			if err != nil { return err }
-			continue
-		case *sshFxpOpendirPacket:
-			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
-			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
-			if err != nil { return err }
-			continue
 		case hasHandle:
 			handle = pkt.getHandle()
 		case hasPath:
-			handle = rs.nextRequest(newRequest(pkt.getPath(), *rs.Handlers))
+			handle = rs.nextRequest(newRequest(pkt.getPath()))
 		}
+
 		request, ok := rs.getRequest(handle)
 		if !ok { return rs.sendError(pkt, syscall.EBADF) }
 
-		// send packet to request handler and wait for response
-		request.pktChan <- pkt
-		resp := <-request.rspChan
-		if resp.err != nil { rs.sendError(resp.pkt, err) }
+		resp := request.handleRequest(rs.Handlers, pkt)
+		if resp.err != nil { rs.sendError(resp.pkt, resp.err) }
 		rs.sendPacket(resp.pkt)
 	}
 	return nil
