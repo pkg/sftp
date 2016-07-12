@@ -40,7 +40,6 @@ func (p sshFxpRemovePacket) getPath() string   { return p.Filename }
 func (p sshFxpRenamePacket) getPath() string   { return p.Oldpath }
 func (p sshFxpSymlinkPacket) getPath() string  { return p.Targetpath }
 
-// have path but not handled the same... keep?
 func (p sshFxpOpendirPacket) getPath() string { return p.Path }
 func (p sshFxpOpenPacket) getPath() string    { return p.Path }
 
