@@ -29,11 +29,13 @@ type Request struct {
 	get_reader io.Reader
 }
 
+// Here mainly to specify that Filepath is required
 func newRequest(path string) *Request {
 	request := &Request{Filepath: path}
 	return request
 }
 
+// called from worker to handle packet/request
 func (r *Request) handleRequest(handlers Handlers, pkt packet) response {
 	r.populate(pkt)
 	var err error
@@ -52,6 +54,7 @@ func (r *Request) handleRequest(handlers Handlers, pkt packet) response {
 	return response{rpkt, nil}
 }
 
+// wrap FileReader handler
 func fileget(h FileReader, r *Request) (resp_packet, error) {
 	if r.get_reader == nil {
 		reader, err := h.Fileread(r)
@@ -68,6 +71,8 @@ func fileget(h FileReader, r *Request) (resp_packet, error) {
 		Data:   r.data[:n],
 	}, nil
 }
+
+// wrap FileWriter handler
 func fileput(h FileWriter, r *Request) (resp_packet, error) {
 	if r.put_writer == nil {
 		writer, err := h.Filewrite(r)
@@ -84,6 +89,8 @@ func fileput(h FileWriter, r *Request) (resp_packet, error) {
 			Code: ssh_FX_OK,
 		}}, nil
 }
+
+// wrap FileCmder handler
 func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 	err := h.Filecmd(r)
 	if err != nil { return nil, err }
@@ -93,6 +100,8 @@ func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 			Code: ssh_FX_OK,
 		}}, nil
 }
+
+// wrap FileInfoer handler
 func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 	finfo, err := h.Fileinfo(r)
 	if err != nil { return nil, err }
@@ -134,8 +143,9 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 	return nil, err
 }
 
+// populate attributes of request object from packet data
 func (r *Request) populate(p interface{}) {
-	// r.Filepath set in newRequest()
+	// r.Filepath should be set in newRequest()
 	switch p := p.(type) {
 	case *sshFxpSetstatPacket:
 		r.Method = "Setstat"
