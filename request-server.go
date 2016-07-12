@@ -151,7 +151,8 @@ func (rs *RequestServer) packetWorker() error {
 		request, ok := rs.getRequest(handle)
 		if !ok { return rs.sendError(pkt, syscall.EBADF) }
 
-		resp := request.handleRequest(rs.Handlers, pkt)
+		request.populate(pkt)
+		resp := request.handleRequest(rs.Handlers)
 		if resp.err != nil { rs.sendError(resp.pkt, resp.err) }
 		rs.sendPacket(resp.pkt)
 	}

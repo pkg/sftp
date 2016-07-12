@@ -36,8 +36,7 @@ func newRequest(path string) *Request {
 }
 
 // called from worker to handle packet/request
-func (r *Request) handleRequest(handlers Handlers, pkt packet) response {
-	r.populate(pkt)
+func (r *Request) handleRequest(handlers Handlers) response {
 	var err error
 	var rpkt resp_packet
 	switch r.Method {
