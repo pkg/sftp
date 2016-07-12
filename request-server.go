@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"encoding"
 	"io"
 	"io/ioutil"
 	"sync"
@@ -121,6 +122,8 @@ func (rs *RequestServer) packetWorker() error {
 	for pkt := range rs.pktChan {
 		// handle packet specific pre-processing
 		var handle string
+		var rpkt encoding.BinaryMarshaler
+		var err error
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:
 			err := rs.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
@@ -149,12 +152,13 @@ func (rs *RequestServer) packetWorker() error {
 		}
 
 		request, ok := rs.getRequest(handle)
-		if !ok { return rs.sendError(pkt, syscall.EBADF) }
-
+		if !ok { rpkt = statusFromError(pkt, syscall.EBADF) }
 		request.populate(pkt)
-		resp := request.handleRequest(rs.Handlers)
-		if resp.err != nil { rs.sendError(resp.pkt, resp.err) }
-		rs.sendPacket(resp.pkt)
+		rpkt, err = request.handleRequest(rs.Handlers)
+		if err != nil { rpkt = statusFromError(pkt, err) }
+
+		err = rs.sendPacket(rpkt)
+		if err != nil { return err }
 	}
 	return nil
 }

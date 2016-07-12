@@ -7,12 +7,6 @@ import (
 	"syscall"
 )
 
-// response passed back to packet handling code
-type response struct {
-	pkt resp_packet
-	err error
-}
-
 type Request struct {
 	// Get, Put, SetStat, Rename, Rmdir, Mkdir, Symlink, List, Stat, Readlink
 	Method   string
@@ -36,7 +30,7 @@ func newRequest(path string) *Request {
 }
 
 // called from worker to handle packet/request
-func (r *Request) handleRequest(handlers Handlers) response {
+func (r *Request) handleRequest(handlers Handlers) (resp_packet, error) {
 	var err error
 	var rpkt resp_packet
 	switch r.Method {
@@ -49,8 +43,7 @@ func (r *Request) handleRequest(handlers Handlers) response {
 	case "List", "Stat", "Readlink":
 		rpkt, err = fileinfo(handlers.FileInfo, r)
 	}
-	if err != nil { return response{nil, err} }
-	return response{rpkt, nil}
+	return rpkt, err
 }
 
 // wrap FileReader handler
