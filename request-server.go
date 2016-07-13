@@ -151,8 +151,9 @@ func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
 	var rpkt resp_packet
 	var err error
 	if request, ok := rs.getRequest(handle); ok {
+		// called here to keep packet handling out of request for testing
 		request.populate(pkt)
-		rpkt, err = request.handleRequest(rs.Handlers)
+		rpkt, err = request.handle(rs.Handlers)
 		if err != nil { rpkt = statusFromError(pkt, err) }
 	} else { rpkt = statusFromError(pkt, syscall.EBADF) }
 	return rpkt
