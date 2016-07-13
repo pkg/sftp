@@ -5,13 +5,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
 
 type LoginRequest struct {
-	Username string
-	Password string
+	Username    string
+	Password    string
+	PublicKey string
 }
 
 type ManagedServer struct {
@@ -25,7 +27,7 @@ func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver) *ManagedS
 }
 
 func (m ManagedServer) Start(port int, privateKeyPath string) {
-	fmt.Println("Starting SFTP server...")
+	log.Println("Starting SFTP server...")
 
 	privateBytes, err := ioutil.ReadFile(privateKeyPath)
 	if err != nil {
@@ -41,7 +43,7 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 	if err != nil {
 		log.Fatal("failed to listen for connection", err)
 	}
-	fmt.Printf("Listening on %v\n", listener.Addr())
+	log.Printf("Listening on %v\n", listener.Addr())
 
 	for {
 		newConn, err := listener.Accept()
@@ -50,7 +52,7 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 		}
 
 		go func(conn net.Conn) {
-			fmt.Println("Got connection!")
+			log.Println("Got connection!")
 
 			var driver ServerDriver
 			config := &ssh.ServerConfig{
@@ -58,6 +60,18 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 					driver = m.driverGenerator(LoginRequest{
 						Username: c.User(),
 						Password: string(pass),
+						PublicKey: "",
+					})
+					if driver == nil {
+						return nil, fmt.Errorf("password rejected for %q", c.User())
+					}
+					return nil, nil
+				},
+				PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+					driver := m.driverGenerator(LoginRequest{
+						Username: "",
+						Password: "",
+						PublicKey: strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
 					})
 					if driver == nil {
 						return nil, fmt.Errorf("password rejected for %q", c.User())
@@ -69,37 +83,39 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 
 			_, newChan, requestChan, err := ssh.NewServerConn(conn, config)
 			if err != nil {
-				log.Fatal("failed to handshake", err)
+				log.Println("failed to handshake", err)
 			}
-			fmt.Println("Handshake completed...")
+			log.Println("Handshake completed...")
 
 			go ssh.DiscardRequests(requestChan)
 
-			for newThing := range newChan {
-				fmt.Println("Incoming channel: ", newThing.ChannelType())
-				if newThing.ChannelType() != "session" {
-					newThing.Reject(ssh.UnknownChannelType, "unknown channel type")
-					fmt.Println("Unknown channel type:", newThing.ChannelType())
+			for newChannelRequest := range newChan {
+				log.Println("Incoming channel: ", newChannelRequest.ChannelType())
+				if newChannelRequest.ChannelType() != "session" {
+					newChannelRequest.Reject(ssh.UnknownChannelType, "unknown channel type")
+					log.Println("Unknown channel type:", newChannelRequest.ChannelType())
 					continue
 				}
-				channel, requests, err := newThing.Accept()
+				channel, requests, err := newChannelRequest.Accept()
 				if err != nil {
-					fmt.Println("could not accept channel", err)
+					log.Println("could not accept channel", err)
 				}
-				fmt.Println("Channel accepted.")
+				log.Println("Channel accepted.")
 
 				go func(in <-chan *ssh.Request) {
 					for req := range in {
-						fmt.Printf("Request: %v\n", req.Type)
+						log.Printf("Request: %v\n", req.Type)
 						ok := false
 						switch req.Type {
 						case "subsystem":
-							fmt.Printf("Subsystem: %s\n", req.Payload[4:])
-							if string(req.Payload[4:]) == "sftp" {
-								ok = true
+							if (len(req.Payload) >= 4) {
+								log.Printf("Subsystem: %s\n", req.Payload[4:])
+								if string(req.Payload[4:]) == "sftp" {
+									ok = true
+								}
 							}
 						}
-						fmt.Printf(" - accepted: %v\n", ok)
+						log.Printf(" - accepted: %v\n", ok)
 						req.Reply(ok, nil)
 					}
 				}(requests)
@@ -107,10 +123,10 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 				server, err := NewServer(channel, driver)
 
 				if err != nil {
-					fmt.Println("Error:", err)
+					log.Println("Error:", err)
 				}
 				if err := server.Serve(); err != nil {
-					fmt.Println("sftp server completed with error:", err)
+					log.Println("sftp server completed with error:", err)
 					channel.Close()
 				}
 			}
