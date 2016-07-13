@@ -126,16 +126,13 @@ func (rs *RequestServer) packetWorker() error {
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:
 			rpkt = sshFxVersionPacket{sftpProtocolVersion, nil}
-		case *sshFxpOpenPacket:
-			handle = rs.nextRequest(newRequest(pkt.getPath()))
-			rpkt = sshFxpHandlePacket{pkt.id(), handle}
-		case *sshFxpOpendirPacket:
-			handle = rs.nextRequest(newRequest(pkt.getPath()))
-			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case *sshFxpClosePacket:
 			handle = pkt.getHandle()
 			rs.closeRequest(handle)
 			rpkt = statusFromError(pkt, nil)
+		case isOpener:
+			handle = rs.nextRequest(newRequest(pkt.getPath()))
+			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case hasPath:
 			handle = rs.nextRequest(newRequest(pkt.getPath()))
 			rpkt = rs.request(handle, pkt)

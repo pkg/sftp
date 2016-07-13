@@ -25,6 +25,11 @@ type hasHandle interface {
 	getHandle() string
 }
 
+type isOpener interface {
+	hasPath
+	isOpener()
+}
+
 //// define types by adding methods
 // hasPath
 func (p sshFxpLstatPacket) getPath() string    { return p.Path }
@@ -39,8 +44,11 @@ func (p sshFxpRemovePacket) getPath() string   { return p.Filename }
 func (p sshFxpRenamePacket) getPath() string   { return p.Oldpath }
 func (p sshFxpSymlinkPacket) getPath() string  { return p.Targetpath }
 
+// Openers implement hasPath and isOpener
 func (p sshFxpOpendirPacket) getPath() string { return p.Path }
+func (p sshFxpOpendirPacket) isOpener()       {}
 func (p sshFxpOpenPacket) getPath() string    { return p.Path }
+func (p sshFxpOpenPacket) isOpener()          {}
 
 // hasHandle
 func (p sshFxpFstatPacket) getHandle() string    { return p.Handle }
