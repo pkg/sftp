@@ -30,7 +30,7 @@ func newRequest(path string) *Request {
 }
 
 // called from worker to handle packet/request
-func (r *Request) handleRequest(handlers Handlers) (resp_packet, error) {
+func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 	var err error
 	var rpkt resp_packet
 	switch r.Method {
