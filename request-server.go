@@ -1,7 +1,6 @@
 package sftp
 
 import (
-	"encoding"
 	"io"
 	"io/ioutil"
 	"sync"
@@ -122,43 +121,42 @@ func (rs *RequestServer) packetWorker() error {
 	for pkt := range rs.pktChan {
 		// handle packet specific pre-processing
 		var handle string
-		var rpkt encoding.BinaryMarshaler
+		var rpkt resp_packet
 		var err error
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:
-			err := rs.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
-			if err != nil { return err }
-			continue
+			rpkt = sshFxVersionPacket{sftpProtocolVersion, nil}
 		case *sshFxpOpenPacket:
 			handle = rs.nextRequest(newRequest(pkt.getPath()))
-			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
-			if err != nil { return err }
-			continue
+			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case *sshFxpOpendirPacket:
 			handle = rs.nextRequest(newRequest(pkt.getPath()))
-			err := rs.sendPacket(sshFxpHandlePacket{pkt.id(), handle})
-			if err != nil { return err }
-			continue
+			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case *sshFxpClosePacket:
 			handle = pkt.getHandle()
 			rs.closeRequest(handle)
-			err := rs.sendError(pkt, nil)
-			if err != nil { return err }
-			continue
-		case hasHandle:
-			handle = pkt.getHandle()
+			rpkt = statusFromError(pkt, nil)
 		case hasPath:
 			handle = rs.nextRequest(newRequest(pkt.getPath()))
+			rpkt = rs.request(handle, pkt)
+		case hasHandle:
+			handle = pkt.getHandle()
+			rpkt = rs.request(handle, pkt)
 		}
-
-		request, ok := rs.getRequest(handle)
-		if !ok { rpkt = statusFromError(pkt, syscall.EBADF) }
-		request.populate(pkt)
-		rpkt, err = request.handleRequest(rs.Handlers)
-		if err != nil { rpkt = statusFromError(pkt, err) }
 
 		err = rs.sendPacket(rpkt)
 		if err != nil { return err }
 	}
 	return nil
+}
+
+func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
+	var rpkt resp_packet
+	var err error
+	if request, ok := rs.getRequest(handle); ok {
+		request.populate(pkt)
+		rpkt, err = request.handleRequest(rs.Handlers)
+		if err != nil { rpkt = statusFromError(pkt, err) }
+	} else { rpkt = statusFromError(pkt, syscall.EBADF) }
+	return rpkt
 }
