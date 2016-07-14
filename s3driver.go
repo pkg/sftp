@@ -188,9 +188,10 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	}
 
 	_, err = d.s3.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String(d.bucket),
-		Key:    aws.String(localPath),
-		Body:   bytes.NewReader(rawData),
+		Bucket:               aws.String(d.bucket),
+		Key:                  aws.String(localPath),
+		ServerSideEncryption: aws.String("AES256"),
+		Body:                 bytes.NewReader(rawData),
 	})
 	return err
 }

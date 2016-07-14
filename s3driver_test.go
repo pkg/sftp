@@ -182,9 +182,10 @@ func TestMakeDir(t *testing.T) {
 	mockS3API := NewMockS3API(mockCtrl)
 
 	mockS3API.EXPECT().PutObject(&s3.PutObjectInput{
-		Bucket: aws.String("bucket"),
-		Key:    aws.String("home/new_dir/"),
-		Body:   bytes.NewReader([]byte{}),
+		Bucket:               aws.String("bucket"),
+		Key:                  aws.String("home/new_dir/"),
+		ServerSideEncryption: aws.String("AES256"),
+		Body:                 bytes.NewReader([]byte{}),
 	}).Return(nil, nil)
 
 	driver := &S3Driver{
@@ -225,9 +226,10 @@ func TestPutFile(t *testing.T) {
 	mockS3API := NewMockS3API(mockCtrl)
 
 	mockS3API.EXPECT().PutObject(&s3.PutObjectInput{
-		Bucket: aws.String("bucket"),
-		Key:    aws.String("home/dir/file"),
-		Body:   bytes.NewReader([]byte{1, 2, 3}),
+		Bucket:               aws.String("bucket"),
+		Key:                  aws.String("home/dir/file"),
+		ServerSideEncryption: aws.String("AES256"),
+		Body:                 bytes.NewReader([]byte{1, 2, 3}),
 	}).Return(nil, nil)
 
 	driver := &S3Driver{
