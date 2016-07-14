@@ -41,7 +41,7 @@ func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 		rpkt, err = fileput(handlers.FilePut, r)
 	case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		rpkt, err = filecmd(handlers.FileCmd, r)
-	case "List", "Stat", "Readlink":
+	case "List", "Stat", "Readlink", "Realpath":
 		rpkt, err = fileinfo(handlers.FileInfo, r)
 	}
 	return rpkt, err
@@ -120,7 +120,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 			ID:   r.pkt_id,
 			info: finfo[0],
 		}, nil
-	case "Readlink":
+	case "Readlink", "Realpath":
 		if len(finfo) == 0 {
 			err = &os.PathError{"readlink", r.Filepath, syscall.ENOENT}
 			return nil, err
@@ -171,8 +171,13 @@ func (r *Request) populate(p interface{}) {
 	case *sshFxpReaddirPacket:
 		r.Method = "List"
 		r.pkt_id = p.id()
-	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket,
-		*sshFxpRealpathPacket, *sshFxpRemovePacket:
+	case *sshFxpRemovePacket:
+		r.Method = "Remove"
+		r.pkt_id = p.id()
+	case *sshFxpRealpathPacket:
+		r.Method = "Realpath"
+		r.pkt_id = p.id()
+	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket:
 		r.Method = "Stat"
 		r.pkt_id = p.(packet).id()
 	case *sshFxpRmdirPacket:
