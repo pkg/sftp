@@ -8,7 +8,8 @@ import (
 )
 
 type Request struct {
-	// Get, Put, SetStat, Rename, Rmdir, Mkdir, Symlink, List, Stat, Readlink
+	// Get, Put, SetStat, Stat, Rename, Remove
+	// Rmdir, Mkdir, List, Readlink, Symlink
 	Method   string
 	Filepath string
 	Pflags   uint32
@@ -38,7 +39,7 @@ func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 		rpkt, err = fileget(handlers.FileGet, r)
 	case "Put":
 		rpkt, err = fileput(handlers.FilePut, r)
-	case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink":
+	case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		rpkt, err = filecmd(handlers.FileCmd, r)
 	case "List", "Stat", "Readlink":
 		rpkt, err = fileinfo(handlers.FileInfo, r)
