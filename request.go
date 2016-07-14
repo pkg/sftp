@@ -22,6 +22,7 @@ type Request struct {
 	// reader/writer from handlers
 	put_writer io.Writer
 	get_reader io.Reader
+	eof        bool // hack for readdir to keep eof state
 }
 
 // Here mainly to specify that Filepath is required
@@ -96,6 +97,7 @@ func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 
 // wrap FileInfoer handler
 func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
+	if r.eof { return nil, io.EOF }
 	finfo, err := h.Fileinfo(r)
 	if err != nil { return nil, err }
 
@@ -110,6 +112,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 				Attrs:    []interface{}{fi},
 			})
 		}
+		r.eof = true
 		return ret, nil
 	case "Stat":
 		if len(finfo) == 0 {
