@@ -1,32 +1,13 @@
 package sftp
 
 import (
+	"fmt"
 	"io"
-	"io/ioutil"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"syscall"
 )
-
-// Server takes the dataHandler and openHandler as arguments
-// starts up packet handlers
-// packet handlers convert packets to datas
-// call dataHandler with data
-// is done with packet/data
-//
-// dataHandler should call Handler() on data to process data and
-// reply to client
-//
-// tricky bit about reading/writing spinning up workers to handle all packets
-
-// datas using Id for switch
-// + only 1 type + const
-// - duplicates sftp prot Id
-
-// datas using data-type for switch
-// + types as types
-// + type.Handle could enforce type of arg
-// - requires dummy interface only for typing
 
 var maxTxPacket uint32 = 1 << 15
 
@@ -43,7 +24,6 @@ type Handlers struct {
 type RequestServer struct {
 	serverConn
 	Handlers        Handlers
-	debugStream     io.Writer
 	pktChan         chan packet
 	openRequests    map[string]*Request
 	openRequestLock sync.RWMutex
@@ -59,7 +39,6 @@ func NewRequestServer(rwc io.ReadWriteCloser) (*RequestServer, error) {
 				WriteCloser: rwc,
 			},
 		},
-		debugStream:  ioutil.Discard,
 		pktChan:      make(chan packet, sftpServerWorkerCount),
 		openRequests: make(map[string]*Request),
 	}
@@ -120,7 +99,7 @@ func (rs *RequestServer) Serve() error {
 
 func (rs *RequestServer) packetWorker() error {
 	for pkt := range rs.pktChan {
-		// handle packet specific pre-processing
+		fmt.Println("Incoming Packet: ", pkt, reflect.TypeOf(pkt))
 		var handle string
 		var rpkt resp_packet
 		var err error
@@ -144,6 +123,7 @@ func (rs *RequestServer) packetWorker() error {
 			rpkt = rs.request(handle, pkt)
 		}
 
+		fmt.Println("Reply Packet: ", rpkt, reflect.TypeOf(rpkt))
 		err = rs.sendPacket(rpkt)
 		if err != nil { return err }
 	}
@@ -168,6 +148,7 @@ func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
 	if request, ok := rs.getRequest(handle); ok {
 		// called here to keep packet handling out of request for testing
 		request.populate(pkt)
+		fmt.Println("Request Method: ", request.Method)
 		rpkt, err = request.handle(rs.Handlers)
 		if err != nil { rpkt = statusFromError(pkt, err) }
 	} else { rpkt = statusFromError(pkt, syscall.EBADF) }
