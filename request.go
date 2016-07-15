@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"syscall"
 )
 
@@ -42,7 +43,7 @@ func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 		rpkt, err = fileput(handlers.FilePut, r)
 	case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		rpkt, err = filecmd(handlers.FileCmd, r)
-	case "List", "Stat", "Readlink", "Realpath":
+	case "List", "Stat", "Readlink":
 		rpkt, err = fileinfo(handlers.FileInfo, r)
 	}
 	return rpkt, err
@@ -123,16 +124,17 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 			ID:   r.pkt_id,
 			info: finfo[0],
 		}, nil
-	case "Readlink", "Realpath":
+	case "Readlink":
 		if len(finfo) == 0 {
 			err = &os.PathError{"readlink", r.Filepath, syscall.ENOENT}
 			return nil, err
 		}
+		filename := filepath.Clean(r.Filepath)
 		return &sshFxpNamePacket{
 			ID: r.pkt_id,
 			NameAttrs: []sshFxpNameAttr{{
-				Name:     finfo[0].Name(),
-				LongName: finfo[0].Name(),
+				Name:     filename,
+				LongName: filename,
 				Attrs:    emptyFileStat,
 			}},
 		}, nil
@@ -176,9 +178,6 @@ func (r *Request) populate(p interface{}) {
 		r.pkt_id = p.id()
 	case *sshFxpRemovePacket:
 		r.Method = "Remove"
-		r.pkt_id = p.id()
-	case *sshFxpRealpathPacket:
-		r.Method = "Realpath"
 		r.pkt_id = p.id()
 	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket:
 		r.Method = "Stat"

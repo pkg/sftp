@@ -3,6 +3,7 @@ package sftp
 import (
 	"io"
 	"io/ioutil"
+	"path/filepath"
 	"sync"
 	"syscall"
 )
@@ -130,6 +131,8 @@ func (rs *RequestServer) packetWorker() error {
 			handle = pkt.getHandle()
 			rs.closeRequest(handle)
 			rpkt = statusFromError(pkt, nil)
+		case *sshFxpRealpathPacket:
+			rpkt = cleanPath(pkt)
 		case isOpener:
 			handle = rs.nextRequest(newRequest(pkt.getPath()))
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
@@ -145,6 +148,18 @@ func (rs *RequestServer) packetWorker() error {
 		if err != nil { return err }
 	}
 	return nil
+}
+
+func cleanPath(pkt *sshFxpRealpathPacket) resp_packet {
+	cleaned_path := filepath.Clean(pkt.getPath())
+	return &sshFxpNamePacket{
+		ID: pkt.id(),
+		NameAttrs: []sshFxpNameAttr{{
+			Name:     cleaned_path,
+			LongName: cleaned_path,
+			Attrs:    emptyFileStat,
+		}},
+	}
 }
 
 func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
