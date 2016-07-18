@@ -137,7 +137,11 @@ func (rs *RequestServer) packetWorker() error {
 }
 
 func cleanPath(pkt *sshFxpRealpathPacket) resp_packet {
-	cleaned_path := filepath.Clean(pkt.getPath())
+	path := pkt.getPath()
+	if !filepath.IsAbs(path) {
+		path = "/" + path // all paths are absolute
+	}
+	cleaned_path := filepath.Clean(path)
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []sshFxpNameAttr{{
