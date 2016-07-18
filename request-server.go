@@ -31,7 +31,7 @@ type RequestServer struct {
 
 // simple factory function
 // one server per user-session
-func NewRequestServer(rwc io.ReadWriteCloser) (*RequestServer, error) {
+func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) (*RequestServer, error) {
 	s := &RequestServer{
 		serverConn: serverConn{
 			conn: conn{
@@ -39,6 +39,7 @@ func NewRequestServer(rwc io.ReadWriteCloser) (*RequestServer, error) {
 				WriteCloser: rwc,
 			},
 		},
+		Handlers:     h,
 		pktChan:      make(chan packet, sftpServerWorkerCount),
 		openRequests: make(map[string]*Request),
 	}
