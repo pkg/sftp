@@ -12,7 +12,9 @@ type packet interface {
 	id() uint32
 }
 
-type resp_packet interface { encoding.BinaryMarshaler }
+type resp_packet interface {
+	encoding.BinaryMarshaler
+}
 
 // interfaces to group types
 type hasPath interface {

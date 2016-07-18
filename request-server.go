@@ -86,9 +86,13 @@ func (rs *RequestServer) Serve() error {
 	var pktBytes []byte
 	for {
 		pktType, pktBytes, err = rs.recvPacket()
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 		pkt, err := makePacket(rxPacket{fxp(pktType), pktBytes})
-		if err != nil { break }
+		if err != nil {
+			break
+		}
 		rs.pktChan <- pkt
 	}
 
@@ -125,7 +129,9 @@ func (rs *RequestServer) packetWorker() error {
 
 		fmt.Println("Reply Packet: ", rpkt, reflect.TypeOf(rpkt))
 		err = rs.sendPacket(rpkt)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -150,7 +156,11 @@ func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
 		request.populate(pkt)
 		fmt.Println("Request Method: ", request.Method)
 		rpkt, err = request.handle(rs.Handlers)
-		if err != nil { rpkt = statusFromError(pkt, err) }
-	} else { rpkt = statusFromError(pkt, syscall.EBADF) }
+		if err != nil {
+			rpkt = statusFromError(pkt, err)
+		}
+	} else {
+		rpkt = statusFromError(pkt, syscall.EBADF)
+	}
 	return rpkt
 }
