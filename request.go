@@ -28,7 +28,7 @@ type Request struct {
 
 // Here mainly to specify that Filepath is required
 func newRequest(path string) *Request {
-	request := &Request{Filepath: path}
+	request := &Request{Filepath: filepath.Clean(path)}
 	return request
 }
 
@@ -158,11 +158,11 @@ func (r *Request) populate(p interface{}) {
 		r.pkt_id = p.id()
 	case *sshFxpRenamePacket:
 		r.Method = "Rename"
-		r.Target = p.Newpath
+		r.Target = filepath.Clean(p.Newpath)
 		r.pkt_id = p.id()
 	case *sshFxpSymlinkPacket:
 		r.Method = "Symlink"
-		r.Target = p.Linkpath
+		r.Target = filepath.Clean(p.Linkpath)
 		r.pkt_id = p.id()
 	case *sshFxpReadPacket:
 		r.Method = "Get"
