@@ -170,7 +170,7 @@ func (f *memFile) Mode() os.FileMode {
 func (f *memFile) ModTime() time.Time { return time.Now() }
 func (f *memFile) IsDir() bool        { return f.isdir }
 func (f *memFile) Sys() interface{} {
-	return syscall.Stat_t{Uid: 65534, Gid: 65534}
+	return &syscall.Stat_t{Uid: 65534, Gid: 65534}
 }
 
 // Read/Write
