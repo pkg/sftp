@@ -1,9 +1,10 @@
 package sftp
 
 import (
-	"github.com/stretchr/testify/assert"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func clientRequestServerPair(t *testing.T) (*Client, *RequestServer) {
@@ -12,15 +13,19 @@ func clientRequestServerPair(t *testing.T) (*Client, *RequestServer) {
 	server, err := NewRequestServer(struct {
 		io.Reader
 		io.WriteCloser
-	}{sr, sw})
-	if err != nil { t.Fatal(err) }
+	}{sr, sw}, Handlers{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	go server.Serve()
 	client, err := NewClientPipe(cr, cw)
-	if err != nil { t.Fatalf("%+v\n", err) }
+	if err != nil {
+		t.Fatalf("%+v\n", err)
+	}
 	return client, server
 }
 
-func TestPsRequestCache(t *testing.T) {
+func TestRequestCache(t *testing.T) {
 	_, rs := clientRequestServerPair(t)
 	foo := &Request{Filepath: "foo"}
 	bar := &Request{Filepath: "bar"}
