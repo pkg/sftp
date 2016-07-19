@@ -165,6 +165,9 @@ func (f *memFile) Mode() os.FileMode {
 	if f.isdir {
 		ret = os.FileMode(0755) | os.ModeDir
 	}
+	if f.symlink != "" {
+		ret = os.FileMode(0777) | os.ModeSymlink
+	}
 	return ret
 }
 func (f *memFile) ModTime() time.Time { return time.Now() }
