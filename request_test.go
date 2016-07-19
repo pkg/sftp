@@ -18,26 +18,38 @@ type testHandler struct {
 }
 
 func (t *testHandler) Fileread(r *Request) (io.Reader, error) {
-	if t.err != nil { return nil, t.err }
+	if t.err != nil {
+		return nil, t.err
+	}
 	return strings.NewReader(t.filecontents), nil
 }
 
 func (t *testHandler) Filewrite(r *Request) (io.Writer, error) {
-	if t.err != nil { return nil, t.err }
+	if t.err != nil {
+		return nil, t.err
+	}
 	return io.Writer(t.output), nil
 }
 
 func (t *testHandler) Filecmd(r *Request) error {
-	if t.err != nil { return t.err }
+	if t.err != nil {
+		return t.err
+	}
 	return nil
 }
 
 func (t *testHandler) Fileinfo(r *Request) ([]os.FileInfo, error) {
-	if t.err != nil { return nil, t.err }
+	if t.err != nil {
+		return nil, t.err
+	}
 	f, err := os.Open(r.Filepath)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	fi, err := f.Stat()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return []os.FileInfo{fi}, nil
 }
 
@@ -87,7 +99,7 @@ func statusOk(t *testing.T, p interface{}) {
 	}
 }
 
-func TestGetMethod(t *testing.T) {
+func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
 	// req.length is 4, so we test reads in 4 byte chunks
@@ -100,7 +112,7 @@ func TestGetMethod(t *testing.T) {
 	}
 }
 
-func TestPutMethod(t *testing.T) {
+func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
 	pkt, err := request.handle(handlers)
@@ -109,7 +121,7 @@ func TestPutMethod(t *testing.T) {
 	statusOk(t, pkt)
 }
 
-func TestCmdrMethod(t *testing.T) {
+func TestRequestCmdr(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Mkdir")
 	pkt, err := request.handle(handlers)
@@ -122,9 +134,9 @@ func TestCmdrMethod(t *testing.T) {
 	assert.Equal(t, err, testError)
 }
 
-func TestInfoListMethod(t *testing.T)     { testInfoMethod(t, "List") }
-func TestInfoReadlinkMethod(t *testing.T) { testInfoMethod(t, "Readlink") }
-func TestInfoStatMethod(t *testing.T) {
+func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }
+func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
+func TestRequestInfoStat(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
 	pkt, err := request.handle(handlers)
