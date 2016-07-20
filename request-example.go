@@ -1,5 +1,9 @@
 package sftp
 
+// This serves as an example of how to implement the request server handler as
+// well as a dummy backend for testing. It implements an in-memory backend that
+// works as a very simple filesystem with simple flat key-value lookup system.
+
 import (
 	"bytes"
 	"fmt"
@@ -12,29 +16,13 @@ import (
 
 var _ = fmt.Println
 
+// Returns a Hanlders object with the test handlers
 func InMemHandler() Handlers {
 	root := &root{
 		files: make(map[string]*memFile),
 	}
 	root.memFile = newMemFile("/", true)
 	return Handlers{root, root, root, root}
-}
-
-//
-type root struct {
-	*memFile
-	files map[string]*memFile
-}
-
-func (r *root) fetch(path string) (*memFile, error) {
-	fmt.Println("fetch", r.files)
-	if path == "/" {
-		return r.memFile, nil
-	}
-	if file, ok := r.files[path]; ok {
-		return file, nil
-	}
-	return nil, os.ErrNotExist
 }
 
 // Handlers
@@ -138,7 +126,24 @@ func (fs *root) Fileinfo(r *Request) ([]os.FileInfo, error) {
 	return nil, nil
 }
 
-// Implements os.FileInfo interface
+// In memory file-system-y thing that the Hanlders live on
+type root struct {
+	*memFile
+	files map[string]*memFile
+}
+
+func (r *root) fetch(path string) (*memFile, error) {
+	if path == "/" {
+		return r.memFile, nil
+	}
+	if file, ok := r.files[path]; ok {
+		return file, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+// Implements os.FileInfo, Reader and Writer interfaces.
+// These are the 3 interfaces necessary for the Handlers.
 type memFile struct {
 	name    string
 	content []byte
@@ -147,6 +152,7 @@ type memFile struct {
 	isdir   bool
 }
 
+// factory to make sure modtime is set
 func newMemFile(name string, isdir bool) *memFile {
 	return &memFile{
 		name:    name,
@@ -156,10 +162,8 @@ func newMemFile(name string, isdir bool) *memFile {
 }
 
 // Have memFile fulfill os.FileInfo interface
-func (f *memFile) Name() string {
-	return filepath.Base(f.name)
-}
-func (f *memFile) Size() int64 { return int64(len(f.content)) }
+func (f *memFile) Name() string { return filepath.Base(f.name) }
+func (f *memFile) Size() int64  { return int64(len(f.content)) }
 func (f *memFile) Mode() os.FileMode {
 	ret := os.FileMode(0644)
 	if f.isdir {
