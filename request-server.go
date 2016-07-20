@@ -69,6 +69,11 @@ func (rs *RequestServer) closeRequest(handle string) {
 	}
 }
 
+// close the read/write/closer to trigger exiting the main server loop
+func (rs *RequestServer) Close() error {
+	return rs.conn.Close()
+}
+
 // start serving requests from user session
 func (rs *RequestServer) Serve() error {
 	var wg sync.WaitGroup
