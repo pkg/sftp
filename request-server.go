@@ -70,9 +70,7 @@ func (rs *RequestServer) closeRequest(handle string) {
 }
 
 // close the read/write/closer to trigger exiting the main server loop
-func (rs *RequestServer) Close() error {
-	return rs.conn.Close()
-}
+func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
 // start serving requests from user session
 func (rs *RequestServer) Serve() error {
@@ -145,8 +143,9 @@ func (rs *RequestServer) packetWorker() error {
 func cleanPath(pkt *sshFxpRealpathPacket) resp_packet {
 	path := pkt.getPath()
 	if !filepath.IsAbs(path) {
-		path = "/" + path // all paths are absolute
-	}
+		path = "/" + path
+	} // all paths are absolute
+
 	cleaned_path := filepath.Clean(path)
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
