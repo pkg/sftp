@@ -65,6 +65,10 @@ func (fs *root) Filecmd(r *Request) error {
 		if err != nil {
 			return err
 		}
+		if _, ok := fs.files[r.Target]; ok {
+			return &os.LinkError{"rename", r.Filepath, r.Target,
+				fmt.Errorf("dest file exists")}
+		}
 		fs.files[r.Target] = file
 		delete(fs.files, r.Filepath)
 	case "Rmdir", "Remove":
