@@ -96,7 +96,6 @@ func (fs *root) Fileinfo(r *Request) ([]os.FileInfo, error) {
 	switch r.Method {
 	case "List":
 		list := []os.FileInfo{}
-		fmt.Println("ls", r.Filepath)
 		for fn, fi := range fs.files {
 			if filepath.Dir(fn) == r.Filepath {
 				fmt.Println(fn, fi.Name())
@@ -107,7 +106,8 @@ func (fs *root) Fileinfo(r *Request) ([]os.FileInfo, error) {
 	case "Stat":
 		file, err := fs.fetch(r.Filepath)
 		if err != nil {
-			return nil, err
+			// mimic os.Stat() return error
+			return nil, &os.PathError{"stat", r.Filepath, syscall.ENOENT}
 		}
 		return []os.FileInfo{file}, nil
 	case "Readlink":
