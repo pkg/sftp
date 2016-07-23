@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,10 +34,14 @@ func clientRequestServerPair(t *testing.T) *csPair {
 		io.Reader
 		io.WriteCloser
 	}{sr, sw}, handlers)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	go server.Serve()
 	client, err := NewClientPipe(cr, cw)
-	if err != nil { t.Fatalf("%+v\n", err) }
+	if err != nil {
+		t.Fatalf("%+v\n", err)
+	}
 	return &csPair{client, server}
 }
 
@@ -69,7 +72,6 @@ func putTestFile(cli *Client, path, content string) (int, error) {
 	return 0, err
 }
 
-// needs fail check
 func TestRequestWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -95,7 +97,6 @@ func TestRequestFilename(t *testing.T) {
 	assert.Equal(t, f.Name(), "foo")
 }
 
-// needs fail check
 func TestRequestRead(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -106,12 +107,24 @@ func TestRequestRead(t *testing.T) {
 	defer rf.Close()
 	contents := make([]byte, 5)
 	n, err := rf.Read(contents)
-	if err != nil && err != io.EOF { t.Fatalf("err: %v", err) }
+	if err != nil && err != io.EOF {
+		t.Fatalf("err: %v", err)
+	}
 	assert.Equal(t, 5, n)
 	assert.Equal(t, "hello", string(contents[0:5]))
 }
 
-// needs fail check
+func TestRequestReadFail(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	rf, err := p.cli.Open("/foo")
+	assert.Nil(t, err)
+	contents := make([]byte, 5)
+	n, err := rf.Read(contents)
+	assert.Equal(t, n, 0)
+	assert.IsType(t, &StatusError{}, err)
+}
+
 func TestRequestOpen(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -121,7 +134,6 @@ func TestRequestOpen(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-// needs fail check
 func TestRequestMkdir(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -133,7 +145,6 @@ func TestRequestMkdir(t *testing.T) {
 	assert.True(t, f.isdir)
 }
 
-// needs fail check
 func TestRequestRemove(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -148,7 +159,6 @@ func TestRequestRemove(t *testing.T) {
 	assert.Equal(t, err, os.ErrNotExist)
 }
 
-// needs fail check
 func TestRequestRename(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -163,6 +173,17 @@ func TestRequestRename(t *testing.T) {
 	assert.Nil(t, err)
 	_, err = r.fetch("/foo")
 	assert.Equal(t, err, os.ErrNotExist)
+}
+
+func TestRequestRenameFail(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	_, err = putTestFile(p.cli, "/bar", "goodbye")
+	assert.Nil(t, err)
+	err = p.cli.Rename("/foo", "/bar")
+	assert.IsType(t, &StatusError{}, err)
 }
 
 func TestRequestStat(t *testing.T) {
@@ -184,12 +205,51 @@ func TestRequestStatFail(t *testing.T) {
 	defer p.Close()
 	fi, err := p.cli.Stat("/foo")
 	assert.Nil(t, fi)
-	fmt.Println(err, reflect.TypeOf(err))
 	assert.True(t, os.IsNotExist(err))
 }
 
-// {sym,read}link and readdir left
-func TestRequest(t *testing.T) {
+func TestRequestSymlink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	err = p.cli.Symlink("/foo", "/bar")
+	assert.Nil(t, err)
+	r := p.testHandler()
+	fi, err := r.fetch("/bar")
+	assert.Nil(t, err)
+	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+}
+
+func TestRequestSymlinkFail(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	err := p.cli.Symlink("/foo", "/bar")
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRequestReadlink(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	err = p.cli.Symlink("/foo", "/bar")
+	assert.Nil(t, err)
+	rl, err := p.cli.ReadLink("/bar")
+	assert.Nil(t, err)
+	assert.Equal(t, "foo", rl)
+}
+
+func TestRequestReaddir(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	_, err = putTestFile(p.cli, "/bar", "goodbye")
+	assert.Nil(t, err)
+	di, err := p.cli.ReadDir("/")
+	assert.Nil(t, err)
+	assert.Len(t, di, 2)
+	assert.Equal(t, di[0].Name(), "foo")
+	assert.Equal(t, di[1].Name(), "bar")
 }
