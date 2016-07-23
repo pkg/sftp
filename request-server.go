@@ -3,6 +3,7 @@ package sftp
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
@@ -166,10 +167,20 @@ func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
 		fmt.Println("Request Method: ", request.Method)
 		rpkt, err = request.handle(rs.Handlers)
 		if err != nil {
+			err = errorAdapter(err)
 			rpkt = statusFromError(pkt, err)
 		}
 	} else {
 		rpkt = statusFromError(pkt, syscall.EBADF)
 	}
 	return rpkt
+}
+
+// os.ErrNotExist should convert to ssh_FX_NO_SUCH_FILE, but is not recognized
+// by statusFromError. So we convert to syscall.ENOENT which it does.
+func errorAdapter(err error) error {
+	if err == os.ErrNotExist {
+		return syscall.ENOENT
+	}
+	return err
 }
