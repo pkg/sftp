@@ -129,7 +129,7 @@ func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
 			err = &os.PathError{"readlink", r.Filepath, syscall.ENOENT}
 			return nil, err
 		}
-		filename := filepath.Clean(r.Filepath)
+		filename := finfo[0].Name()
 		return &sshFxpNamePacket{
 			ID: r.pkt_id,
 			NameAttrs: []sshFxpNameAttr{{
