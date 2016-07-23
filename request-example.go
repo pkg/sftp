@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-var _ = fmt.Println
-
 // Returns a Hanlders object with the test handlers
 func InMemHandler() Handlers {
 	root := &root{
@@ -84,7 +82,6 @@ func (fs *root) Filecmd(r *Request) error {
 		}
 		fs.files[r.Filepath] = newMemFile(r.Filepath, true)
 	case "Symlink":
-		fmt.Println("ln -s", r.Filepath, r.Target)
 		_, err := fs.fetch(r.Filepath)
 		if err != nil {
 			return err
@@ -100,10 +97,8 @@ func (fs *root) Fileinfo(r *Request) ([]os.FileInfo, error) {
 	switch r.Method {
 	case "List":
 		list := []os.FileInfo{}
-		fmt.Println("ls", r.Filepath)
 		for fn, fi := range fs.files {
 			if filepath.Dir(fn) == r.Filepath {
-				fmt.Println(fn, fi.Name())
 				list = append(list, fi)
 			}
 		}
