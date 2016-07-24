@@ -13,7 +13,6 @@ type Request struct {
 	// Rmdir, Mkdir, List, Readlink, Symlink
 	Method   string
 	Filepath string
-	Pflags   uint32
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// packet data
@@ -39,7 +38,7 @@ func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 	switch r.Method {
 	case "Get":
 		rpkt, err = fileget(handlers.FileGet, r)
-	case "Put":
+	case "Put": // add "Append" to this to handle append only file writes
 		rpkt, err = fileput(handlers.FilePut, r)
 	case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		rpkt, err = filecmd(handlers.FileCmd, r)
@@ -148,12 +147,10 @@ func (r *Request) populate(p interface{}) {
 	switch p := p.(type) {
 	case *sshFxpSetstatPacket:
 		r.Method = "Setstat"
-		r.Pflags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
 		r.pkt_id = p.id()
 	case *sshFxpFsetstatPacket:
 		r.Method = "Setstat"
-		r.Pflags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
 		r.pkt_id = p.id()
 	case *sshFxpRenamePacket:
