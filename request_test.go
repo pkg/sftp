@@ -57,7 +57,6 @@ func testRequest(method string) *Request {
 	return &Request{
 		Filepath: "./request_test.go",
 		Method:   method,
-		Pflags:   1,
 		Attrs:    []byte("foo"),
 		Target:   "foo",
 		pkt_id:   1,
