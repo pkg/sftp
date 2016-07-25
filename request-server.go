@@ -1,11 +1,9 @@
 package sftp
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sync"
 	"syscall"
 )
@@ -108,7 +106,7 @@ func (rs *RequestServer) Serve() error {
 
 func (rs *RequestServer) packetWorker() error {
 	for pkt := range rs.pktChan {
-		fmt.Println("Incoming Packet: ", pkt, reflect.TypeOf(pkt))
+		// fmt.Println("Incoming Packet: ", pkt, reflect.TypeOf(pkt))
 		var handle string
 		var rpkt resp_packet
 		var err error
@@ -132,7 +130,7 @@ func (rs *RequestServer) packetWorker() error {
 			rpkt = rs.request(handle, pkt)
 		}
 
-		fmt.Println("Reply Packet: ", rpkt, reflect.TypeOf(rpkt))
+		// fmt.Println("Reply Packet: ", rpkt, reflect.TypeOf(rpkt))
 		err = rs.sendPacket(rpkt)
 		if err != nil {
 			return err
@@ -164,7 +162,7 @@ func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
 	if request, ok := rs.getRequest(handle); ok {
 		// called here to keep packet handling out of request for testing
 		request.populate(pkt)
-		fmt.Println("Request Method: ", request.Method)
+		// fmt.Println("Request Method: ", request.Method)
 		rpkt, err = request.handle(rs.Handlers)
 		if err != nil {
 			err = errorAdapter(err)
