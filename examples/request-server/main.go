@@ -119,10 +119,7 @@ func main() {
 		}(requests)
 
 		root := sftp.InMemHandler()
-		server, err := sftp.NewRequestServer(channel, root)
-		if err != nil {
-			log.Fatal(err)
-		}
+		server := sftp.NewRequestServer(channel, root)
 		if err := server.Serve(); err != nil {
 			log.Fatal("sftp server completed with error:", err)
 		}

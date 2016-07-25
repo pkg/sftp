@@ -30,13 +30,10 @@ func clientRequestServerPair(t *testing.T) *csPair {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
 	handlers := InMemHandler()
-	server, err := NewRequestServer(struct {
+	server := NewRequestServer(struct {
 		io.Reader
 		io.WriteCloser
 	}{sr, sw}, handlers)
-	if err != nil {
-		t.Fatal(err)
-	}
 	go server.Serve()
 	client, err := NewClientPipe(cr, cw)
 	if err != nil {

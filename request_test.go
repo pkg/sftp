@@ -84,11 +84,11 @@ func (h Handlers) getOut() *bytes.Buffer {
 	return handler.output.(*bytes.Buffer)
 }
 
-var testError = errors.New("test error")
+var errTest = errors.New("test error")
 
 func (h *Handlers) returnError() {
 	handler := h.FilePut.(*testHandler)
-	handler.err = testError
+	handler.err = errTest
 }
 
 func statusOk(t *testing.T, p interface{}) {
@@ -130,7 +130,7 @@ func TestRequestCmdr(t *testing.T) {
 	handlers.returnError()
 	pkt, err = request.handle(handlers)
 	assert.Nil(t, pkt)
-	assert.Equal(t, err, testError)
+	assert.Equal(t, err, errTest)
 }
 
 func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }

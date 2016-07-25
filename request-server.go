@@ -12,6 +12,7 @@ var maxTxPacket uint32 = 1 << 15
 
 type handleHandler func(string) string
 
+// Handlers contains the 4 SFTP server request handlers.
 type Handlers struct {
 	FileGet  FileReader
 	FilePut  FileWriter
@@ -19,7 +20,7 @@ type Handlers struct {
 	FileInfo FileInfoer
 }
 
-// Server that abstracts the sftp protocol for a http request-like protocol
+// RequestServer abstracts the sftp protocol with an http request-like protocol
 type RequestServer struct {
 	serverConn
 	Handlers        Handlers
@@ -28,10 +29,10 @@ type RequestServer struct {
 	openRequestLock sync.RWMutex
 }
 
-// simple factory function
-// one server per user-session
-func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) (*RequestServer, error) {
-	s := &RequestServer{
+// NewRequestServer creates/allocates/returns new RequestServer.
+// Normally there there will be one server per user-session.
+func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
+	return &RequestServer{
 		serverConn: serverConn{
 			conn: conn{
 				Reader:      rwc,
@@ -42,8 +43,6 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) (*RequestServer, error
 		pktChan:      make(chan packet, sftpServerWorkerCount),
 		openRequests: make(map[string]*Request),
 	}
-
-	return s, nil
 }
 
 func (rs *RequestServer) nextRequest(r *Request) string {
@@ -68,10 +67,10 @@ func (rs *RequestServer) closeRequest(handle string) {
 	}
 }
 
-// close the read/write/closer to trigger exiting the main server loop
+// Close the read/write/closer to trigger exiting the main server loop
 func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
-// start serving requests from user session
+// Serve requests for user session
 func (rs *RequestServer) Serve() error {
 	var wg sync.WaitGroup
 	wg.Add(sftpServerWorkerCount)
