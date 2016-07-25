@@ -1,3 +1,4 @@
+# Request Based SFTP API
 
 The request based API allows for custom backends in a way similar to the http
 package. In order to create a backend you need to implement 4 handler
@@ -16,24 +17,31 @@ The Request structure has 5 public fields which you will deal with.
 
 Below are the methods and a brief description of what they need to do.
 
-## Fileread(*Request) (io.Reader, error)
+### Fileread(*Request) (io.Reader, error)
 
 Handler for "Get" method and returns an io.Reader for the file which the server
 then sends to the client.
 
-    Filewrite(*Request) (io.Writer, error)
+### Filewrite(*Request) (io.Writer, error)
 
 Handler for "Put" method and returns an io.Writer for the file which the server
 then writes the uploaded file to.
 
-    Filecmd(*Request) error
+###    Filecmd(*Request) error
 
 Handles "SetStat", "Rename", "Rmdir", "Mkdir"  and "Symlink" methods. Makes the
 appropriate changes and returns nil for success or an filesystem like error
 (eg. os.ErrNotExist).
 
-    Fileinfo(*Request) ([]os.FileInfo, error)
+### Fileinfo(*Request) ([]os.FileInfo, error)
 
 Handles "List", "Stat", "Readlink" methods. Gathers/creates FileInfo structs
 with the data on the files and returns in a list (list of 1 for Stat and
 Readlink).
+
+
+## TODO
+
+- Add support for SFTP file append only mode.
+- Add support for API users to see trace/debugging info of what is going on
+inside SFTP server.
