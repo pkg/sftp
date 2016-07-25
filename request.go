@@ -131,7 +131,8 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 		return ret, nil
 	case "Stat":
 		if len(finfo) == 0 {
-			err = &os.PathError{"stat", r.Filepath, syscall.ENOENT}
+			err = &os.PathError{Op: "stat", Path: r.Filepath,
+				Err: syscall.ENOENT}
 			return nil, err
 		}
 		return &sshFxpStatResponse{
@@ -140,7 +141,8 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 		}, nil
 	case "Readlink":
 		if len(finfo) == 0 {
-			err = &os.PathError{"readlink", r.Filepath, syscall.ENOENT}
+			err = &os.PathError{Op: "readlink", Path: r.Filepath,
+				Err: syscall.ENOENT}
 			return nil, err
 		}
 		filename := finfo[0].Name()
