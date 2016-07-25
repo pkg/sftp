@@ -12,7 +12,7 @@ type packet interface {
 	id() uint32
 }
 
-type resp_packet interface {
+type responsePacket interface {
 	encoding.BinaryMarshaler
 }
 
