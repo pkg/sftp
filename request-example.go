@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Returns a Hanlders object with the test handlers
+// InMemHandler returns a Hanlders object with the test handlers
 func InMemHandler() Handlers {
 	root := &root{
 		files: make(map[string]*memFile),
@@ -131,11 +131,11 @@ type root struct {
 	files map[string]*memFile
 }
 
-func (r *root) fetch(path string) (*memFile, error) {
+func (fs *root) fetch(path string) (*memFile, error) {
 	if path == "/" {
-		return r.memFile, nil
+		return fs.memFile, nil
 	}
-	if file, ok := r.files[path]; ok {
+	if file, ok := fs.files[path]; ok {
 		return file, nil
 	}
 	return nil, os.ErrNotExist

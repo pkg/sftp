@@ -8,6 +8,7 @@ import (
 	"syscall"
 )
 
+// Request contains the data and state for the incoming service request.
 type Request struct {
 	// Get, Put, SetStat, Stat, Rename, Remove
 	// Rmdir, Mkdir, List, Readlink, Symlink
@@ -52,13 +53,17 @@ func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 func fileget(h FileReader, r *Request) (resp_packet, error) {
 	if r.get_reader == nil {
 		reader, err := h.Fileread(r)
-		if err != nil { return nil, syscall.EBADF }
+		if err != nil {
+			return nil, syscall.EBADF
+		}
 		r.get_reader = reader
 	}
 	reader := r.get_reader
 	data := make([]byte, clamp(r.length, maxTxPacket))
 	n, err := reader.Read(data)
-	if err != nil && (err != io.EOF || n == 0) { return nil, err }
+	if err != nil && (err != io.EOF || n == 0) {
+		return nil, err
+	}
 	return &sshFxpDataPacket{
 		ID:     r.pkt_id,
 		Length: uint32(n),
@@ -70,13 +75,17 @@ func fileget(h FileReader, r *Request) (resp_packet, error) {
 func fileput(h FileWriter, r *Request) (resp_packet, error) {
 	if r.put_writer == nil {
 		writer, err := h.Filewrite(r)
-		if err != nil { return nil, syscall.EBADF }
+		if err != nil {
+			return nil, syscall.EBADF
+		}
 		r.put_writer = writer
 	}
 	writer := r.put_writer
 
 	_, err := writer.Write(r.data)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return &sshFxpStatusPacket{
 		ID: r.pkt_id,
 		StatusError: StatusError{
@@ -87,7 +96,9 @@ func fileput(h FileWriter, r *Request) (resp_packet, error) {
 // wrap FileCmder handler
 func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 	err := h.Filecmd(r)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return &sshFxpStatusPacket{
 		ID: r.pkt_id,
 		StatusError: StatusError{
@@ -97,9 +108,13 @@ func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 
 // wrap FileInfoer handler
 func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
-	if r.eof { return nil, io.EOF }
+	if r.eof {
+		return nil, io.EOF
+	}
 	finfo, err := h.Fileinfo(r)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	switch r.Method {
 	case "List":
