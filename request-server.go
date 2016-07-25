@@ -107,7 +107,7 @@ func (rs *RequestServer) packetWorker() error {
 	for pkt := range rs.pktChan {
 		// fmt.Println("Incoming Packet: ", pkt, reflect.TypeOf(pkt))
 		var handle string
-		var rpkt resp_packet
+		var rpkt responsePacket
 		var err error
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:
@@ -138,7 +138,7 @@ func (rs *RequestServer) packetWorker() error {
 	return nil
 }
 
-func cleanPath(pkt *sshFxpRealpathPacket) resp_packet {
+func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
 	path := pkt.getPath()
 	if !filepath.IsAbs(path) {
 		path = "/" + path
@@ -155,8 +155,8 @@ func cleanPath(pkt *sshFxpRealpathPacket) resp_packet {
 	}
 }
 
-func (rs *RequestServer) request(handle string, pkt packet) resp_packet {
-	var rpkt resp_packet
+func (rs *RequestServer) request(handle string, pkt packet) responsePacket {
+	var rpkt responsePacket
 	var err error
 	if request, ok := rs.getRequest(handle); ok {
 		// called here to keep packet handling out of request for testing

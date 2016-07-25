@@ -33,9 +33,9 @@ func newRequest(path string) *Request {
 }
 
 // called from worker to handle packet/request
-func (r *Request) handle(handlers Handlers) (resp_packet, error) {
+func (r *Request) handle(handlers Handlers) (responsePacket, error) {
 	var err error
-	var rpkt resp_packet
+	var rpkt responsePacket
 	switch r.Method {
 	case "Get":
 		rpkt, err = fileget(handlers.FileGet, r)
@@ -50,7 +50,7 @@ func (r *Request) handle(handlers Handlers) (resp_packet, error) {
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r *Request) (resp_packet, error) {
+func fileget(h FileReader, r *Request) (responsePacket, error) {
 	if r.get_reader == nil {
 		reader, err := h.Fileread(r)
 		if err != nil {
@@ -72,7 +72,7 @@ func fileget(h FileReader, r *Request) (resp_packet, error) {
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r *Request) (resp_packet, error) {
+func fileput(h FileWriter, r *Request) (responsePacket, error) {
 	if r.put_writer == nil {
 		writer, err := h.Filewrite(r)
 		if err != nil {
@@ -94,7 +94,7 @@ func fileput(h FileWriter, r *Request) (resp_packet, error) {
 }
 
 // wrap FileCmder handler
-func filecmd(h FileCmder, r *Request) (resp_packet, error) {
+func filecmd(h FileCmder, r *Request) (responsePacket, error) {
 	err := h.Filecmd(r)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func filecmd(h FileCmder, r *Request) (resp_packet, error) {
 }
 
 // wrap FileInfoer handler
-func fileinfo(h FileInfoer, r *Request) (resp_packet, error) {
+func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 	if r.eof {
 		return nil, io.EOF
 	}
