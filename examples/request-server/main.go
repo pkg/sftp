@@ -28,7 +28,9 @@ func main() {
 	flag.Parse()
 
 	debugStream := ioutil.Discard
-	if debugStderr { debugStream = os.Stderr }
+	if debugStderr {
+		debugStream = os.Stderr
+	}
 
 	// An SSH server is represented by a ServerConfig, which holds
 	// certificate details and handles authentication of ServerConns.
@@ -45,17 +47,23 @@ func main() {
 	}
 
 	privateBytes, err := ioutil.ReadFile("id_rsa")
-	if err != nil { log.Fatal("Failed to load private key", err) }
+	if err != nil {
+		log.Fatal("Failed to load private key", err)
+	}
 
 	private, err := ssh.ParsePrivateKey(privateBytes)
-	if err != nil { log.Fatal("Failed to parse private key", err) }
+	if err != nil {
+		log.Fatal("Failed to parse private key", err)
+	}
 
 	config.AddHostKey(private)
 
 	// Once a ServerConfig has been configured, connections can be
 	// accepted.
 	listener, err := net.Listen("tcp", "0.0.0.0:2022")
-	if err != nil { log.Fatal("failed to listen for connection", err) }
+	if err != nil {
+		log.Fatal("failed to listen for connection", err)
+	}
 	fmt.Printf("Listening on %v\n", listener.Addr())
 
 	nConn, err := listener.Accept()
@@ -66,7 +74,9 @@ func main() {
 	// Before use, a handshake must be performed on the incoming
 	// net.Conn.
 	_, chans, reqs, err := ssh.NewServerConn(nConn, config)
-	if err != nil { log.Fatal("failed to handshake", err) }
+	if err != nil {
+		log.Fatal("failed to handshake", err)
+	}
 	fmt.Fprintf(debugStream, "SSH server established\n")
 
 	// The incoming Request channel must be serviced.
@@ -84,7 +94,9 @@ func main() {
 			continue
 		}
 		channel, requests, err := newChannel.Accept()
-		if err != nil { log.Fatal("could not accept channel.", err) }
+		if err != nil {
+			log.Fatal("could not accept channel.", err)
+		}
 		fmt.Fprintf(debugStream, "Channel accepted\n")
 
 		// Sessions have out-of-band requests such as "shell",
@@ -108,7 +120,9 @@ func main() {
 
 		root := sftp.InMemHandler()
 		server, err := sftp.NewRequestServer(channel, root)
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 		if err := server.Serve(); err != nil {
 			log.Fatal("sftp server completed with error:", err)
 		}
