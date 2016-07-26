@@ -47,16 +47,16 @@ func TestRequestCache(t *testing.T) {
 	defer p.Close()
 	foo := &Request{Filepath: "foo"}
 	bar := &Request{Filepath: "bar"}
-	p.svr.nextRequest(foo)
-	p.svr.nextRequest(bar)
+	fh := p.svr.nextRequest(foo)
+	bh := p.svr.nextRequest(bar)
 	assert.Len(t, p.svr.openRequests, 2)
-	_foo, ok := p.svr.getRequest("foo")
+	_foo, ok := p.svr.getRequest(fh)
 	assert.Equal(t, foo, _foo)
 	assert.True(t, ok)
 	_, ok = p.svr.getRequest("zed")
 	assert.False(t, ok)
-	p.svr.closeRequest("foo")
-	p.svr.closeRequest("bar")
+	p.svr.closeRequest(fh)
+	p.svr.closeRequest(bh)
 	assert.Len(t, p.svr.openRequests, 0)
 }
 
