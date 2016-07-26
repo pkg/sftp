@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 )
@@ -27,6 +28,7 @@ type RequestServer struct {
 	pktChan         chan packet
 	openRequests    map[string]*Request
 	openRequestLock sync.RWMutex
+	handleCount     int
 }
 
 // NewRequestServer creates/allocates/returns new RequestServer.
@@ -48,8 +50,10 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 func (rs *RequestServer) nextRequest(r *Request) string {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
-	rs.openRequests[r.Filepath] = r
-	return r.Filepath
+	rs.handleCount++
+	handle := strconv.Itoa(rs.handleCount)
+	rs.openRequests[handle] = r
+	return handle
 }
 
 func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
