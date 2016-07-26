@@ -28,7 +28,7 @@ type ServerDriver interface {
 	Rename(oldPath string, newPath string) error
 	MakeDir(path string) error
 	GetFile(path string) (io.ReadCloser, error)
-	PutFile(path string, reader io.Reader) (error)
+	PutFile(path string, reader io.Reader) error
 }
 
 // Server is an SSH File Transfer Protocol (sftp) server.
@@ -68,7 +68,7 @@ func (svr *Server) closeHandle(handle string) error {
 	defer svr.openFilesLock.Unlock()
 	if f, ok := svr.openFiles[handle]; ok {
 		delete(svr.openFiles, handle)
-		if (f.IsDir) {
+		if f.IsDir {
 			return nil
 		}
 
@@ -453,10 +453,10 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	}
 
 	handle := svr.nextHandle(&fileHandle{
-		Path:        p.Path,
-		IsDir:       false,
-		Position:    0,
-		TempHandle:  tmpfile,
+		Path:       p.Path,
+		IsDir:      false,
+		Position:   0,
+		TempHandle: tmpfile,
 	})
 	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
 }
@@ -467,20 +467,26 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 		return svr.sendError(p, syscall.EBADF)
 	}
 
+	// If we've returned any files, we must have returned all of them, because the driver does not yet provide a way to
+	// page through results. So simply return EOF.
+	if f.Position > 0 {
+		return svr.sendError(p, io.EOF)
+	}
+
 	files, err := svr.driver.ListDir(f.Path)
 	if err != nil {
 		return svr.sendError(p, err)
 	}
 
 	ret := sshFxpNamePacket{ID: p.ID}
-	for _, dirent := range files[f.Position:] {
+	for _, dirent := range files {
 		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 			Name:     dirent.Name(),
 			LongName: dirent.Name(),
 			Attrs:    []interface{}{dirent},
 		})
 	}
-	f.Position = len(files[f.Position:])
+	f.Position = len(files)
 	return svr.sendPacket(ret)
 }
 
