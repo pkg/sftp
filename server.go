@@ -478,8 +478,21 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 		return svr.sendError(p, err)
 	}
 
+	// For compatibility, include a '.' and '..' directory.
+	files = append(files, &fileInfo{
+		name: ".",
+		size: 4096,
+		mode: os.ModeDir,
+	})
+	files = append(files, &fileInfo{
+		name: "..",
+		size: 4096,
+		mode: os.ModeDir,
+	})
+
 	ret := sshFxpNamePacket{ID: p.ID}
 	for _, dirent := range files {
+
 		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 			Name:     dirent.Name(),
 			LongName: dirent.Name(),

@@ -63,6 +63,9 @@ func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
 	objects, err := d.s3.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:    aws.String(d.bucket),
 		Prefix:    aws.String(prefix),
@@ -85,6 +88,7 @@ func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
 	for _, o := range objects.CommonPrefixes {
 		files = append(files, &fileInfo{
 			name: strings.TrimSuffix(strings.TrimPrefix(*o.Prefix, prefix), "/"),
+			size: 4096,
 			mode: os.ModeDir,
 		})
 	}
