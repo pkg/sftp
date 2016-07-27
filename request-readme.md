@@ -42,6 +42,7 @@ Readlink).
 
 ## TODO
 
-- Add support for SFTP file append only mode.
 - Add support for API users to see trace/debugging info of what is going on
 inside SFTP server.
+- Consider adding support for SFTP file append only mode.
+
