@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -247,6 +248,7 @@ func TestRequestReaddir(t *testing.T) {
 	di, err := p.cli.ReadDir("/")
 	assert.Nil(t, err)
 	assert.Len(t, di, 2)
-	assert.Equal(t, di[0].Name(), "foo")
-	assert.Equal(t, di[1].Name(), "bar")
+	names := []string{di[0].Name(), di[1].Name()}
+	sort.Strings(names)
+	assert.Equal(t, []string{"bar", "foo"}, names)
 }
