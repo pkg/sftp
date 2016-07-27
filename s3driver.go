@@ -66,33 +66,42 @@ func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
 	if !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
 	}
-	objects, err := d.s3.ListObjectsV2(&s3.ListObjectsV2Input{
-		Bucket:    aws.String(d.bucket),
-		Prefix:    aws.String(prefix),
-		Delimiter: aws.String("/"),
-	})
-	if err != nil {
-		return nil, err
-	}
+	var nextContinuationToken *string
 	files := []os.FileInfo{}
-	for _, o := range objects.Contents {
-		if *o.Key == prefix {
-			continue
+	for {
+		objects, err := d.s3.ListObjectsV2(&s3.ListObjectsV2Input{
+			Bucket:            aws.String(d.bucket),
+			Prefix:            aws.String(prefix),
+			Delimiter:         aws.String("/"),
+			ContinuationToken: nextContinuationToken,
+		})
+		if err != nil {
+			return nil, err
 		}
-		files = append(files, &fileInfo{
-			name:  strings.TrimPrefix(*o.Key, prefix),
-			size:  *o.Size,
-			mtime: *o.LastModified,
-		})
+
+		for _, o := range objects.Contents {
+			if *o.Key == prefix {
+				continue
+			}
+			files = append(files, &fileInfo{
+				name:  strings.TrimPrefix(*o.Key, prefix),
+				size:  *o.Size,
+				mtime: *o.LastModified,
+			})
+		}
+		for _, o := range objects.CommonPrefixes {
+			files = append(files, &fileInfo{
+				name: strings.TrimSuffix(strings.TrimPrefix(*o.Prefix, prefix), "/"),
+				size: 4096,
+				mode: os.ModeDir,
+			})
+		}
+
+		if !*objects.IsTruncated {
+			return files, nil
+		}
+		nextContinuationToken = objects.NextContinuationToken
 	}
-	for _, o := range objects.CommonPrefixes {
-		files = append(files, &fileInfo{
-			name: strings.TrimSuffix(strings.TrimPrefix(*o.Prefix, prefix), "/"),
-			size: 4096,
-			mode: os.ModeDir,
-		})
-	}
-	return files, nil
 }
 
 func (d S3Driver) DeleteDir(path string) error {
@@ -200,6 +209,9 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	return err
 }
 
+// translatePath takes in a home directory prefix, and a path to add to it, and returns a cleaned and validated path
+// that represents the two joined together. It will resolve things like '..' while disallowing the prefix to be escaped
+// from. It also preserves a single trailing slash if one is present, so it can be used on both directories and files.
 func translatePath(prefix, path string) (s3Path string, err error) {
 	cleanPath := filepath.Clean("/" + prefix + filepath.Clean("/"+path))
 	// For some reason, filepath.Clean drops trailing /'s, so if there was one we have to put it back
