@@ -91,6 +91,7 @@ func TestListDir(t *testing.T) {
 		CommonPrefixes: []*s3.CommonPrefix{
 			&s3.CommonPrefix{Prefix: aws.String("nested_dir/")},
 		},
+		IsTruncated: aws.Bool(false),
 	}, nil)
 
 	driver := &S3Driver{
