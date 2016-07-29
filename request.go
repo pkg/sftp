@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 	"syscall"
 )
 
@@ -17,19 +18,45 @@ type Request struct {
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// packet data
-	pkt_id uint32
+	packets     []packet_data
+	packetsLock sync.RWMutex
+	// reader/writer from handlers
+	put_writer io.WriterAt
+	get_reader io.ReaderAt
+	eof        bool // hack for readdir to keep eof state
+}
+
+type packet_data struct {
+	id     uint32
 	data   []byte
 	length uint32
-	// reader/writer from handlers
-	put_writer io.Writer
-	get_reader io.Reader
-	eof        bool // hack for readdir to keep eof state
+	offset int64
 }
 
 // Here mainly to specify that Filepath is required
 func newRequest(path string) *Request {
 	request := &Request{Filepath: filepath.Clean(path)}
 	return request
+}
+
+// push packet_data into fifo
+func (r *Request) pushPacket(pd packet_data) {
+	r.packetsLock.Lock()
+	defer r.packetsLock.Unlock()
+	r.packets = append(r.packets, pd)
+}
+
+// pop packet_data into fifo
+func (r *Request) popPacket() packet_data {
+	r.packetsLock.Lock()
+	defer r.packetsLock.Unlock()
+	var pd packet_data
+	pd, r.packets = r.packets[0], r.packets[1:]
+	return pd
+}
+
+func (r *Request) pkt_id() uint32 {
+	return r.packets[0].id
 }
 
 // called from worker to handle packet/request
@@ -59,13 +86,15 @@ func fileget(h FileReader, r *Request) (responsePacket, error) {
 		r.get_reader = reader
 	}
 	reader := r.get_reader
-	data := make([]byte, clamp(r.length, maxTxPacket))
-	n, err := reader.Read(data)
+
+	pd := r.popPacket()
+	data := make([]byte, clamp(pd.length, maxTxPacket))
+	n, err := reader.ReadAt(data, pd.offset)
 	if err != nil && (err != io.EOF || n == 0) {
 		return nil, err
 	}
 	return &sshFxpDataPacket{
-		ID:     r.pkt_id,
+		ID:     pd.id,
 		Length: uint32(n),
 		Data:   data[:n],
 	}, nil
@@ -82,12 +111,13 @@ func fileput(h FileWriter, r *Request) (responsePacket, error) {
 	}
 	writer := r.put_writer
 
-	_, err := writer.Write(r.data)
+	pd := r.popPacket()
+	_, err := writer.WriteAt(pd.data, pd.offset)
 	if err != nil {
 		return nil, err
 	}
 	return &sshFxpStatusPacket{
-		ID: r.pkt_id,
+		ID: pd.id,
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
 		}}, nil
@@ -100,7 +130,7 @@ func filecmd(h FileCmder, r *Request) (responsePacket, error) {
 		return nil, err
 	}
 	return &sshFxpStatusPacket{
-		ID: r.pkt_id,
+		ID: r.pkt_id(),
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
 		}}, nil
@@ -119,7 +149,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 	switch r.Method {
 	case "List":
 		dirname := path.Base(r.Filepath)
-		ret := &sshFxpNamePacket{ID: r.pkt_id}
+		ret := &sshFxpNamePacket{ID: r.pkt_id()}
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 				Name:     fi.Name(),
@@ -136,7 +166,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 			return nil, err
 		}
 		return &sshFxpStatResponse{
-			ID:   r.pkt_id,
+			ID:   r.pkt_id(),
 			info: finfo[0],
 		}, nil
 	case "Readlink":
@@ -147,7 +177,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 		}
 		filename := finfo[0].Name()
 		return &sshFxpNamePacket{
-			ID: r.pkt_id,
+			ID: r.pkt_id(),
 			NameAttrs: []sshFxpNameAttr{{
 				Name:     filename,
 				LongName: filename,
@@ -161,50 +191,54 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 // populate attributes of request object from packet data
 func (r *Request) populate(p interface{}) {
 	// r.Filepath should already be set
+	var pd packet_data
 	switch p := p.(type) {
 	case *sshFxpSetstatPacket:
 		r.Method = "Setstat"
 		r.Attrs = p.Attrs.([]byte)
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpFsetstatPacket:
 		r.Method = "Setstat"
 		r.Attrs = p.Attrs.([]byte)
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpRenamePacket:
 		r.Method = "Rename"
 		r.Target = filepath.Clean(p.Newpath)
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpSymlinkPacket:
 		r.Method = "Symlink"
 		r.Target = filepath.Clean(p.Linkpath)
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpReadPacket:
 		r.Method = "Get"
-		r.length = p.Len
-		r.pkt_id = p.id()
+		pd.length = p.Len
+		pd.offset = int64(p.Offset)
+		pd.id = p.id()
 	case *sshFxpWritePacket:
 		r.Method = "Put"
-		r.data = p.Data
-		r.length = p.Length
-		r.pkt_id = p.id()
+		pd.id = p.id()
+		pd.data = p.Data
+		pd.length = p.Length
+		pd.offset = int64(p.Offset)
 	case *sshFxpReaddirPacket:
 		r.Method = "List"
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpRemovePacket:
 		r.Method = "Remove"
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket:
 		r.Method = "Stat"
-		r.pkt_id = p.(packet).id()
+		pd.id = p.(packet).id()
 	case *sshFxpRmdirPacket:
 		r.Method = "Rmdir"
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpReadlinkPacket:
 		r.Method = "Readlink"
-		r.pkt_id = p.id()
+		pd.id = p.id()
 	case *sshFxpMkdirPacket:
 		r.Method = "Mkdir"
-		r.pkt_id = p.id()
+		pd.id = p.id()
 		//r.Attrs are ignored in ./packet.go
 	}
+	r.pushPacket(pd)
 }

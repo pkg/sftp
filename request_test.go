@@ -7,28 +7,27 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
 	"testing"
 )
 
 type testHandler struct {
-	filecontents string    // dummy contents
-	output       io.Writer // dummy file out
-	err          error     // dummy error, should be file related
+	filecontents []byte      // dummy contents
+	output       io.WriterAt // dummy file out
+	err          error       // dummy error, should be file related
 }
 
-func (t *testHandler) Fileread(r *Request) (io.Reader, error) {
+func (t *testHandler) Fileread(r *Request) (io.ReaderAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	return strings.NewReader(t.filecontents), nil
+	return bytes.NewReader(t.filecontents), nil
 }
 
-func (t *testHandler) Filewrite(r *Request) (io.Writer, error) {
+func (t *testHandler) Filewrite(r *Request) (io.WriterAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	return io.Writer(t.output), nil
+	return io.WriterAt(t.output), nil
 }
 
 func (t *testHandler) Filecmd(r *Request) error {
@@ -53,22 +52,38 @@ func (t *testHandler) Fileinfo(r *Request) ([]os.FileInfo, error) {
 	return []os.FileInfo{fi}, nil
 }
 
+// make sure len(fakefile) == len(filecontents)
+type fakefile [10]byte
+
+var filecontents []byte = []byte("file-data.")
+
 func testRequest(method string) *Request {
 	return &Request{
 		Filepath: "./request_test.go",
 		Method:   method,
 		Attrs:    []byte("foo"),
 		Target:   "foo",
-		pkt_id:   1,
-		data:     []byte("file-data."),
-		length:   5,
+		packets: []packet_data{
+			packet_data{id: 1, data: filecontents[:5], length: 5},
+			packet_data{id: 2, data: filecontents[5:], length: 5, offset: 5}},
 	}
+}
+
+func (ff *fakefile) WriteAt(p []byte, off int64) (int, error) {
+	n := copy(ff[off:], p)
+	return n, nil
+}
+
+func (ff fakefile) string() string {
+	b := make([]byte, len(ff))
+	copy(b, ff[:])
+	return string(b)
 }
 
 func newTestHandlers() Handlers {
 	handler := &testHandler{
-		filecontents: "file-data.",
-		output:       bytes.NewBuffer([]byte{}),
+		filecontents: filecontents,
+		output:       &fakefile{},
 		err:          nil,
 	}
 	return Handlers{
@@ -79,9 +94,9 @@ func newTestHandlers() Handlers {
 	}
 }
 
-func (h Handlers) getOut() *bytes.Buffer {
+func (h Handlers) getOutString() string {
 	handler := h.FilePut.(*testHandler)
-	return handler.output.(*bytes.Buffer)
+	return handler.output.(*fakefile).string()
 }
 
 var errTest = errors.New("test error")
@@ -93,7 +108,6 @@ func (h *Handlers) returnError() {
 
 func statusOk(t *testing.T, p interface{}) {
 	if pkt, ok := p.(*sshFxpStatusPacket); ok {
-		assert.Equal(t, pkt.id(), uint32(1))
 		assert.Equal(t, pkt.StatusError.Code, uint32(ssh_FX_OK))
 	}
 }
@@ -101,12 +115,12 @@ func statusOk(t *testing.T, p interface{}) {
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
-	// req.length is 4, so we test reads in 4 byte chunks
-	for _, txt := range []string{"file-", "data."} {
+	// req.length is 5, so we test reads in 5 byte chunks
+	for i, txt := range []string{"file-", "data."} {
 		pkt, err := request.handle(handlers)
 		assert.Nil(t, err)
 		dpkt := pkt.(*sshFxpDataPacket)
-		assert.Equal(t, dpkt.id(), uint32(1))
+		assert.Equal(t, dpkt.id(), uint32(i+1))
 		assert.Equal(t, string(dpkt.Data), txt)
 	}
 }
@@ -116,8 +130,11 @@ func TestRequestPut(t *testing.T) {
 	request := testRequest("Put")
 	pkt, err := request.handle(handlers)
 	assert.Nil(t, err)
-	assert.Equal(t, handlers.getOut().String(), "file-data.")
 	statusOk(t, pkt)
+	pkt, err = request.handle(handlers)
+	assert.Nil(t, err)
+	statusOk(t, pkt)
+	assert.Equal(t, "file-data.", handlers.getOutString())
 }
 
 func TestRequestCmdr(t *testing.T) {

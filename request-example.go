@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -24,7 +25,7 @@ func InMemHandler() Handlers {
 }
 
 // Handlers
-func (fs *root) Fileread(r *Request) (io.Reader, error) {
+func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	file, err := fs.fetch(r.Filepath)
 	if err != nil {
 		return nil, err
@@ -35,10 +36,10 @@ func (fs *root) Fileread(r *Request) (io.Reader, error) {
 			return nil, err
 		}
 	}
-	return file.Reader()
+	return file.ReaderAt()
 }
 
-func (fs *root) Filewrite(r *Request) (io.Writer, error) {
+func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
 		dir, err := fs.fetch(filepath.Dir(r.Filepath))
@@ -51,7 +52,7 @@ func (fs *root) Filewrite(r *Request) (io.Writer, error) {
 		file = newMemFile(r.Filepath, false)
 		fs.files[r.Filepath] = file
 	}
-	return file.Writer()
+	return file.WriterAt()
 }
 
 func (fs *root) Filecmd(r *Request) error {
@@ -144,11 +145,12 @@ func (fs *root) fetch(path string) (*memFile, error) {
 // Implements os.FileInfo, Reader and Writer interfaces.
 // These are the 3 interfaces necessary for the Handlers.
 type memFile struct {
-	name    string
-	content []byte
-	modtime time.Time
-	symlink string
-	isdir   bool
+	name        string
+	modtime     time.Time
+	symlink     string
+	isdir       bool
+	content     []byte
+	contentLock sync.RWMutex
 }
 
 // factory to make sure modtime is set
@@ -180,22 +182,30 @@ func (f *memFile) Sys() interface{} {
 }
 
 // Read/Write
-func (f *memFile) Reader() (io.Reader, error) {
+func (f *memFile) ReaderAt() (io.ReaderAt, error) {
 	if f.isdir {
 		return nil, os.ErrInvalid
 	}
 	return bytes.NewReader(f.content), nil
 }
 
-func (f *memFile) Writer() (io.Writer, error) {
+func (f *memFile) WriterAt() (io.WriterAt, error) {
 	if f.isdir {
 		return nil, os.ErrInvalid
 	}
 	return f, nil
 }
-func (f *memFile) Write(p []byte) (int, error) {
+func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
 	// mimic write delays, should be optional
 	time.Sleep(time.Microsecond * time.Duration(len(p)))
-	f.content = append(f.content, p...)
+	f.contentLock.Lock()
+	defer f.contentLock.Unlock()
+	plen := len(p) + int(off)
+	if plen >= len(f.content) {
+		nc := make([]byte, plen)
+		copy(nc, f.content)
+		f.content = nc
+	}
+	copy(f.content[off:], p)
 	return len(p), nil
 }
