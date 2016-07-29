@@ -61,6 +61,19 @@ func TestRequestCache(t *testing.T) {
 	assert.Len(t, p.svr.openRequests, 0)
 }
 
+func TestRequestCacheState(t *testing.T) {
+	// test operation that uses open/close
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	assert.Len(t, p.svr.openRequests, 0)
+	// test operation that doesn't open/close
+	err = p.cli.Remove("/foo")
+	assert.Nil(t, err)
+	assert.Len(t, p.svr.openRequests, 0)
+}
+
 func putTestFile(cli *Client, path, content string) (int, error) {
 	w, err := cli.Create(path)
 	if err == nil {
