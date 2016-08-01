@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/pkg/sftp"
+	"github.com/Clever/sftp"
 	"golang.org/x/crypto/ssh"
 )
 

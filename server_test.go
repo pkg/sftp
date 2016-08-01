@@ -11,7 +11,7 @@ func clientServerPair(t *testing.T) (*Client, *Server) {
 	server, err := NewServer(struct {
 		io.Reader
 		io.WriteCloser
-	}{sr, sw})
+	}{sr, sw}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

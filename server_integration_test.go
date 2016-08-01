@@ -296,6 +296,7 @@ func (chsvr *sshSessionChannelServer) handleSubsystem(req *ssh.Request) error {
 
 	sftpServer, err := NewServer(
 		chsvr.ch,
+		&TestFileDriver{},
 		WithDebug(sftpServerDebugStream),
 	)
 	if err != nil {
@@ -390,12 +391,10 @@ func TestServerCompareSubsystems(t *testing.T) {
 
 	script := `
 ls /
-ls -l /
 ls /dev/
-ls -l /dev/
-ls -l /etc/
-ls -l /bin/
-ls -l /usr/bin/
+ls /etc/
+ls /bin/
+ls /usr/bin/
 `
 	outputGo, err := runSftpClient(t, script, "/", hostGo, portGo)
 	if err != nil {
@@ -479,26 +478,6 @@ func TestServerMkdirRmdir(t *testing.T) {
 
 	if _, err := os.Stat(tmpDir); err == nil {
 		t.Fatal("should have error after deleting the directory")
-	}
-}
-
-func TestServerSymlink(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
-	defer listenerGo.Close()
-
-	link := "/tmp/" + randName()
-	defer os.RemoveAll(link)
-
-	// now create a symbolic link within the new directory
-	if output, err := runSftpClient(t, "symlink /bin/sh "+link, "/", hostGo, portGo); err != nil {
-		t.Fatalf("failed: %v %v", err, string(output))
-	}
-
-	// symlink should now exist
-	if stat, err := os.Lstat(link); err != nil {
-		t.Fatal(err)
-	} else if (stat.Mode() & os.ModeSymlink) != os.ModeSymlink {
-		t.Fatalf("is not a symlink: %v", stat.Mode())
 	}
 }
 
@@ -601,18 +580,11 @@ func compareDirectoriesRecursive(t *testing.T, aroot, broot string) {
 			t.Fatalf("could not stat %v: %v", bPath, err)
 		}
 
-		// compare stats, with some leniency for the timestamp
-		if aFile.Mode() != bFile.Mode() {
-			t.Fatalf("modes different for %v: %v vs %v", aRel, aFile.Mode(), bFile.Mode())
-		}
+		// compare stats
 		if !aFile.IsDir() {
 			if aFile.Size() != bFile.Size() {
 				t.Fatalf("sizes different for %v: %v vs %v", aRel, aFile.Size(), bFile.Size())
 			}
-		}
-		timeDiff := aFile.ModTime().Sub(bFile.ModTime())
-		if timeDiff > time.Second || timeDiff < -time.Second {
-			t.Fatalf("mtimes different for %v: %v vs %v", aRel, aFile.ModTime(), bFile.ModTime())
 		}
 
 		// compare contents
@@ -647,25 +619,4 @@ func TestServerPutRecursive(t *testing.T) {
 	}
 
 	compareDirectoriesRecursive(t, dirLocal, path.Join(tmpDirRemote, path.Base(dirLocal)))
-}
-
-func TestServerGetRecursive(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
-	defer listenerGo.Close()
-
-	dirRemote, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpDirLocal := "/tmp/" + randName()
-	defer os.RemoveAll(tmpDirLocal)
-
-	t.Logf("get recursive: local %v remote %v", tmpDirLocal, dirRemote)
-
-	// pull this directory (source code etc) recursively from the server
-	if output, err := runSftpClient(t, "lmkdir "+tmpDirLocal+"\r\nget -r -P "+dirRemote+"/ "+tmpDirLocal+"/", "/", hostGo, portGo); err != nil {
-		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
-	}
-
-	compareDirectoriesRecursive(t, dirRemote, path.Join(tmpDirLocal, path.Base(dirRemote)))
 }
