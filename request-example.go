@@ -194,6 +194,8 @@ func (f *memFile) Writer() (io.Writer, error) {
 	return f, nil
 }
 func (f *memFile) Write(p []byte) (int, error) {
+	// mimic write delays, should be optional
+	time.Sleep(time.Microsecond * time.Duration(len(p)))
 	f.content = append(f.content, p...)
 	return len(p), nil
 }
