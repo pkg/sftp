@@ -26,6 +26,8 @@ func InMemHandler() Handlers {
 
 // Handlers
 func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err != nil {
 		return nil, err
@@ -40,6 +42,8 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
 		dir, err := fs.fetch(filepath.Dir(r.Filepath))
@@ -56,6 +60,8 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 }
 
 func (fs *root) Filecmd(r *Request) error {
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
 	switch r.Method {
 	case "SetStat":
 		return nil
@@ -95,6 +101,8 @@ func (fs *root) Filecmd(r *Request) error {
 }
 
 func (fs *root) Fileinfo(r *Request) ([]os.FileInfo, error) {
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
 	switch r.Method {
 	case "List":
 		list := []os.FileInfo{}
@@ -129,7 +137,8 @@ func (fs *root) Fileinfo(r *Request) ([]os.FileInfo, error) {
 // In memory file-system-y thing that the Hanlders live on
 type root struct {
 	*memFile
-	files map[string]*memFile
+	files     map[string]*memFile
+	filesLock sync.Mutex
 }
 
 func (fs *root) fetch(path string) (*memFile, error) {
@@ -196,6 +205,7 @@ func (f *memFile) WriterAt() (io.WriterAt, error) {
 	return f, nil
 }
 func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
+	// fmt.Println(string(p), off)
 	// mimic write delays, should be optional
 	time.Sleep(time.Microsecond * time.Duration(len(p)))
 	f.contentLock.Lock()
