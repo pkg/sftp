@@ -3,6 +3,7 @@ package sftp
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sort"
 	"testing"
@@ -21,26 +22,60 @@ type csPair struct {
 func (cs csPair) Close() {
 	cs.svr.Close()
 	cs.cli.Close()
+	os.Remove(sock)
 }
 
 func (cs csPair) testHandler() *root {
 	return cs.svr.Handlers.FileGet.(*root)
 }
 
+var sock string = "/tmp/rstest.sock"
+
 func clientRequestServerPair(t *testing.T) *csPair {
-	cr, sw := io.Pipe()
-	sr, cw := io.Pipe()
-	handlers := InMemHandler()
-	server := NewRequestServer(struct {
-		io.Reader
-		io.WriteCloser
-	}{sr, sw}, handlers)
-	go server.Serve()
-	client, err := NewClientPipe(cr, cw)
+	ready := make(chan bool)
+	os.Remove(sock) // either this or signal handling
+	var server *RequestServer
+	go func() {
+		l, err := net.Listen("unix", sock)
+		if err != nil {
+			// neither assert nor t.Fatal reliably exit before Accept errors
+			panic(err)
+		}
+		ready <- true
+		fd, err := l.Accept()
+		assert.Nil(t, err)
+		handlers := InMemHandler()
+		server = NewRequestServer(fd, handlers)
+		server.Serve()
+	}()
+	<-ready
+	defer os.Remove(sock)
+	c, err := net.Dial("unix", sock)
+	assert.Nil(t, err)
+	client, err := NewClientPipe(c, c)
 	if err != nil {
 		t.Fatalf("%+v\n", err)
 	}
 	return &csPair{client, server}
+}
+
+// after adding logging, maybe check log to make sure packet handling
+// was split over more than one worker
+func TestRequestSplitWrite(t *testing.T) {
+	done := make(chan bool)
+	defer close(done)
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	w, err := p.cli.Create("/foo")
+	assert.Nil(t, err)
+	p.cli.maxPacket = 3 // force it to send in small chunks
+	contents := "one two three four five six seven eight nine ten"
+	w.Write([]byte(contents))
+	w.Close()
+	r := p.testHandler()
+	f, _ := r.fetch("/foo")
+	assert.Equal(t, contents, string(f.content))
+	fmt.Println(string(f.content))
 }
 
 func TestRequestCache(t *testing.T) {
