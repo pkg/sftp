@@ -7,6 +7,8 @@ This is a fork of [github.com/pkg/sftp](http://github.com/pkg/sftp) that changes
 S3 and file system backend. The file system backend is mostly used for tests and is similar to the previous behavior. Additionally, this
 adds a ManagedServer component that can be used to easily create a server with an arbitrary backend.
 
+Tests that depend on the details of the file system server (mostly client tests) are being skipped.
+
 usage and examples
 ------------------
 
