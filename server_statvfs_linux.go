@@ -1,3 +1,5 @@
+// +build !gccgo,linux
+
 package sftp
 
 import (
