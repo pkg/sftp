@@ -59,8 +59,8 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 }
 
 func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
-	rs.openRequestLock.Lock()
-	defer rs.openRequestLock.Unlock()
+	rs.openRequestLock.RLock()
+	defer rs.openRequestLock.RUnlock()
 	r, ok := rs.openRequests[handle]
 	return r, ok
 }
