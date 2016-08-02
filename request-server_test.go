@@ -62,8 +62,6 @@ func clientRequestServerPair(t *testing.T) *csPair {
 // after adding logging, maybe check log to make sure packet handling
 // was split over more than one worker
 func TestRequestSplitWrite(t *testing.T) {
-	done := make(chan bool)
-	defer close(done)
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	w, err := p.cli.Create("/foo")
