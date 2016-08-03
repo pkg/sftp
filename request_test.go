@@ -1,6 +1,8 @@
 package sftp
 
 import (
+	"sync"
+
 	"github.com/stretchr/testify/assert"
 
 	"bytes"
@@ -55,16 +57,17 @@ func (t *testHandler) Fileinfo(r Request) ([]os.FileInfo, error) {
 // make sure len(fakefile) == len(filecontents)
 type fakefile [10]byte
 
-var filecontents []byte = []byte("file-data.")
+var filecontents = []byte("file-data.")
 
 func testRequest(method string) Request {
 	request := Request{
-		Filepath: "./request_test.go",
-		Method:   method,
-		Attrs:    []byte("foo"),
-		Target:   "foo",
-		packets:  make(chan packet_data, sftpServerWorkerCount),
-		state:    &state{},
+		Filepath:  "./request_test.go",
+		Method:    method,
+		Attrs:     []byte("foo"),
+		Target:    "foo",
+		packets:   make(chan packet_data, sftpServerWorkerCount),
+		state:     &state{},
+		stateLock: &sync.RWMutex{},
 	}
 	for _, p := range []packet_data{
 		packet_data{id: 1, data: filecontents[:5], length: 5},
@@ -162,7 +165,8 @@ func TestRequestInfoStat(t *testing.T) {
 	request := testRequest("Stat")
 	pkt, err := request.handle(handlers)
 	assert.Nil(t, err)
-	spkt := pkt.(*sshFxpStatResponse)
+	spkt, ok := pkt.(*sshFxpStatResponse)
+	assert.True(t, ok)
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
 }
 

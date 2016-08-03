@@ -29,7 +29,7 @@ func (cs csPair) testHandler() *root {
 	return cs.svr.Handlers.FileGet.(*root)
 }
 
-var sock string = "/tmp/rstest.sock"
+const sock = "/tmp/rstest.sock"
 
 func clientRequestServerPair(t *testing.T) *csPair {
 	ready := make(chan bool)

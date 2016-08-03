@@ -20,11 +20,10 @@ type Request struct {
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// packet data
-	pkt_id      uint32
-	packetsLock sync.Mutex
-	packets     chan packet_data
+	pkt_id  uint32
+	packets chan packet_data
 	// reader/writer/readdir from handlers
-	stateLock sync.RWMutex
+	stateLock *sync.RWMutex
 	state     *state
 }
 
@@ -53,6 +52,7 @@ func newRequest(path string) Request {
 	request := Request{Filepath: filepath.Clean(path)}
 	request.packets = make(chan packet_data, sftpServerWorkerCount)
 	request.state = &state{}
+	request.stateLock = &sync.RWMutex{}
 	return request
 }
 
