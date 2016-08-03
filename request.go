@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+
+	"github.com/pkg/errors"
 )
 
 // Request contains the data and state for the incoming service request.
@@ -39,7 +41,14 @@ type packet_data struct {
 	offset int64
 }
 
-// Here mainly to specify that Filepath is required
+// New Request initialized based on packet data
+func requestFromPacket(pkt hasPath) Request {
+	request := newRequest(pkt.getPath())
+	request.init(pkt)
+	return request
+}
+
+// Used to be sure packets and state sub-structs are initialized
 func newRequest(path string) Request {
 	request := Request{Filepath: filepath.Clean(path)}
 	request.packets = make(chan packet_data, sftpServerWorkerCount)
@@ -180,8 +189,9 @@ func fileinfo(h FileInfoer, r Request) (responsePacket, error) {
 
 	switch r.Method {
 	case "List":
+		pd := r.popPacket()
 		dirname := path.Base(r.Filepath)
-		ret := &sshFxpNamePacket{ID: r.pkt_id}
+		ret := &sshFxpNamePacket{ID: pd.id}
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 				Name:     fi.Name(),
@@ -220,58 +230,58 @@ func fileinfo(h FileInfoer, r Request) (responsePacket, error) {
 	return nil, err
 }
 
-// populate attributes of request object from packet data
-func (r *Request) populate(p packet) {
-	// r.Filepath should already be set
+// file data for additional read/write packets
+func (r *Request) update(p hasHandle) error {
 	pd := packet_data{id: p.id()}
-	r.pkt_id = p.id()
 	switch p := p.(type) {
-	case *sshFxpSetstatPacket:
-		r.Method = "Setstat"
-		r.Attrs = p.Attrs.([]byte)
-		pd.id = p.id()
-	case *sshFxpFsetstatPacket:
-		r.Method = "Setstat"
-		r.Attrs = p.Attrs.([]byte)
-		pd.id = p.id()
-	case *sshFxpRenamePacket:
-		r.Method = "Rename"
-		r.Target = filepath.Clean(p.Newpath)
-		pd.id = p.id()
-	case *sshFxpSymlinkPacket:
-		r.Method = "Symlink"
-		r.Target = filepath.Clean(p.Linkpath)
-		pd.id = p.id()
 	case *sshFxpReadPacket:
 		r.Method = "Get"
 		pd.length = p.Len
 		pd.offset = int64(p.Offset)
-		pd.id = p.id()
 	case *sshFxpWritePacket:
 		r.Method = "Put"
-		pd.id = p.id()
 		pd.data = p.Data
 		pd.length = p.Length
 		pd.offset = int64(p.Offset)
 	case *sshFxpReaddirPacket:
 		r.Method = "List"
-		pd.id = p.id()
-	case *sshFxpRemovePacket:
-		r.Method = "Remove"
-		pd.id = p.id()
-	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket:
+	case *sshFxpFsetstatPacket:
+		r.Method = "Setstat"
+		r.Attrs = p.Attrs.([]byte)
+	case *sshFxpFstatPacket:
 		r.Method = "Stat"
-		pd.id = p.(packet).id()
-	case *sshFxpRmdirPacket:
-		r.Method = "Rmdir"
-		pd.id = p.id()
-	case *sshFxpReadlinkPacket:
-		r.Method = "Readlink"
-		pd.id = p.id()
-	case *sshFxpMkdirPacket:
-		r.Method = "Mkdir"
-		pd.id = p.id()
-		//r.Attrs are ignored in ./packet.go
+	default:
+		return errors.Errorf("unexpected packet type %T", p)
 	}
 	r.pushPacket(pd)
+	return nil
+}
+
+// init attributes of request object from packet data
+func (r *Request) init(p hasPath) {
+	r.pkt_id = p.id()
+	switch p := p.(type) {
+	case *sshFxpOpenPacket, *sshFxpOpendirPacket:
+		r.Method = "Open"
+	case *sshFxpSetstatPacket:
+		r.Method = "Setstat"
+		r.Attrs = p.Attrs.([]byte)
+	case *sshFxpRenamePacket:
+		r.Method = "Rename"
+		r.Target = filepath.Clean(p.Newpath)
+	case *sshFxpSymlinkPacket:
+		r.Method = "Symlink"
+		r.Target = filepath.Clean(p.Linkpath)
+	case *sshFxpRemovePacket:
+		r.Method = "Remove"
+	case *sshFxpStatPacket, *sshFxpLstatPacket:
+		r.Method = "Stat"
+	case *sshFxpRmdirPacket:
+		r.Method = "Rmdir"
+	case *sshFxpReadlinkPacket:
+		r.Method = "Readlink"
+	case *sshFxpMkdirPacket:
+		r.Method = "Mkdir"
+		//r.Attrs are ignored in ./packet.go
+	}
 }

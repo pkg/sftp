@@ -122,18 +122,19 @@ func (rs *RequestServer) packetWorker() error {
 		case *sshFxpRealpathPacket:
 			rpkt = cleanPath(pkt)
 		case isOpener:
-			handle := rs.nextRequest(newRequest(pkt.getPath()))
+			handle := rs.nextRequest(requestFromPacket(pkt))
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
+			request.update(pkt)
 			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
 				rpkt = rs.handle(request, pkt)
 			}
 		case hasPath:
-			request := newRequest(pkt.getPath())
+			request := requestFromPacket(pkt)
 			rpkt = rs.handle(request, pkt)
 		default:
 			return errors.Errorf("unexpected packet type %T", pkt)
@@ -165,8 +166,6 @@ func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
 }
 
 func (rs *RequestServer) handle(request Request, pkt packet) responsePacket {
-	// called here to keep packet handling out of request for testing
-	request.populate(pkt)
 	// fmt.Println("Request Method: ", request.Method)
 	rpkt, err := request.handle(rs.Handlers)
 	if err != nil {
