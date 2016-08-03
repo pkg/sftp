@@ -28,7 +28,7 @@ type RequestServer struct {
 	serverConn
 	Handlers        Handlers
 	pktChan         chan packet
-	openRequests    map[string]*Request
+	openRequests    map[string]Request
 	openRequestLock sync.RWMutex
 	handleCount     int
 }
@@ -45,11 +45,11 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 		},
 		Handlers:     h,
 		pktChan:      make(chan packet, sftpServerWorkerCount),
-		openRequests: make(map[string]*Request),
+		openRequests: make(map[string]Request),
 	}
 }
 
-func (rs *RequestServer) nextRequest(r *Request) string {
+func (rs *RequestServer) nextRequest(r Request) string {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
 	rs.handleCount++
@@ -58,7 +58,7 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 	return handle
 }
 
-func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
+func (rs *RequestServer) getRequest(handle string) (Request, bool) {
 	rs.openRequestLock.RLock()
 	defer rs.openRequestLock.RUnlock()
 	r, ok := rs.openRequests[handle]
@@ -164,7 +164,7 @@ func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
 	}
 }
 
-func (rs *RequestServer) handle(request *Request, pkt packet) responsePacket {
+func (rs *RequestServer) handle(request Request, pkt packet) responsePacket {
 	// called here to keep packet handling out of request for testing
 	request.populate(pkt)
 	// fmt.Println("Request Method: ", request.Method)

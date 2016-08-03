@@ -16,28 +16,28 @@ type testHandler struct {
 	err          error       // dummy error, should be file related
 }
 
-func (t *testHandler) Fileread(r *Request) (io.ReaderAt, error) {
+func (t *testHandler) Fileread(r Request) (io.ReaderAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
 	return bytes.NewReader(t.filecontents), nil
 }
 
-func (t *testHandler) Filewrite(r *Request) (io.WriterAt, error) {
+func (t *testHandler) Filewrite(r Request) (io.WriterAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
 	return io.WriterAt(t.output), nil
 }
 
-func (t *testHandler) Filecmd(r *Request) error {
+func (t *testHandler) Filecmd(r Request) error {
 	if t.err != nil {
 		return t.err
 	}
 	return nil
 }
 
-func (t *testHandler) Fileinfo(r *Request) ([]os.FileInfo, error) {
+func (t *testHandler) Fileinfo(r Request) ([]os.FileInfo, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
@@ -57,16 +57,21 @@ type fakefile [10]byte
 
 var filecontents []byte = []byte("file-data.")
 
-func testRequest(method string) *Request {
-	return &Request{
+func testRequest(method string) Request {
+	request := Request{
 		Filepath: "./request_test.go",
 		Method:   method,
 		Attrs:    []byte("foo"),
 		Target:   "foo",
-		packets: []packet_data{
-			packet_data{id: 1, data: filecontents[:5], length: 5},
-			packet_data{id: 2, data: filecontents[5:], length: 5, offset: 5}},
+		packets:  make(chan packet_data, sftpServerWorkerCount),
+		state:    &state{},
 	}
+	for _, p := range []packet_data{
+		packet_data{id: 1, data: filecontents[:5], length: 5},
+		packet_data{id: 2, data: filecontents[5:], length: 5, offset: 5}} {
+		request.packets <- p
+	}
+	return request
 }
 
 func (ff *fakefile) WriteAt(p []byte, off int64) (int, error) {

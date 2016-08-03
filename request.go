@@ -18,12 +18,18 @@ type Request struct {
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// packet data
-	packets     []packet_data
-	packetsLock sync.RWMutex
-	// reader/writer from handlers
-	put_writer io.WriterAt
-	get_reader io.ReaderAt
-	eof        bool // hack for readdir to keep eof state
+	pkt_id      uint32
+	packetsLock sync.Mutex
+	packets     chan packet_data
+	// reader/writer/readdir from handlers
+	stateLock sync.RWMutex
+	state     *state
+}
+
+type state struct {
+	writerAt io.WriterAt
+	readerAt io.ReaderAt
+	endofdir bool // need to track when to send EOF for readdir
 }
 
 type packet_data struct {
@@ -34,33 +40,57 @@ type packet_data struct {
 }
 
 // Here mainly to specify that Filepath is required
-func newRequest(path string) *Request {
-	request := &Request{Filepath: filepath.Clean(path)}
+func newRequest(path string) Request {
+	request := Request{Filepath: filepath.Clean(path)}
+	request.packets = make(chan packet_data, sftpServerWorkerCount)
+	request.state = &state{}
 	return request
 }
 
+// manage state
+func (r Request) setState(s interface{}) {
+	r.stateLock.Lock()
+	defer r.stateLock.Unlock()
+	switch s := s.(type) {
+	case io.WriterAt:
+		r.state.writerAt = s
+	case io.ReaderAt:
+		r.state.readerAt = s
+	case bool:
+		r.state.endofdir = s
+	}
+}
+
+func (r Request) getWriter() io.WriterAt {
+	r.stateLock.RLock()
+	defer r.stateLock.RUnlock()
+	return r.state.writerAt
+}
+
+func (r Request) getReader() io.ReaderAt {
+	r.stateLock.RLock()
+	defer r.stateLock.RUnlock()
+	return r.state.readerAt
+}
+
+func (r Request) getEOD() bool {
+	r.stateLock.RLock()
+	defer r.stateLock.RUnlock()
+	return r.state.endofdir
+}
+
 // push packet_data into fifo
-func (r *Request) pushPacket(pd packet_data) {
-	r.packetsLock.Lock()
-	defer r.packetsLock.Unlock()
-	r.packets = append(r.packets, pd)
+func (r Request) pushPacket(pd packet_data) {
+	r.packets <- pd
 }
 
 // pop packet_data into fifo
 func (r *Request) popPacket() packet_data {
-	r.packetsLock.Lock()
-	defer r.packetsLock.Unlock()
-	var pd packet_data
-	pd, r.packets = r.packets[0], r.packets[1:]
-	return pd
-}
-
-func (r *Request) pkt_id() uint32 {
-	return r.packets[0].id
+	return <-r.packets
 }
 
 // called from worker to handle packet/request
-func (r *Request) handle(handlers Handlers) (responsePacket, error) {
+func (r Request) handle(handlers Handlers) (responsePacket, error) {
 	var err error
 	var rpkt responsePacket
 	switch r.Method {
@@ -77,15 +107,16 @@ func (r *Request) handle(handlers Handlers) (responsePacket, error) {
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r *Request) (responsePacket, error) {
-	if r.get_reader == nil {
-		reader, err := h.Fileread(r)
+func fileget(h FileReader, r Request) (responsePacket, error) {
+	var err error
+	reader := r.getReader()
+	if reader == nil {
+		reader, err = h.Fileread(r)
 		if err != nil {
 			return nil, syscall.EBADF
 		}
-		r.get_reader = reader
+		r.setState(reader)
 	}
-	reader := r.get_reader
 
 	pd := r.popPacket()
 	data := make([]byte, clamp(pd.length, maxTxPacket))
@@ -101,18 +132,19 @@ func fileget(h FileReader, r *Request) (responsePacket, error) {
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r *Request) (responsePacket, error) {
-	if r.put_writer == nil {
-		writer, err := h.Filewrite(r)
+func fileput(h FileWriter, r Request) (responsePacket, error) {
+	var err error
+	writer := r.getWriter()
+	if writer == nil {
+		writer, err = h.Filewrite(r)
 		if err != nil {
 			return nil, syscall.EBADF
 		}
-		r.put_writer = writer
+		r.setState(writer)
 	}
-	writer := r.put_writer
 
 	pd := r.popPacket()
-	_, err := writer.WriteAt(pd.data, pd.offset)
+	_, err = writer.WriteAt(pd.data, pd.offset)
 	if err != nil {
 		return nil, err
 	}
@@ -124,21 +156,21 @@ func fileput(h FileWriter, r *Request) (responsePacket, error) {
 }
 
 // wrap FileCmder handler
-func filecmd(h FileCmder, r *Request) (responsePacket, error) {
+func filecmd(h FileCmder, r Request) (responsePacket, error) {
 	err := h.Filecmd(r)
 	if err != nil {
 		return nil, err
 	}
 	return &sshFxpStatusPacket{
-		ID: r.pkt_id(),
+		ID: r.pkt_id,
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
 		}}, nil
 }
 
 // wrap FileInfoer handler
-func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
-	if r.eof {
+func fileinfo(h FileInfoer, r Request) (responsePacket, error) {
+	if r.getEOD() {
 		return nil, io.EOF
 	}
 	finfo, err := h.Fileinfo(r)
@@ -149,7 +181,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 	switch r.Method {
 	case "List":
 		dirname := path.Base(r.Filepath)
-		ret := &sshFxpNamePacket{ID: r.pkt_id()}
+		ret := &sshFxpNamePacket{ID: r.pkt_id}
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 				Name:     fi.Name(),
@@ -157,7 +189,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 				Attrs:    []interface{}{fi},
 			})
 		}
-		r.eof = true
+		r.setState(true)
 		return ret, nil
 	case "Stat":
 		if len(finfo) == 0 {
@@ -166,7 +198,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 			return nil, err
 		}
 		return &sshFxpStatResponse{
-			ID:   r.pkt_id(),
+			ID:   r.pkt_id,
 			info: finfo[0],
 		}, nil
 	case "Readlink":
@@ -177,7 +209,7 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 		}
 		filename := finfo[0].Name()
 		return &sshFxpNamePacket{
-			ID: r.pkt_id(),
+			ID: r.pkt_id,
 			NameAttrs: []sshFxpNameAttr{{
 				Name:     filename,
 				LongName: filename,
@@ -189,9 +221,10 @@ func fileinfo(h FileInfoer, r *Request) (responsePacket, error) {
 }
 
 // populate attributes of request object from packet data
-func (r *Request) populate(p interface{}) {
+func (r *Request) populate(p packet) {
 	// r.Filepath should already be set
-	var pd packet_data
+	pd := packet_data{id: p.id()}
+	r.pkt_id = p.id()
 	switch p := p.(type) {
 	case *sshFxpSetstatPacket:
 		r.Method = "Setstat"
