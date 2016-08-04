@@ -2,7 +2,6 @@ package sftp
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"strings"
@@ -11,8 +10,8 @@ import (
 )
 
 type LoginRequest struct {
-	Username    string
-	Password    string
+	Username  string
+	Password  string
 	PublicKey string
 }
 
@@ -26,17 +25,16 @@ func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver) *ManagedS
 	}
 }
 
-func (m ManagedServer) Start(port int, privateKeyPath string) {
+func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 	log.Println("Starting SFTP server...")
 
-	privateBytes, err := ioutil.ReadFile(privateKeyPath)
-	if err != nil {
-		log.Fatal("Failed to load private key", err)
-	}
-
-	private, err := ssh.ParsePrivateKey(privateBytes)
-	if err != nil {
-		log.Fatal("Failed to parse private key", err)
+	privateKeys := []ssh.Signer{}
+	for i, rawKey := range rawPrivateKeys {
+		privateKey, err := ssh.ParsePrivateKey(rawKey)
+		if err != nil {
+			log.Fatal("Failed to parse private key ", i, err)
+		}
+		privateKeys = append(privateKeys, privateKey)
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
@@ -58,8 +56,8 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 			config := &ssh.ServerConfig{
 				PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 					driver = m.driverGenerator(LoginRequest{
-						Username: c.User(),
-						Password: string(pass),
+						Username:  c.User(),
+						Password:  string(pass),
 						PublicKey: "",
 					})
 					if driver == nil {
@@ -69,8 +67,8 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 				},
 				PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 					driver := m.driverGenerator(LoginRequest{
-						Username: "",
-						Password: "",
+						Username:  "",
+						Password:  "",
 						PublicKey: strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
 					})
 					if driver == nil {
@@ -79,7 +77,9 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 					return nil, nil
 				},
 			}
-			config.AddHostKey(private)
+			for _, privateKey := range privateKeys {
+				config.AddHostKey(privateKey)
+			}
 
 			_, newChan, requestChan, err := ssh.NewServerConn(conn, config)
 			if err != nil {
@@ -108,7 +108,7 @@ func (m ManagedServer) Start(port int, privateKeyPath string) {
 						ok := false
 						switch req.Type {
 						case "subsystem":
-							if (len(req.Payload) >= 4) {
+							if len(req.Payload) >= 4 {
 								log.Printf("Subsystem: %s\n", req.Payload[4:])
 								if string(req.Payload[4:]) == "sftp" {
 									ok = true

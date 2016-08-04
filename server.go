@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	sftpServerWorkerCount = 8
+	sftpServerWorkerCount = 1
 )
 
 type ServerDriver interface {
@@ -318,7 +318,7 @@ func handlePacket(s *Server, p interface{}) error {
 		return s.sendPacket(sshFxpHandlePacket{p.ID, handle})
 	case *sshFxpReadPacket:
 		f, ok := s.getHandle(p.Handle)
-		if !ok {
+		if !ok || f.IsDir {
 			return s.sendError(p, syscall.EBADF)
 		}
 
@@ -334,7 +334,7 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 	case *sshFxpWritePacket:
 		f, ok := s.getHandle(p.Handle)
-		if !ok {
+		if !ok || f.IsDir {
 			return s.sendError(p, syscall.EBADF)
 		}
 
