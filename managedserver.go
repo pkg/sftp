@@ -48,7 +48,6 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 		newConn, err := listener.Accept()
 		if err != nil {
 			log.Fatal("failed to accept incoming connection", err)
-			return
 		}
 
 		go func(conn net.Conn) {
