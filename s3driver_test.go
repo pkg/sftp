@@ -57,7 +57,7 @@ func TestStat(t *testing.T) {
 	}).Return(&s3.ListObjectsV2Output{
 		KeyCount: aws.Int64(1),
 		Contents: []*s3.Object{
-			&s3.Object{Key: aws.String("file")},
+			&s3.Object{Key: aws.String("file"), Size: aws.Int64(123), LastModified: aws.Time(time.Now())},
 		},
 	}, nil)
 

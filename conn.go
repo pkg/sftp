@@ -3,6 +3,7 @@ package sftp
 import (
 	"encoding"
 	"io"
+	"log"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -118,5 +119,8 @@ type serverConn struct {
 }
 
 func (s *serverConn) sendError(p id, err error) error {
+	if err != nil && err != io.EOF {
+		log.Println("Sending error:", err)
+	}
 	return s.sendPacket(statusFromError(p, err))
 }
