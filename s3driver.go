@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -48,8 +49,10 @@ func (d S3Driver) Stat(path string) (os.FileInfo, error) {
 	}
 
 	info := &fileInfo{
-		name: localPath,
-		mode: os.ModePerm,
+		name:  localPath,
+		mode:  os.ModePerm,
+		size:  *resp.Contents[0].Size,
+		mtime: *resp.Contents[0].LastModified,
 	}
 	if strings.HasSuffix(*resp.Contents[0].Key, "/") {
 		info.name = strings.TrimRight(info.name, "/")
@@ -91,9 +94,10 @@ func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
 		}
 		for _, o := range objects.CommonPrefixes {
 			files = append(files, &fileInfo{
-				name: strings.TrimSuffix(strings.TrimPrefix(*o.Prefix, prefix), "/"),
-				size: 4096,
-				mode: os.ModeDir,
+				name:  strings.TrimSuffix(strings.TrimPrefix(*o.Prefix, prefix), "/"),
+				size:  4096,
+				mtime: time.Unix(1, 0),
+				mode:  os.ModeDir,
 			})
 		}
 

@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -47,11 +48,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 		newConn, err := listener.Accept()
 		if err != nil {
 			log.Fatal("failed to accept incoming connection", err)
+			return
 		}
 
 		go func(conn net.Conn) {
-			log.Println("Got connection!")
-
 			var driver ServerDriver
 			config := &ssh.ServerConfig{
 				PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
@@ -83,7 +83,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 
 			_, newChan, requestChan, err := ssh.NewServerConn(conn, config)
 			if err != nil {
-				log.Println("failed to handshake", err)
+				if err != io.EOF {
+					log.Println("failed to handshake", err)
+				}
+				return
 			}
 			log.Println("Handshake completed...")
 
@@ -124,6 +127,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 
 				if err != nil {
 					log.Println("Error:", err)
+					return
 				}
 				if err := server.Serve(); err != nil {
 					log.Println("sftp server completed with error:", err)

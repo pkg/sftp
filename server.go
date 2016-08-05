@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -461,6 +462,29 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
 }
 
+func generateLongName(fileInfo os.FileInfo) string {
+	// The format of the `longname' field is unspecified by this protocol.
+	// It MUST be suitable for use in the output of a directory listing
+	// command (in fact, the recommended operation for a directory listing
+	// command is to simply display this data).  However, clients SHOULD NOT
+	// attempt to parse the longname field for file attributes; they SHOULD
+	// use the attrs field instead.
+	//  - SFTP Specification, https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
+
+	// Despite this, many SFTP clients DO parse the long name and expect OpenSSH's format. This function produces a
+	// longname that matches that format.
+	dateFormat := "Jan _2 15:04"
+	if fileInfo.ModTime().Year() != time.Now().Year() {
+		dateFormat = "Jan _2  2006"
+	}
+	permissionFlags := "-rw-------"
+	if fileInfo.IsDir() {
+		permissionFlags = "drw-------"
+	}
+	return fmt.Sprintf("%-10s %3d %-8s %-8s %8d %-12s %-s", permissionFlags,
+		1, "owner", "owner", fileInfo.Size(), fileInfo.ModTime().Format(dateFormat), fileInfo.Name())
+}
+
 func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok || !f.IsDir {
@@ -480,14 +504,16 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 
 	// For compatibility, include a '.' and '..' directory.
 	files = append(files, &fileInfo{
-		name: ".",
-		size: 4096,
-		mode: os.ModeDir,
+		name:  ".",
+		size:  4096,
+		mtime: time.Unix(1, 0),
+		mode:  os.ModeDir,
 	})
 	files = append(files, &fileInfo{
-		name: "..",
-		size: 4096,
-		mode: os.ModeDir,
+		name:  "..",
+		size:  4096,
+		mtime: time.Unix(1, 0),
+		mode:  os.ModeDir,
 	})
 
 	ret := sshFxpNamePacket{ID: p.ID}
@@ -495,7 +521,7 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 
 		ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
 			Name:     dirent.Name(),
-			LongName: dirent.Name(),
+			LongName: generateLongName(dirent),
 			Attrs:    []interface{}{dirent},
 		})
 	}
