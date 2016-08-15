@@ -225,10 +225,10 @@ func translatePath(prefix, path string) (s3Path string, err error) {
 	return strings.TrimLeft(cleanPath, "/"), nil
 }
 
-func NewS3Driver(bucket, homePath, region, awsAccessKeyID, awsSecretKey string) *S3Driver {
+func NewS3Driver(bucket, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string) *S3Driver {
 	config := aws.NewConfig().
 		WithRegion(region).
-		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, ""))
+		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, awsToken))
 	s3 := s3.New(session.New(), config)
 	return &S3Driver{
 		s3:       s3,
