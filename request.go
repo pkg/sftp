@@ -88,6 +88,18 @@ func (r Request) getEOD() bool {
 	return r.state.endofdir
 }
 
+// Close reader/writer if possible
+func (r Request) close() {
+	rd := r.getReader()
+	if c, ok := rd.(io.Closer); ok {
+		c.Close()
+	}
+	wt := r.getWriter()
+	if c, ok := wt.(io.Closer); ok {
+		c.Close()
+	}
+}
+
 // push packet_data into fifo
 func (r Request) pushPacket(pd packet_data) {
 	r.packets <- pd

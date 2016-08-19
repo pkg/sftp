@@ -68,7 +68,8 @@ func (rs *RequestServer) getRequest(handle string) (Request, bool) {
 func (rs *RequestServer) closeRequest(handle string) {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
-	if _, ok := rs.openRequests[handle]; ok {
+	if r, ok := rs.openRequests[handle]; ok {
+		r.close()
 		delete(rs.openRequests, handle)
 	}
 }
