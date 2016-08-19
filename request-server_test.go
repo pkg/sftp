@@ -79,8 +79,8 @@ func TestRequestSplitWrite(t *testing.T) {
 func TestRequestCache(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
-	foo := Request{Filepath: "foo"}
-	bar := Request{Filepath: "bar"}
+	foo := newRequest("foo")
+	bar := newRequest("bar")
 	fh := p.svr.nextRequest(foo)
 	bh := p.svr.nextRequest(bar)
 	assert.Len(t, p.svr.openRequests, 2)
