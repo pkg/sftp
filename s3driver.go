@@ -143,9 +143,10 @@ func (d S3Driver) Rename(oldpath string, newpath string) error {
 	}
 
 	if _, err := d.s3.CopyObject(&s3.CopyObjectInput{
-		Bucket:     aws.String(d.bucket),
-		CopySource: aws.String(d.bucket + "/" + translatedOldpath),
-		Key:        &translatedNewpath,
+		Bucket:               aws.String(d.bucket),
+		CopySource:           aws.String(d.bucket + "/" + translatedOldpath),
+		Key:                  &translatedNewpath,
+		ServerSideEncryption: aws.String("AES256"),
 	}); err != nil {
 		return err
 	}

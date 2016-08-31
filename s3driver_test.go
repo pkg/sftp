@@ -157,9 +157,10 @@ func TestRename(t *testing.T) {
 	mockS3API := NewMockS3API(mockCtrl)
 
 	mockS3API.EXPECT().CopyObject(&s3.CopyObjectInput{
-		Bucket:     aws.String("bucket"),
-		CopySource: aws.String("bucket/home/dir/file"),
-		Key:        aws.String("home/dir/new_file"),
+		Bucket:               aws.String("bucket"),
+		CopySource:           aws.String("bucket/home/dir/file"),
+		Key:                  aws.String("home/dir/new_file"),
+		ServerSideEncryption: aws.String("AES256"),
 	}).Return(nil, nil)
 
 	mockS3API.EXPECT().DeleteObject(&s3.DeleteObjectInput{
