@@ -47,7 +47,7 @@ func requestFromPacket(pkt hasPath) Request {
 	return request
 }
 
-// Used to be sure packets and state sub-structs are initialized
+// NewRequest creates a new Request object.
 func NewRequest(path string) Request {
 	request := Request{Filepath: filepath.Clean(path)}
 	request.packets = make(chan packet_data, sftpServerWorkerCount)
