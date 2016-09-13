@@ -42,13 +42,13 @@ type packet_data struct {
 
 // New Request initialized based on packet data
 func requestFromPacket(pkt hasPath) Request {
-	request := newRequest(pkt.getPath())
+	request := NewRequest(pkt.getPath())
 	request.init(pkt)
 	return request
 }
 
 // Used to be sure packets and state sub-structs are initialized
-func newRequest(path string) Request {
+func NewRequest(path string) Request {
 	request := Request{Filepath: filepath.Clean(path)}
 	request.packets = make(chan packet_data, sftpServerWorkerCount)
 	request.state = &state{}
