@@ -1,7 +1,3 @@
-env:
-- REPORT_CARD_GITHUB_STATUS_TOKEN=$$report_card_github_status_token
-- REPORT_CARD_GITHUB_REPO_TOKEN=$$report_card_github_repo_token
-- REPORT_CARD_GITHUB_API_TOKEN=$$report_card_github_api_token
 image: clever/drone-go:1.6
 notify:
   email:
@@ -13,8 +9,6 @@ notify:
     on_success: false
     webhook_url: $$slack_webhook
 script:
-- sudo pip install -q git+https://$REPORT_CARD_GITHUB_REPO_TOKEN@github.com/Clever/report-card.git; GITHUB_API_TOKEN=$REPORT_CARD_GITHUB_STATUS_TOKEN report-card --publish || true
-- pip install -q git+git://github.com/Clever/report-card.git && GITHUB_API_TOKEN=$REPORT_CARD_GITHUB_API_TOKEN report-card --publish
 - go get -t -v ./...
 - go test -integration -v ./...
 - go test -testserver -v ./...
@@ -22,3 +16,5 @@ script:
 - go test -race -integration -v ./...
 - go test -race -testserver -v ./...
 - go test -race -integration -testserver -v ./...
+publish:
+  report_card: {}
