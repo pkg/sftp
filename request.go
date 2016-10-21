@@ -42,14 +42,23 @@ type packet_data struct {
 
 // New Request initialized based on packet data
 func requestFromPacket(pkt hasPath) Request {
-	request := NewRequest(pkt.getPath())
-	request.init(pkt)
+	method := requestMethod(pkt)
+	request := NewRequest(method, pkt.getPath())
+	request.pkt_id = pkt.id()
+	switch p := pkt.(type) {
+	case *sshFxpSetstatPacket:
+		request.Attrs = p.Attrs.([]byte)
+	case *sshFxpRenamePacket:
+		request.Target = filepath.Clean(p.Newpath)
+	case *sshFxpSymlinkPacket:
+		request.Target = filepath.Clean(p.Linkpath)
+	}
 	return request
 }
 
 // NewRequest creates a new Request object.
-func NewRequest(path string) Request {
-	request := Request{Filepath: filepath.Clean(path)}
+func NewRequest(method, path string) Request {
+	request := Request{Method: method, Filepath: filepath.Clean(path)}
 	request.packets = make(chan packet_data, sftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}
@@ -270,30 +279,26 @@ func (r *Request) update(p hasHandle) error {
 }
 
 // init attributes of request object from packet data
-func (r *Request) init(p hasPath) {
-	r.pkt_id = p.id()
-	switch p := p.(type) {
+func requestMethod(p hasPath) (method string) {
+	switch p.(type) {
 	case *sshFxpOpenPacket, *sshFxpOpendirPacket:
-		r.Method = "Open"
+		method = "Open"
 	case *sshFxpSetstatPacket:
-		r.Method = "Setstat"
-		r.Attrs = p.Attrs.([]byte)
+		method = "Setstat"
 	case *sshFxpRenamePacket:
-		r.Method = "Rename"
-		r.Target = filepath.Clean(p.Newpath)
+		method = "Rename"
 	case *sshFxpSymlinkPacket:
-		r.Method = "Symlink"
-		r.Target = filepath.Clean(p.Linkpath)
+		method = "Symlink"
 	case *sshFxpRemovePacket:
-		r.Method = "Remove"
+		method = "Remove"
 	case *sshFxpStatPacket, *sshFxpLstatPacket:
-		r.Method = "Stat"
+		method = "Stat"
 	case *sshFxpRmdirPacket:
-		r.Method = "Rmdir"
+		method = "Rmdir"
 	case *sshFxpReadlinkPacket:
-		r.Method = "Readlink"
+		method = "Readlink"
 	case *sshFxpMkdirPacket:
-		r.Method = "Mkdir"
-		//r.Attrs are ignored in ./packet.go
+		method = "Mkdir"
 	}
+	return method
 }

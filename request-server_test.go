@@ -73,14 +73,13 @@ func TestRequestSplitWrite(t *testing.T) {
 	r := p.testHandler()
 	f, _ := r.fetch("/foo")
 	assert.Equal(t, contents, string(f.content))
-	fmt.Println(string(f.content))
 }
 
 func TestRequestCache(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
-	foo := NewRequest("foo")
-	bar := NewRequest("bar")
+	foo := NewRequest("", "foo")
+	bar := NewRequest("", "bar")
 	fh := p.svr.nextRequest(foo)
 	bh := p.svr.nextRequest(bar)
 	assert.Len(t, p.svr.openRequests, 2)
