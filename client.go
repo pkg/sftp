@@ -495,7 +495,7 @@ func (c *Client) Remove(path string) error {
 		// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
 		// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
 		case ssh_FX_PERMISSION_DENIED, ssh_FX_FAILURE, ssh_FX_FILE_IS_A_DIRECTORY:
-			return c.removeDirectory(path)
+			return c.RemoveDirectory(path)
 		}
 	}
 	return err
@@ -518,7 +518,8 @@ func (c *Client) removeFile(path string) error {
 	}
 }
 
-func (c *Client) removeDirectory(path string) error {
+// RemoveDirectory removes a directory path.
+func (c *Client) RemoveDirectory(path string) error {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(sshFxpRmdirPacket{
 		ID:   id,
