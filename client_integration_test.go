@@ -1414,9 +1414,9 @@ func contains(vector []string, s string) bool {
 var globTests = []struct {
 	pattern, result string
 }{
-	{"match.go", "match.go"},
-	{"mat?h.go", "match.go"},
-	{"*", "match.go"},
+	{"match.go", "./match.go"},
+	{"mat?h.go", "./match.go"},
+	{"ma*ch.go", "./match.go"},
 	{"../*/match.go", "../sftp/match.go"},
 }
 
