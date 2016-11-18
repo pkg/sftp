@@ -1417,7 +1417,7 @@ var globTests = []struct {
 	{"match.go", "match.go"},
 	{"mat?h.go", "match.go"},
 	{"*", "match.go"},
-	{"../*/match.go", "../filepath/match.go"},
+	{"../*/match.go", "../sftp/match.go"},
 }
 
 type globTest struct {
@@ -1426,7 +1426,7 @@ type globTest struct {
 }
 
 func (test *globTest) buildWant(root string) []string {
-	want := make([]string, 0)
+	var want []string
 	for _, m := range test.matches {
 		want = append(want, root+filepath.FromSlash(m))
 	}
