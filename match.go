@@ -9,7 +9,8 @@ import (
 // ErrBadPattern indicates a globbing pattern was malformed.
 var ErrBadPattern = errors.New("syntax error in pattern")
 
-const Separator = "/"
+// Unix separator
+const separator = "/"
 
 // Match reports whether name matches the shell file name pattern.
 // The pattern syntax is:
@@ -42,7 +43,7 @@ Pattern:
 		star, chunk, pattern = scanChunk(pattern)
 		if star && chunk == "" {
 			// Trailing * matches rest of string unless it has a /.
-			return !strings.Contains(name, string(Separator)), nil
+			return !strings.Contains(name, separator), nil
 		}
 		// Look for match at current position.
 		t, ok, err := matchChunk(chunk, name)
@@ -59,7 +60,7 @@ Pattern:
 		if star {
 			// Look for match skipping i+1 bytes.
 			// Cannot skip /.
-			for i := 0; i < len(name) && !IsPathSeparator(name[i]); i++ {
+			for i := 0; i < len(name) && !isPathSeparator(name[i]); i++ {
 				t, ok, err := matchChunk(chunk, name[i+1:])
 				if ok {
 					// if we're the last chunk, make sure we exhausted the name
@@ -79,7 +80,8 @@ Pattern:
 	return len(name) == 0, nil
 }
 
-func IsPathSeparator(c byte) bool {
+// detect if byte(char) is path separator
+func isPathSeparator(c byte) bool {
 	return string(c) == "/"
 }
 
@@ -167,7 +169,7 @@ func matchChunk(chunk, s string) (rest string, ok bool, err error) {
 			}
 
 		case '?':
-			if IsPathSeparator(s[0]) {
+			if isPathSeparator(s[0]) {
 				return
 			}
 			_, n := utf8.DecodeRuneInString(s)
@@ -224,7 +226,7 @@ func getEsc(chunk string) (r rune, nchunk string, err error) {
 // The returned values have the property that path = dir+file.
 func Split(path string) (dir, file string) {
 	i := len(path) - 1
-	for i >= 0 && !IsPathSeparator(path[i]) {
+	for i >= 0 && !isPathSeparator(path[i]) {
 		i--
 	}
 	return path[:i+1], path[i+1:]
@@ -277,7 +279,7 @@ func cleanGlobPath(path string) string {
 	switch path {
 	case "":
 		return "."
-	case string(Separator):
+	case string(separator):
 		// do nothing to the path
 		return path
 	default:
@@ -326,7 +328,7 @@ func join(elem []string) string {
 	// If there's a bug here, fix the logic in ./path_plan9.go too.
 	for i, e := range elem {
 		if e != "" {
-			return strings.Join(elem[i:], string(Separator))
+			return strings.Join(elem[i:], string(separator))
 		}
 	}
 	return ""
