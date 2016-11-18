@@ -242,10 +242,12 @@ func Split(path string) (dir, file string) {
 // is malformed.
 func (c *Client) Glob(pattern string) (matches []string, err error) {
 	if !hasMeta(pattern) {
-		if _, err = c.Lstat(pattern); err != nil {
+		file, err := c.Lstat(pattern)
+		if err != nil {
 			return nil, nil
 		}
-		return []string{pattern}, nil
+		dir, _ := Split(pattern)
+		return []string{Join(dir, file.Name())}, nil
 	}
 
 	dir, file := Split(pattern)
