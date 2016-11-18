@@ -247,6 +247,7 @@ func (c *Client) Glob(pattern string) (matches []string, err error) {
 			return nil, nil
 		}
 		dir, _ := Split(pattern)
+		dir = cleanGlobPath(dir)
 		return []string{Join(dir, file.Name())}, nil
 	}
 
