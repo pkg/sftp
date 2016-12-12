@@ -11,9 +11,10 @@ import (
 )
 
 type LoginRequest struct {
-	Username  string
-	Password  string
-	PublicKey string
+	Username   string
+	Password   string
+	PublicKey  string
+	RemoteAddr net.Addr
 }
 
 type ManagedServer struct {
@@ -55,9 +56,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 			config := &ssh.ServerConfig{
 				PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 					driver = m.driverGenerator(LoginRequest{
-						Username:  c.User(),
-						Password:  string(pass),
-						PublicKey: "",
+						Username:   c.User(),
+						Password:   string(pass),
+						PublicKey:  "",
+						RemoteAddr: c.RemoteAddr(),
 					})
 					if driver == nil {
 						return nil, fmt.Errorf("password rejected for %q", c.User())
@@ -66,9 +68,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 				},
 				PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 					driver := m.driverGenerator(LoginRequest{
-						Username:  c.User(),
-						Password:  "",
-						PublicKey: strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
+						Username:   c.User(),
+						Password:   "",
+						PublicKey:  strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
+						RemoteAddr: c.RemoteAddr(),
 					})
 					if driver == nil {
 						return nil, fmt.Errorf("password rejected for %q", c.User())
