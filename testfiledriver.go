@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 type TestFileDriver struct{}
@@ -43,4 +44,8 @@ func (d TestFileDriver) PutFile(path string, r io.Reader) error {
 		return err
 	}
 	return ioutil.WriteFile(path, bytes, 0755)
+}
+
+func (d TestFileDriver) TranslatePath(root, homedir, path string) (string, error) {
+	return filepath.Clean("/" + path)
 }

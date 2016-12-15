@@ -12,34 +12,34 @@ import (
 )
 
 func TestTranslatePathSimple(t *testing.T) {
-	path, err := translatePath("sftp/test_user", "/file")
+	path, err := TranslatePath("", "sftp/test_user", "/file")
 	if err != nil || path != "sftp/test_user/file" {
 		t.FailNow()
 	}
 
-	path, err = translatePath("sftp/test_user", "/dir/")
+	path, err = TranslatePath("", "sftp/test_user", "/dir/")
 	if err != nil || path != "sftp/test_user/dir/" {
 		t.FailNow()
 	}
 
-	path, err = translatePath("sftp/test_user", "/dir/file")
+	path, err = TranslatePath("", "sftp/test_user", "/dir/file")
 	if err != nil || path != "sftp/test_user/dir/file" {
 		t.FailNow()
 	}
 
-	path, err = translatePath("sftp/test_user", "/dir/../some_other_file")
+	path, err = TranslatePath("", "sftp/test_user", "/dir/../some_other_file")
 	if err != nil || path != "sftp/test_user/some_other_file" {
 		t.FailNow()
 	}
 }
 
 func TestTranslatePathEscaping(t *testing.T) {
-	path, err := translatePath("sftp/test_user", "/dir/../../some_escape_attempt")
+	path, err := TranslatePath("sftp", "/test_user", "/dir/../../some_escape_attempt")
 	if err != nil || path != "sftp/test_user/some_escape_attempt" {
 		t.FailNow()
 	}
 
-	path, err = translatePath("sftp/test_user", "///dir/./../../../another_escape_attempt")
+	path, err = TranslatePath("sftp", "sftp/test_user", "///dir/./../../../another_escape_attempt")
 	if err != nil || path != "sftp/test_user/another_escape_attempt" {
 		t.FailNow()
 	}

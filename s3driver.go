@@ -26,11 +26,12 @@ type S3 interface {
 type S3Driver struct {
 	s3       S3
 	bucket   string
+	prefix   string
 	homePath string
 }
 
 func (d S3Driver) Stat(path string) (os.FileInfo, error) {
-	localPath, err := translatePath(d.homePath, path)
+	localPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func (d S3Driver) Stat(path string) (os.FileInfo, error) {
 }
 
 func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
-	prefix, err := translatePath(d.homePath, path)
+	prefix, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,7 @@ func (d S3Driver) ListDir(path string) ([]os.FileInfo, error) {
 }
 
 func (d S3Driver) DeleteDir(path string) error {
-	translatedPath, err := translatePath(d.homePath, path)
+	translatedPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return err
 	}
@@ -121,7 +122,7 @@ func (d S3Driver) DeleteDir(path string) error {
 }
 
 func (d S3Driver) DeleteFile(path string) error {
-	translatedPath, err := translatePath(d.homePath, path)
+	translatedPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return err
 	}
@@ -133,11 +134,11 @@ func (d S3Driver) DeleteFile(path string) error {
 }
 
 func (d S3Driver) Rename(oldpath string, newpath string) error {
-	translatedOldpath, err := translatePath(d.homePath, oldpath)
+	translatedOldpath, err := TranslatePath(d.prefix, d.homePath, oldpath)
 	if err != nil {
 		return err
 	}
-	translatedNewpath, err := translatePath(d.homePath, newpath)
+	translatedNewpath, err := TranslatePath(d.prefix, d.homePath, newpath)
 	if err != nil {
 		return err
 	}
@@ -162,7 +163,7 @@ func (d S3Driver) Rename(oldpath string, newpath string) error {
 }
 
 func (d S3Driver) MakeDir(path string) error {
-	localPath, err := translatePath(d.homePath, path)
+	localPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return err
 	}
@@ -180,7 +181,7 @@ func (d S3Driver) MakeDir(path string) error {
 }
 
 func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
-	localPath, err := translatePath(d.homePath, path)
+	localPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +196,7 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 }
 
 func (d S3Driver) PutFile(path string, r io.Reader) error {
-	localPath, err := translatePath(d.homePath, path)
+	localPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return err
 	}
@@ -214,11 +215,24 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	return err
 }
 
-// translatePath takes in a home directory prefix, and a path to add to it, and returns a cleaned and validated path
-// that represents the two joined together. It will resolve things like '..' while disallowing the prefix to be escaped
-// from. It also preserves a single trailing slash if one is present, so it can be used on both directories and files.
-func translatePath(prefix, path string) (s3Path string, err error) {
-	cleanPath := filepath.Clean("/" + prefix + filepath.Clean("/"+path))
+// translatePath takes in a S3 root prefix, a home directory, and either an absolute or relative path to append, and returns a cleaned and validated path.
+// It will resolve things like '..' while disallowing the prefix to be escaped.
+// It also preserves a single trailing slash if one is present, so it can be used on both directories and files.
+func TranslatePath(prefix, home, path string) (string, error) {
+	if path == "" {
+		return filepath.Clean("/" + prefix + "/" + home), nil
+	}
+
+	var cleanPath string
+	if strings.HasPrefix(path, "/") {
+		cleanPath = filepath.Clean(prefix + path)
+		if !strings.HasPrefix(cleanPath, prefix) {
+			cleanPath = prefix
+		}
+	} else {
+		cleanPath = filepath.Clean("/" + prefix + "/" + home + filepath.Clean("/"+path))
+	}
+
 	// For some reason, filepath.Clean drops trailing /'s, so if there was one we have to put it back
 	if strings.HasSuffix(path, "/") {
 		cleanPath += "/"
@@ -226,7 +240,11 @@ func translatePath(prefix, path string) (s3Path string, err error) {
 	return strings.TrimLeft(cleanPath, "/"), nil
 }
 
-func NewS3Driver(bucket, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string) *S3Driver {
+// NewS3Driver creates a new S3Driver with the AWS credentials and S3 parameters.
+// bucket: name of S3 bucket
+// prefix: key within the S3 bucket, if applicable
+// homePath: default home directory for user (can be different from prefix)
+func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string) *S3Driver {
 	config := aws.NewConfig().
 		WithRegion(region).
 		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, awsToken))
@@ -234,6 +252,7 @@ func NewS3Driver(bucket, homePath, region, awsAccessKeyID, awsSecretKey, awsToke
 	return &S3Driver{
 		s3:       s3,
 		bucket:   bucket,
+		prefix:   prefix,
 		homePath: homePath,
 	}
 }
