@@ -46,6 +46,6 @@ func (d TestFileDriver) PutFile(path string, r io.Reader) error {
 	return ioutil.WriteFile(path, bytes, 0755)
 }
 
-func (d TestFileDriver) TranslatePath(root, homedir, path string) (string, error) {
+func (d TestFileDriver) RealPath(path string) string {
 	return filepath.Clean("/" + path)
 }

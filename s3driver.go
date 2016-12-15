@@ -215,6 +215,11 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	return err
 }
 
+func (d S3Driver) RealPath(path string) string {
+	result, _ := TranslatePath("/", d.homePath, path)
+	return "/" + result
+}
+
 // translatePath takes in a S3 root prefix, a home directory, and either an absolute or relative path to append, and returns a cleaned and validated path.
 // It will resolve things like '..' while disallowing the prefix to be escaped.
 // It also preserves a single trailing slash if one is present, so it can be used on both directories and files.

@@ -29,7 +29,7 @@ type ServerDriver interface {
 	MakeDir(path string) error
 	GetFile(path string) (io.ReadCloser, error)
 	PutFile(path string, reader io.Reader) error
-	TranslatePath(root, homedir, path string) (string, error)
+	RealPath(path string) string
 }
 
 // Server is an SSH File Transfer Protocol (sftp) server.
@@ -301,7 +301,7 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxpReadlinkPacket:
 		return s.sendError(p, fmt.Errorf("Not supported"))
 	case *sshFxpRealpathPacket:
-		f := s.driver.TranslatePath("", "", p.Path)
+		f := s.driver.RealPath(p.Path)
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{
