@@ -30,4 +30,13 @@ contributing
 
 We welcome pull requests, bug fixes and issue reports.
 
-Before proposing a large change, first please discuss your change by raising an issue.
+Before proposing a large change, first please discuss your change by raising an
+issue.
+
+For API/code bugs, please include a small code example to reproduce the issue.
+For pull requests, remember test coverage.
+
+We handle issues and pull requests with a 0 open philosophy. That means we will
+try to address the submission as soon as possible and will work toward a
+resolution. If progress can no longer be made (eg. unreproducible bug) or stops
+(eg. unresponsive submitter), we will close the bug.
