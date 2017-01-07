@@ -33,10 +33,16 @@ We welcome pull requests, bug fixes and issue reports.
 Before proposing a large change, first please discuss your change by raising an
 issue.
 
-For API/code bugs, please include a small code example to reproduce the issue.
-For pull requests, remember test coverage.
+For API/code bugs, please include a small, self contained code example to
+reproduce the issue. For pull requests, remember test coverage.
 
 We handle issues and pull requests with a 0 open philosophy. That means we will
 try to address the submission as soon as possible and will work toward a
 resolution. If progress can no longer be made (eg. unreproducible bug) or stops
 (eg. unresponsive submitter), we will close the bug.
+
+Please remember that we don't have infinite time and so it is a good guideline
+that the less time it takes us to work with you on your idea/issue the greater
+the chance we will have the time to do it.
+
+Thanks.
