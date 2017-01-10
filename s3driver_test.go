@@ -11,37 +11,56 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTranslatePathSimple(t *testing.T) {
-	path, err := translatePath("sftp/test_user", "/file")
-	if err != nil || path != "sftp/test_user/file" {
-		t.FailNow()
+func TestTranslatePath(t *testing.T) {
+	testCases := []struct {
+		prefix, desc, home, path, result string
+	}{
+		{
+			desc:   "trivial path",
+			home:   "sftp/test_user",
+			path:   "file",
+			result: "sftp/test_user/file",
+		},
+		{
+			desc:   "trivial directory",
+			home:   "sftp/test_user",
+			path:   "dir/",
+			result: "sftp/test_user/dir/",
+		},
+		{
+			desc:   "nested path",
+			home:   "sftp/test_user",
+			path:   "dir/file",
+			result: "sftp/test_user/dir/file",
+		},
+		{
+			desc:   "path w/ ..",
+			home:   "sftp/test_user",
+			path:   "dir/../some_other_file",
+			result: "sftp/test_user/some_other_file",
+		},
+		{
+			desc:   "handle escaping attempt",
+			prefix: "sftp",
+			home:   "/test_user",
+			path:   "dir/../../some_escape_attempt",
+			result: "sftp/test_user/some_escape_attempt",
+		},
+		{
+			desc:   "convoluted escape attempt",
+			prefix: "sftp",
+			home:   "/test_user",
+			path:   "///dir/./../../../another_escape_attempt",
+			result: "sftp", // ends up w/ the base path
+		},
 	}
 
-	path, err = translatePath("sftp/test_user", "/dir/")
-	if err != nil || path != "sftp/test_user/dir/" {
-		t.FailNow()
-	}
-
-	path, err = translatePath("sftp/test_user", "/dir/file")
-	if err != nil || path != "sftp/test_user/dir/file" {
-		t.FailNow()
-	}
-
-	path, err = translatePath("sftp/test_user", "/dir/../some_other_file")
-	if err != nil || path != "sftp/test_user/some_other_file" {
-		t.FailNow()
-	}
-}
-
-func TestTranslatePathEscaping(t *testing.T) {
-	path, err := translatePath("sftp/test_user", "/dir/../../some_escape_attempt")
-	if err != nil || path != "sftp/test_user/some_escape_attempt" {
-		t.FailNow()
-	}
-
-	path, err = translatePath("sftp/test_user", "///dir/./../../../another_escape_attempt")
-	if err != nil || path != "sftp/test_user/another_escape_attempt" {
-		t.FailNow()
+	for _, spec := range testCases {
+		t.Run(spec.desc, func(t *testing.T) {
+			path, err := TranslatePath(spec.prefix, spec.home, spec.path)
+			assert.NoError(t, err)
+			assert.Equal(t, spec.result, path)
+		})
 	}
 }
 
@@ -178,7 +197,7 @@ func TestRename(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMakeDir(t *testing.T) {
+func TestRelativeMakeDir(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	mockS3API := NewMockS3API(mockCtrl)
@@ -186,6 +205,26 @@ func TestMakeDir(t *testing.T) {
 	mockS3API.EXPECT().PutObject(&s3.PutObjectInput{
 		Bucket:               aws.String("bucket"),
 		Key:                  aws.String("home/new_dir/"),
+		ServerSideEncryption: aws.String("AES256"),
+		Body:                 bytes.NewReader([]byte{}),
+	}).Return(nil, nil)
+
+	driver := &S3Driver{
+		s3:       mockS3API,
+		bucket:   "bucket",
+		homePath: "home",
+	}
+	assert.NoError(t, driver.MakeDir("new_dir"))
+}
+
+func TestAbsoluteMakeDir(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mockS3API := NewMockS3API(mockCtrl)
+
+	mockS3API.EXPECT().PutObject(&s3.PutObjectInput{
+		Bucket:               aws.String("bucket"),
+		Key:                  aws.String("new_dir/"),
 		ServerSideEncryption: aws.String("AES256"),
 		Body:                 bytes.NewReader([]byte{}),
 	}).Return(nil, nil)
