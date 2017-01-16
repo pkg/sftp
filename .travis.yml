@@ -1,8 +1,9 @@
 language: go
 go_import_path: github.com/pkg/sftp
 go:
-  - 1.5.2
-  - 1.6.2
+  - 1.5.x
+  - 1.6.x
+  - 1.7.x
   - tip
 
 sudo: false
