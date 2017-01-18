@@ -27,7 +27,7 @@ func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver) *ManagedS
 	}
 }
 
-func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
+func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []string) {
 	log.Println("Starting SFTP server...")
 
 	privateKeys := []ssh.Signer{}
@@ -54,6 +54,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte) {
 		go func(conn net.Conn) {
 			var driver ServerDriver
 			config := &ssh.ServerConfig{
+				Config: ssh.Config{
+					Ciphers: ciphers,
+					MACs:    macs,
+				},
 				PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 					driver = m.driverGenerator(LoginRequest{
 						Username:   c.User(),
