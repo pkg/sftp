@@ -3,13 +3,25 @@ package sftp
 import (
 	"fmt"
 	"io"
-	"log"
 	"net"
+	"os"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
 
+// Logger is an abstraction for how logging will be performed by the server. It matches
+// a subset of the Clever/kayvee-go library.
+type Logger interface {
+	InfoD(title string, meta map[string]interface{})
+	ErrorD(title string, meta map[string]interface{})
+}
+
+// meta is a shorthand for map[string]interface{} to make logger calls more concise.
+type meta map[string]interface{}
+
+// LoginRequest is the metadata associated with a login request that is passed to the
+// driverGenerator function in order for it to approve/deny the request.
 type LoginRequest struct {
 	Username   string
 	Password   string
@@ -17,38 +29,53 @@ type LoginRequest struct {
 	RemoteAddr net.Addr
 }
 
+// ManagedServer is our term for the SFTP server.
 type ManagedServer struct {
 	driverGenerator func(LoginRequest) ServerDriver
+	lg              Logger
 }
 
-func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver) *ManagedServer {
+// NewManagedServer creates a new ManagedServer which conditionally serves requests based
+// on the output of driverGenerator.
+func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver, lg Logger) *ManagedServer {
 	return &ManagedServer{
-		driverGenerator,
+		driverGenerator: driverGenerator,
+		lg:              lg,
 	}
 }
 
+// Start actually starts the server and begins fielding requests.
 func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []string) {
-	log.Println("Starting SFTP server...")
+	m.lg.InfoD("starting-server", meta{
+		"port":    port,
+		"ciphers": ciphers,
+		"macs":    macs,
+	})
 
 	privateKeys := []ssh.Signer{}
 	for i, rawKey := range rawPrivateKeys {
 		privateKey, err := ssh.ParsePrivateKey(rawKey)
 		if err != nil {
-			log.Fatal("Failed to parse private key ", i, err)
+			m.lg.ErrorD("private-key-parse", meta{"index": i, "error": err.Error()})
+			os.Exit(1)
 		}
 		privateKeys = append(privateKeys, privateKey)
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		log.Fatal("failed to listen for connection", err)
+		m.lg.ErrorD("listen-fail", meta{
+			"msg":   "failed to open socket",
+			"error": err.Error(),
+			"port":  port})
 	}
-	log.Printf("Listening on %v\n", listener.Addr())
+	m.lg.InfoD("listening", meta{"address": listener.Addr().String()})
 
 	for {
 		newConn, err := listener.Accept()
 		if err != nil {
-			log.Fatal("failed to accept incoming connection", err)
+			m.lg.ErrorD("listener-accept-fail", meta{"error": err.Error()})
+			os.Exit(1)
 		}
 
 		go func(conn net.Conn) {
@@ -90,53 +117,55 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 			_, newChan, requestChan, err := ssh.NewServerConn(conn, config)
 			if err != nil {
 				if err != io.EOF {
-					log.Println("failed to handshake", err)
+					m.lg.ErrorD("handshake-failure", meta{"error": err.Error()})
 				}
 				return
 			}
-			log.Println("Handshake completed...")
+			m.lg.InfoD("handshake-complete", meta{})
 
 			go ssh.DiscardRequests(requestChan)
 
 			for newChannelRequest := range newChan {
-				log.Println("Incoming channel: ", newChannelRequest.ChannelType())
+				m.lg.InfoD("incoming-channel", meta{"type": newChannelRequest.ChannelType()})
 				if newChannelRequest.ChannelType() != "session" {
 					newChannelRequest.Reject(ssh.UnknownChannelType, "unknown channel type")
-					log.Println("Unknown channel type:", newChannelRequest.ChannelType())
+					m.lg.ErrorD("unknown-channel-type", meta{"type": newChannelRequest.ChannelType()})
 					continue
 				}
 				channel, requests, err := newChannelRequest.Accept()
 				if err != nil {
-					log.Println("could not accept channel", err)
+					m.lg.ErrorD("channel-accept-failure", meta{
+						"err":  err.Error(),
+						"type": newChannelRequest.ChannelType()})
+					return
 				}
-				log.Println("Channel accepted.")
+				m.lg.ErrorD("channel-accepted", meta{})
 
 				go func(in <-chan *ssh.Request) {
 					for req := range in {
-						log.Printf("Request: %v\n", req.Type)
+						m.lg.ErrorD("ssh-request", meta{"type": req.Type})
 						ok := false
 						switch req.Type {
 						case "subsystem":
 							if len(req.Payload) >= 4 {
-								log.Printf("Subsystem: %s\n", req.Payload[4:])
+								m.lg.ErrorD("ssh-request-subsytem", meta{"type": req.Type, "system": req.Payload[4:]})
 								if string(req.Payload[4:]) == "sftp" {
 									ok = true
 								}
 							}
 						}
-						log.Printf(" - accepted: %v\n", ok)
+						m.lg.ErrorD("ssh-request-accepted", meta{"reply": ok, "type": req.Type})
 						req.Reply(ok, nil)
 					}
 				}(requests)
 
 				server, err := NewServer(channel, driver)
-
 				if err != nil {
-					log.Println("Error:", err)
+					m.lg.ErrorD("server-creation", meta{"err": err.Error()})
 					return
 				}
 				if err := server.Serve(); err != nil {
-					log.Println("sftp server completed with error:", err)
+					m.lg.ErrorD("server-closed", meta{"err": err.Error()})
 					channel.Close()
 				}
 			}
