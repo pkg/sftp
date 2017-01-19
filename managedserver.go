@@ -108,6 +108,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 				channel, requests, err := newChannelRequest.Accept()
 				if err != nil {
 					log.Println("could not accept channel", err)
+					return
 				}
 				log.Println("Channel accepted.")
 
