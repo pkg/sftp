@@ -830,7 +830,13 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 						desiredInFlight++
 					}
 					writeOffset += uint64(nbytes)
-					for pendingData, ok := pendingWrites[writeOffset]; ok; pendingData, ok = pendingWrites[writeOffset] {
+					for {
+						pendingData, ok := pendingWrites[writeOffset]
+						if !ok {
+							break
+						}
+						// Give go a chance to free the memory.
+						delete(pendingWrites, writeOffset)
 						nbytes, err := w.Write(pendingData)
 						if err != nil {
 							firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: err}
