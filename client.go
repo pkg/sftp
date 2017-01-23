@@ -778,16 +778,21 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 
 	var copied int64
 	for firstErr.err == nil || inFlight > 0 {
-		for inFlight < desiredInFlight && firstErr.err == nil {
-			b := make([]byte, f.c.maxPacket)
-			sendReq(b, offset)
-			offset += uint64(f.c.maxPacket)
-			if offset > fileSize {
-				desiredInFlight = 1
+		if firstErr.err == nil {
+			for inFlight+len(pendingWrites) < desiredInFlight {
+				b := make([]byte, f.c.maxPacket)
+				sendReq(b, offset)
+				offset += uint64(f.c.maxPacket)
+				if offset > fileSize {
+					desiredInFlight = 1
+				}
 			}
 		}
 
 		if inFlight == 0 {
+			if firstErr.err == nil && len(pendingWrites) > 0 {
+				return copied, errors.New("internal inconsistency")
+			}
 			break
 		}
 		select {
@@ -816,6 +821,8 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 					nbytes, err := w.Write(data)
 					copied += int64(nbytes)
 					if err != nil {
+						// We will never receive another DATA with offset==writeOffset, so
+						// the loop will drain inFlight and then exit.
 						firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: err}
 						break
 					}
@@ -838,6 +845,8 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 						// Give go a chance to free the memory.
 						delete(pendingWrites, writeOffset)
 						nbytes, err := w.Write(pendingData)
+						// Do not move writeOffset on error so subsequent iterations won't trigger
+						// any writes.
 						if err != nil {
 							firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: err}
 							break
@@ -847,14 +856,12 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 							break
 						}
 						writeOffset += uint64(nbytes)
-						inFlight--
 					}
 				} else {
 					// Don't write the data yet because
 					// this response came in out of order
 					// and we need to wait for responses
 					// for earlier segments of the file.
-					inFlight++ // Pending writes should still be considered inFlight.
 					pendingWrites[req.offset] = data
 				}
 			default:
