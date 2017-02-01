@@ -50,7 +50,11 @@ func (c *clientConn) loop() {
 // recv continuously reads from the server and forwards responses to the
 // appropriate channel.
 func (c *clientConn) recv() error {
-	defer c.conn.Close()
+	defer func() {
+		c.Lock()
+		c.conn.Close()
+		c.Unlock()
+	}()
 	for {
 		typ, data, err := c.recvPacket()
 		if err != nil {
