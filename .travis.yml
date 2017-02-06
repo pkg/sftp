@@ -19,7 +19,6 @@ addons:
 install:
   - go get -t -v ./...
   - ssh-keygen -t rsa -q -P "" -f $HOME/.ssh/id_rsa
-  - (cd $GOPATH/src/golang.org/x/crypto && git fetch https://go.googlesource.com/crypto refs/changes/55/36055/1 && git checkout FETCH_HEAD && cd ./ssh && go install)
 
 script:
   - go test -integration -v ./...
