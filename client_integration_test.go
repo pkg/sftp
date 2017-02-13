@@ -6,6 +6,8 @@ package sftp
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding"
+	"errors"
 	"flag"
 	"io"
 	"io/ioutil"
@@ -1195,6 +1197,69 @@ func TestClientReadFrom(t *testing.T) {
 			t.Errorf("Write(%v): size: want: %v, got %v", tt.n, tt.total, total)
 		}
 	}
+}
+
+// Issue #145 in github
+// Deadlock in ReadFrom when network drops after 1 good packet.
+// Deadlock would occur anytime desiredInFlight-inFlight==2 and 2 errors
+// occured in a row. The channel to report the errors only had a buffer
+// of 1 and 2 would be sent.
+func TestClientReadFromDeadlock(t *testing.T) {
+	clientDeadlock(t, func(f *File) {
+		b := make([]byte, 32768*4)
+		content := bytes.NewReader(b)
+		f.ReadFrom(content)
+	})
+}
+
+// Write has exact same problem
+func TestClientWriteDeadlock(t *testing.T) {
+	clientDeadlock(t, func(f *File) {
+		b := make([]byte, 32768*4)
+		f.Write(b)
+	})
+}
+
+// shared body for both previous tests
+func clientDeadlock(t *testing.T, badfunc func(*File)) {
+
+	if !*testServerImpl {
+		t.Skipf("skipping without -testserver")
+	}
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "writeTest")
+	w, err := sftp.Create(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	// Override sendPacket with failing version
+	// Replicates network error/drop part way through (after 1 good packet)
+	count := 0
+	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
+		count++
+		if count > 1 {
+			return errors.New("Fake network issue")
+		}
+		return sendPacket(w, m)
+	}
+	sftp.clientConn.conn.sendPacketTest = sendPacketTest
+	defer func() {
+		sftp.clientConn.conn.sendPacketTest = nil
+	}()
+
+	// this locked (before the fix)
+	badfunc(w)
 }
 
 // taken from github.com/kr/fs/walk_test.go
