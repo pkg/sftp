@@ -898,7 +898,8 @@ func (f *File) Write(b []byte) (int, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
-	ch := make(chan result, 1)
+	// chan must have a buffer of max value of (desiredInFlight - inFlight)
+	ch := make(chan result, 2)
 	var firstErr error
 	written := len(b)
 	for len(b) > 0 || inFlight > 0 {
@@ -961,7 +962,8 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
-	ch := make(chan result, 1)
+	// chan must have a buffer of max value of (desiredInFlight - inFlight)
+	ch := make(chan result, 2)
 	var firstErr error
 	read := int64(0)
 	b := make([]byte, f.c.maxPacket)
