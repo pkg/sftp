@@ -4,6 +4,7 @@ package sftp
 // enable with -integration
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"flag"
 	"io"
@@ -1147,6 +1148,43 @@ func TestClientWrite(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got != tt.n {
+			t.Errorf("Write(%v): wrote: want: %v, got %v", tt.n, tt.n, got)
+		}
+		fi, err := os.Stat(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total := fi.Size(); total != tt.total {
+			t.Errorf("Write(%v): size: want: %v, got %v", tt.n, tt.total, total)
+		}
+	}
+}
+
+// ReadFrom is basically Write with io.Reader as the arg
+func TestClientReadFrom(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "writeTest")
+	w, err := sftp.Create(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	for _, tt := range clientWriteTests {
+		got, err := w.ReadFrom(bytes.NewReader(make([]byte, tt.n)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != int64(tt.n) {
 			t.Errorf("Write(%v): wrote: want: %v, got %v", tt.n, tt.n, got)
 		}
 		fi, err := os.Stat(f)
