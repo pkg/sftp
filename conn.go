@@ -129,3 +129,13 @@ type serverConn struct {
 func (s *serverConn) sendError(p id, err error) error {
 	return s.sendPacket(statusFromError(p, err))
 }
+
+func (s *serverConn) sendErrorCode(p id, code uint32) error {
+	pkt := sshFxpStatusPacket{
+		ID: p.id(),
+		StatusError: StatusError{
+			Code: code,
+		},
+	}
+	return s.sendPacket(pkt)
+}

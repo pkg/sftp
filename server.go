@@ -8,8 +8,9 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
+	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -27,13 +28,16 @@ const (
 // as specified at http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 type Server struct {
 	serverConn
-	debugStream   io.Writer
-	readOnly      bool
-	pktChan       chan rxPacket
-	openFiles     map[string]*os.File
-	openFilesLock sync.RWMutex
-	handleCount   int
-	maxTxPacket   uint32
+	debugStream    io.Writer
+	readOnly       bool
+	pktChan        chan rxPacket
+	openFiles      map[string]*os.File
+	openFilesLock  sync.RWMutex
+	handleCount    int
+	maxTxPacket    uint32
+	uploadPath     string
+	fileNameMapper func(string) (string, bool)
+	uploadNotifier func(string)
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -50,7 +54,12 @@ func (svr *Server) closeHandle(handle string) error {
 	defer svr.openFilesLock.Unlock()
 	if f, ok := svr.openFiles[handle]; ok {
 		delete(svr.openFiles, handle)
-		return f.Close()
+		fileName := f.Name()
+		err := f.Close()
+		if svr.uploadNotifier != nil {
+			go svr.uploadNotifier(fileName)
+		}
+		return err
 	}
 
 	return syscall.EBADF
@@ -94,6 +103,15 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		}
 	}
 
+	if s.uploadPath == "" {
+		s.uploadPath = "/"
+	} else {
+		s.uploadPath = path.Clean(s.uploadPath)
+		if len(s.uploadPath) > 1 && s.uploadPath[len(s.uploadPath)-1] == '/' {
+			s.uploadPath = s.uploadPath[:len(s.uploadPath)-1]
+		}
+	}
+
 	return s, nil
 }
 
@@ -116,9 +134,38 @@ func ReadOnly() ServerOption {
 	}
 }
 
+func UploadPath(path string) ServerOption {
+	return func(s *Server) error {
+		s.uploadPath = path
+		return nil
+	}
+}
+
+func FileNameMapper(f func(string) (string, bool)) ServerOption {
+	return func(s *Server) error {
+		s.fileNameMapper = f
+		return nil
+	}
+}
+
+func UploadNotifier(f func(string)) ServerOption {
+	return func(s *Server) error {
+		s.uploadNotifier = f
+		return nil
+	}
+}
+
 type rxPacket struct {
 	pktType  fxp
 	pktBytes []byte
+}
+
+var allowedPacketTypes = map[fxp]bool{
+	ssh_FXP_INIT:     true,
+	ssh_FXP_OPEN:     true,
+	ssh_FXP_CLOSE:    true,
+	ssh_FXP_WRITE:    true,
+	ssh_FXP_REALPATH: true,
 }
 
 // Up to N parallel servers
@@ -184,6 +231,13 @@ func (svr *Server) sftpServerWorker() error {
 		}
 		if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
 			return err
+		}
+
+		if !allowedPacketTypes[p.pktType] {
+			if err := svr.sendErrorCode(pkt, ssh_FX_OP_UNSUPPORTED); err != nil {
+				return errors.Wrap(err, "failed to send op unsupported response")
+			}
+			continue
 		}
 
 		// handle FXP_OPENDIR specially
@@ -283,16 +337,11 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 
 	case *sshFxpRealpathPacket:
-		f, err := filepath.Abs(p.Path)
-		if err != nil {
-			return s.sendError(p, err)
-		}
-		f = filepath.Clean(f)
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{
-				Name:     f,
-				LongName: f,
+				Name:     s.uploadPath,
+				LongName: s.uploadPath,
 				Attrs:    emptyFileStat,
 			}},
 		})
@@ -405,32 +454,30 @@ func (p sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
 }
 
 func (p sshFxpOpenPacket) respond(svr *Server) error {
-	var osFlags int
-	if p.hasPflags(ssh_FXF_READ, ssh_FXF_WRITE) {
-		osFlags |= os.O_RDWR
-	} else if p.hasPflags(ssh_FXF_WRITE) {
-		osFlags |= os.O_WRONLY
-	} else if p.hasPflags(ssh_FXF_READ) {
-		osFlags |= os.O_RDONLY
-	} else {
-		// how are they opening?
-		return svr.sendError(p, syscall.EINVAL)
+	// This is upload only, so the file must be opened for writing. Appending
+	// is not supported.
+	if !p.hasPflags(ssh_FXF_WRITE) || p.hasPflags(ssh_FXF_APPEND) {
+		return svr.sendErrorCode(p, ssh_FX_OP_UNSUPPORTED)
 	}
-
-	if p.hasPflags(ssh_FXF_APPEND) {
-		osFlags |= os.O_APPEND
+	prefix := svr.uploadPath
+	if prefix != "/" {
+		prefix += "/"
 	}
-	if p.hasPflags(ssh_FXF_CREAT) {
-		osFlags |= os.O_CREATE
+	if !strings.HasPrefix(p.Path, prefix) {
+		return svr.sendErrorCode(p, ssh_FX_NO_SUCH_PATH)
 	}
-	if p.hasPflags(ssh_FXF_TRUNC) {
-		osFlags |= os.O_TRUNC
+	fileName := p.Path[len(prefix):]
+	if strings.ContainsRune(fileName, '/') {
+		return svr.sendErrorCode(p, ssh_FX_NO_SUCH_PATH)
 	}
-	if p.hasPflags(ssh_FXF_EXCL) {
-		osFlags |= os.O_EXCL
+	if svr.fileNameMapper != nil {
+		var ok bool
+		fileName, ok = svr.fileNameMapper(fileName)
+		if !ok {
+			return svr.sendErrorCode(p, ssh_FX_INVALID_FILENAME)
+		}
 	}
-
-	f, err := os.OpenFile(p.Path, osFlags, 0644)
+	f, err := os.Create(fileName)
 	if err != nil {
 		return svr.sendError(p, err)
 	}
