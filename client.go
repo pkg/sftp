@@ -653,7 +653,7 @@ func (f *File) Read(b []byte) (int, error) {
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
-	ch := make(chan result, 1)
+	ch := make(chan result, 2)
 	type inflightRead struct {
 		b      []byte
 		offset uint64
@@ -752,7 +752,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 	offset := f.offset
 	writeOffset := offset
 	fileSize := uint64(fi.Size())
-	ch := make(chan result, 1)
+	ch := make(chan result, 2)
 	type inflightRead struct {
 		b      []byte
 		offset uint64
