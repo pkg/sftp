@@ -98,7 +98,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 					return nil, nil
 				},
 				PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-					driver := m.driverGenerator(LoginRequest{
+					driver = m.driverGenerator(LoginRequest{
 						Username:   c.User(),
 						Password:   "",
 						PublicKey:  strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
@@ -148,7 +148,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 						switch req.Type {
 						case "subsystem":
 							if len(req.Payload) >= 4 {
-								m.lg.ErrorD("ssh-request-subsytem", meta{"type": req.Type, "system": req.Payload[4:]})
+								m.lg.ErrorD("ssh-request-subsytem", meta{
+									"type":   req.Type,
+									"system": string(req.Payload[4:])})
+								// we reject all SSH requests that are not SFTP
 								if string(req.Payload[4:]) == "sftp" {
 									ok = true
 								}
@@ -169,7 +172,6 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 					channel.Close()
 				}
 			}
-
 		}(newConn)
 	}
 }
