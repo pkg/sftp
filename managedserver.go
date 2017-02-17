@@ -98,7 +98,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 					return nil, nil
 				},
 				PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-					driver := m.driverGenerator(LoginRequest{
+					driver = m.driverGenerator(LoginRequest{
 						Username:   c.User(),
 						Password:   "",
 						PublicKey:  strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
