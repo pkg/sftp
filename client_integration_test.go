@@ -4,7 +4,10 @@ package sftp
 // enable with -integration
 
 import (
+	"bytes"
 	"crypto/sha1"
+	"encoding"
+	"errors"
 	"flag"
 	"io"
 	"io/ioutil"
@@ -1158,6 +1161,197 @@ func TestClientWrite(t *testing.T) {
 			t.Errorf("Write(%v): size: want: %v, got %v", tt.n, tt.total, total)
 		}
 	}
+}
+
+// ReadFrom is basically Write with io.Reader as the arg
+func TestClientReadFrom(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "writeTest")
+	w, err := sftp.Create(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	for _, tt := range clientWriteTests {
+		got, err := w.ReadFrom(bytes.NewReader(make([]byte, tt.n)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != int64(tt.n) {
+			t.Errorf("Write(%v): wrote: want: %v, got %v", tt.n, tt.n, got)
+		}
+		fi, err := os.Stat(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total := fi.Size(); total != tt.total {
+			t.Errorf("Write(%v): size: want: %v, got %v", tt.n, tt.total, total)
+		}
+	}
+}
+
+// Issue #145 in github
+// Deadlock in ReadFrom when network drops after 1 good packet.
+// Deadlock would occur anytime desiredInFlight-inFlight==2 and 2 errors
+// occured in a row. The channel to report the errors only had a buffer
+// of 1 and 2 would be sent.
+var fakeNetErr = errors.New("Fake network issue")
+
+func TestClientReadFromDeadlock(t *testing.T) {
+	clientWriteDeadlock(t, 1, func(f *File) {
+		b := make([]byte, 32768*4)
+		content := bytes.NewReader(b)
+		n, err := f.ReadFrom(content)
+		if n != 0 {
+			t.Fatal("Write should return 0", n)
+		}
+		if err != fakeNetErr {
+			t.Fatal("Didn't recieve correct error", err)
+		}
+	})
+}
+
+// Write has exact same problem
+func TestClientWriteDeadlock(t *testing.T) {
+	clientWriteDeadlock(t, 1, func(f *File) {
+		b := make([]byte, 32768*4)
+		n, err := f.Write(b)
+		if n != 0 {
+			t.Fatal("Write should return 0", n)
+		}
+		if err != fakeNetErr {
+			t.Fatal("Didn't recieve correct error", err)
+		}
+	})
+}
+
+// shared body for both previous tests
+func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
+	if !*testServerImpl {
+		t.Skipf("skipping without -testserver")
+	}
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "writeTest")
+	w, err := sftp.Create(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	// Override sendPacket with failing version
+	// Replicates network error/drop part way through (after 1 good packet)
+	count := 0
+	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
+		count++
+		if count > N {
+			return fakeNetErr
+		}
+		return sendPacket(w, m)
+	}
+	sftp.clientConn.conn.sendPacketTest = sendPacketTest
+	defer func() {
+		sftp.clientConn.conn.sendPacketTest = nil
+	}()
+
+	// this locked (before the fix)
+	badfunc(w)
+}
+
+// Read/WriteTo has this issue as well
+func TestClientReadDeadlock(t *testing.T) {
+	clientReadDeadlock(t, 1, func(f *File) {
+		b := make([]byte, 32768*4)
+		n, err := f.Read(b)
+		if n != 0 {
+			t.Fatal("Write should return 0", n)
+		}
+		if err != fakeNetErr {
+			t.Fatal("Didn't recieve correct error", err)
+		}
+	})
+}
+
+func TestClientWriteToDeadlock(t *testing.T) {
+	clientReadDeadlock(t, 2, func(f *File) {
+		b := make([]byte, 32768*4)
+		buf := bytes.NewBuffer(b)
+		n, err := f.WriteTo(buf)
+		if n != 32768 {
+			t.Fatal("Write should return 0", n)
+		}
+		if err != fakeNetErr {
+			t.Fatal("Didn't recieve correct error", err)
+		}
+	})
+}
+
+func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
+	if !*testServerImpl {
+		t.Skipf("skipping without -testserver")
+	}
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "writeTest")
+	w, err := sftp.Create(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// write the data for the read tests
+	b := make([]byte, 32768*4)
+	w.Write(b)
+	defer w.Close()
+
+	// open new copy of file for read tests
+	r, err := sftp.Open(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	// Override sendPacket with failing version
+	// Replicates network error/drop part way through (after 1 good packet)
+	count := 0
+	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
+		count++
+		if count > N {
+			return fakeNetErr
+		}
+		return sendPacket(w, m)
+	}
+	sftp.clientConn.conn.sendPacketTest = sendPacketTest
+	defer func() {
+		sftp.clientConn.conn.sendPacketTest = nil
+	}()
+
+	// this locked (before the fix)
+	badfunc(r)
 }
 
 // taken from github.com/kr/fs/walk_test.go
