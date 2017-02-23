@@ -21,7 +21,7 @@ type Logger interface {
 type meta map[string]interface{}
 
 // Alerter is the function signature for an optional alerting function to be called in error cases.
-type Alerter func(title string, metadata map[string]string)
+type Alerter func(title string, metadata map[string]interface{})
 
 // DriverGenerator is a function that creates an SFTP ServerDriver if the login request
 // is valid.
@@ -53,19 +53,9 @@ func NewManagedServer(driverGenerator DriverGenerator, lg Logger, alertFn Alerte
 	}
 }
 
-// makeStrictMetadata the transforms metadata from the looser logging format to the stricter
-// alerting format.
-func makeStrictMetadata(m map[string]interface{}) map[string]string {
-	strict := map[string]string{}
-	for k, v := range m {
-		m[k] = fmt.Sprintf("%#v", v)
-	}
-	return strict
-}
-
 func (m ManagedServer) errorAndAlert(title string, metadata map[string]interface{}) {
 	if m.alertFn != nil {
-		m.alertFn(title, makeStrictMetadata(metadata))
+		m.alertFn(title, metadata)
 	}
 	m.lg.ErrorD(title, metadata)
 }
