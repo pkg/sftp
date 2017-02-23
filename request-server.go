@@ -4,7 +4,7 @@ import (
 	"encoding"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"strconv"
 	"sync"
 	"syscall"
@@ -181,17 +181,17 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 }
 
 func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
-	path := pkt.getPath()
-	if !filepath.IsAbs(path) {
-		path = "/" + path
+	pkgPath := pkt.getPath()
+	if !path.IsAbs(pkgPath) {
+		pkgPath = "/" + pkgPath
 	} // all paths are absolute
 
-	cleaned_path := filepath.Clean(path)
+	cleanedPath := path.Clean(pkgPath)
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []sshFxpNameAttr{{
-			Name:     cleaned_path,
-			LongName: cleaned_path,
+			Name:     cleanedPath,
+			LongName: cleanedPath,
 			Attrs:    emptyFileStat,
 		}},
 	}

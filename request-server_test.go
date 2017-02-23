@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -246,6 +247,13 @@ func TestRequestFstat(t *testing.T) {
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
+	fstat := fi.Sys().(*FileStat)
+
+	// Windows does not suppot UID or GID.
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, fstat.UID, uint32(65534))
+		assert.Equal(t, fstat.GID, uint32(65534))
+	}
 }
 
 func TestRequestStatFail(t *testing.T) {

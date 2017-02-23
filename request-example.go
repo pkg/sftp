@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"sync"
 	"time"
 )
@@ -45,7 +45,7 @@ func (fs *root) Filewrite(r Request) (io.WriterAt, error) {
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
-		dir, err := fs.fetch(filepath.Dir(r.Filepath))
+		dir, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return nil, err
 		}
@@ -76,13 +76,13 @@ func (fs *root) Filecmd(r Request) error {
 		fs.files[r.Target] = file
 		delete(fs.files, r.Filepath)
 	case "Rmdir", "Remove":
-		_, err := fs.fetch(filepath.Dir(r.Filepath))
+		_, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
 		delete(fs.files, r.Filepath)
 	case "Mkdir":
-		_, err := fs.fetch(filepath.Dir(r.Filepath))
+		_, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -106,7 +106,7 @@ func (fs *root) Fileinfo(r Request) ([]os.FileInfo, error) {
 	case "List":
 		list := []os.FileInfo{}
 		for fn, fi := range fs.files {
-			if filepath.Dir(fn) == r.Filepath {
+			if path.Dir(fn) == r.Filepath {
 				list = append(list, fi)
 			}
 		}
@@ -171,7 +171,7 @@ func newMemFile(name string, isdir bool) *memFile {
 }
 
 // Have memFile fulfill os.FileInfo interface
-func (f *memFile) Name() string { return filepath.Base(f.name) }
+func (f *memFile) Name() string { return path.Base(f.name) }
 func (f *memFile) Size() int64  { return int64(len(f.content)) }
 func (f *memFile) Mode() os.FileMode {
 	ret := os.FileMode(0644)
