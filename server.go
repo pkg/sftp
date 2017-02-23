@@ -36,7 +36,7 @@ type Server struct {
 	handleCount    int
 	maxTxPacket    uint32
 	uploadPath     string
-	fileNameMapper func(string) (string, bool)
+	fileNameMapper func(string) (string, bool, error)
 	uploadNotifier func(string)
 }
 
@@ -141,7 +141,7 @@ func UploadPath(path string) ServerOption {
 	}
 }
 
-func FileNameMapper(f func(string) (string, bool)) ServerOption {
+func FileNameMapper(f func(string) (string, bool, error)) ServerOption {
 	return func(s *Server) error {
 		s.fileNameMapper = f
 		return nil
@@ -472,8 +472,11 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	}
 	if svr.fileNameMapper != nil {
 		var ok bool
-		fileName, ok = svr.fileNameMapper(fileName)
-		if !ok {
+		var err error
+		fileName, ok, err = svr.fileNameMapper(fileName)
+		if err != nil {
+			return svr.sendErrorCode(p, ssh_FX_FAILURE)
+		} else if !ok {
 			return svr.sendErrorCode(p, ssh_FX_INVALID_FILENAME)
 		}
 	}

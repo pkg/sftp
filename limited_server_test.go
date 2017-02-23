@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -20,11 +21,15 @@ func TestLimitedServer(t *testing.T) {
 
 	uploadPath := "/unvisioned/mockernut"
 
-	fileNameMapper := func(name string) (string, bool) {
-		if name[0] != 'A' {
-			return "", false
+	fileNameMapper := func(name string) (string, bool, error) {
+		switch name[0] {
+		case 'E':
+			return "", false, errors.New("server error")
+		case 'A':
+		default:
+			return "", false, nil
 		}
-		return uploadDir + "/" + name, true
+		return uploadDir + "/" + name, true, nil
 	}
 
 	notifyChan := make(chan string)
@@ -107,6 +112,12 @@ func TestLimitedServer(t *testing.T) {
 	_, err = client.Create(uploadPath + "/forfare-semicrome")
 	if err == nil {
 		t.Error("Invalid file name didn't fail")
+	}
+
+	// Simulate server error.
+	_, err = client.Create(uploadPath + "/Edextrinous-serpulae")
+	if err == nil {
+		t.Error("No server failure")
 	}
 
 	// Bad directory
