@@ -20,6 +20,13 @@ type Logger interface {
 // meta is a shorthand for map[string]interface{} to make logger calls more concise.
 type meta map[string]interface{}
 
+// Alerter is the function signature for an optional alerting function to be called in error cases.
+type Alerter func(title string, metadata map[string]string)
+
+// DriverGenerator is a function that creates an SFTP ServerDriver if the login request
+// is valid.
+type DriverGenerator func(LoginRequest) ServerDriver
+
 // LoginRequest is the metadata associated with a login request that is passed to the
 // driverGenerator function in order for it to approve/deny the request.
 type LoginRequest struct {
@@ -33,15 +40,34 @@ type LoginRequest struct {
 type ManagedServer struct {
 	driverGenerator func(LoginRequest) ServerDriver
 	lg              Logger
+	alertFn         Alerter
 }
 
 // NewManagedServer creates a new ManagedServer which conditionally serves requests based
 // on the output of driverGenerator.
-func NewManagedServer(driverGenerator func(LoginRequest) ServerDriver, lg Logger) *ManagedServer {
+func NewManagedServer(driverGenerator DriverGenerator, lg Logger, alertFn Alerter) *ManagedServer {
 	return &ManagedServer{
 		driverGenerator: driverGenerator,
 		lg:              lg,
+		alertFn:         alertFn,
 	}
+}
+
+// makeStrictMetadata the transforms metadata from the looser logging format to the stricter
+// alerting format.
+func makeStrictMetadata(m map[string]interface{}) map[string]string {
+	strict := map[string]string{}
+	for k, v := range m {
+		m[k] = fmt.Sprintf("%#v", v)
+	}
+	return strict
+}
+
+func (m ManagedServer) errorAndAlert(title string, metadata map[string]interface{}) {
+	if m.alertFn != nil {
+		m.alertFn(title, makeStrictMetadata(metadata))
+	}
+	m.lg.ErrorD(title, metadata)
 }
 
 // Start actually starts the server and begins fielding requests.
@@ -56,7 +82,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 	for i, rawKey := range rawPrivateKeys {
 		privateKey, err := ssh.ParsePrivateKey(rawKey)
 		if err != nil {
-			m.lg.ErrorD("private-key-parse", meta{"index": i, "error": err.Error()})
+			m.errorAndAlert("private-key-parse", meta{"index": i, "error": err.Error()})
 			os.Exit(1)
 		}
 		privateKeys = append(privateKeys, privateKey)
@@ -64,7 +90,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		m.lg.ErrorD("listen-fail", meta{
+		m.errorAndAlert("listen-fail", meta{
 			"msg":   "failed to open socket",
 			"error": err.Error(),
 			"port":  port})
@@ -74,7 +100,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 	for {
 		newConn, err := listener.Accept()
 		if err != nil {
-			m.lg.ErrorD("listener-accept-fail", meta{"error": err.Error()})
+			m.errorAndAlert("listener-accept-fail", meta{"error": err.Error()})
 			os.Exit(1)
 		}
 
@@ -117,7 +143,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 			_, newChan, requestChan, err := ssh.NewServerConn(conn, config)
 			if err != nil {
 				if err != io.EOF {
-					m.lg.ErrorD("handshake-failure", meta{"error": err.Error()})
+					m.errorAndAlert("handshake-failure", meta{"error": err.Error()})
 				}
 				return
 			}
@@ -127,7 +153,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 			for newChannelRequest := range newChan {
 				if newChannelRequest.ChannelType() != "session" {
 					newChannelRequest.Reject(ssh.UnknownChannelType, "unknown channel type")
-					m.lg.ErrorD("unknown-channel-type", meta{"type": newChannelRequest.ChannelType()})
+					m.errorAndAlert("unknown-channel-type", meta{"type": newChannelRequest.ChannelType()})
 					continue
 				}
 				channel, requests, err := newChannelRequest.Accept()
@@ -158,7 +184,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 
 				server, err := NewServer(channel, driver)
 				if err != nil {
-					m.lg.ErrorD("server-creation", meta{"err": err.Error()})
+					m.errorAndAlert("server-creation-err", meta{"err": err.Error()})
 					return
 				}
 				if err := server.Serve(); err != nil {
