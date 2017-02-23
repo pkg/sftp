@@ -121,12 +121,10 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 				}
 				return
 			}
-			m.lg.InfoD("handshake-complete", meta{})
 
 			go ssh.DiscardRequests(requestChan)
 
 			for newChannelRequest := range newChan {
-				m.lg.InfoD("incoming-channel", meta{"type": newChannelRequest.ChannelType()})
 				if newChannelRequest.ChannelType() != "session" {
 					newChannelRequest.Reject(ssh.UnknownChannelType, "unknown channel type")
 					m.lg.ErrorD("unknown-channel-type", meta{"type": newChannelRequest.ChannelType()})
@@ -134,30 +132,26 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 				}
 				channel, requests, err := newChannelRequest.Accept()
 				if err != nil {
-					m.lg.ErrorD("channel-accept-failure", meta{
-						"err":  err.Error(),
-						"type": newChannelRequest.ChannelType()})
+					if err != io.EOF {
+						m.errorAndAlert("channel-accept-failure", meta{
+							"err":  err.Error(),
+							"type": newChannelRequest.ChannelType()})
+					}
 					return
 				}
-				m.lg.ErrorD("channel-accepted", meta{})
 
 				go func(in <-chan *ssh.Request) {
 					for req := range in {
-						m.lg.ErrorD("ssh-request", meta{"type": req.Type})
 						ok := false
 						switch req.Type {
 						case "subsystem":
 							if len(req.Payload) >= 4 {
-								m.lg.ErrorD("ssh-request-subsytem", meta{
-									"type":   req.Type,
-									"system": string(req.Payload[4:])})
 								// we reject all SSH requests that are not SFTP
 								if string(req.Payload[4:]) == "sftp" {
 									ok = true
 								}
 							}
 						}
-						m.lg.ErrorD("ssh-request-accepted", meta{"reply": ok, "type": req.Type})
 						req.Reply(ok, nil)
 					}
 				}(requests)
@@ -168,7 +162,6 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 					return
 				}
 				if err := server.Serve(); err != nil {
-					m.lg.ErrorD("server-closed", meta{"err": err.Error()})
 					channel.Close()
 				}
 			}
