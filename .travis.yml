@@ -1,9 +1,10 @@
 language: go
 go_import_path: github.com/pkg/sftp
+
+# current and previous stable releases, and tip
 go:
-  - 1.5.x
-  - 1.6.x
   - 1.7.x
+  - 1.8.x
   - tip
 
 os:
