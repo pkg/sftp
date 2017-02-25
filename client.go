@@ -690,43 +690,41 @@ func (f *File) Read(b []byte) (int, error) {
 		if inFlight == 0 {
 			break
 		}
-		select {
-		case res := <-ch:
-			inFlight--
-			if res.err != nil {
-				firstErr = offsetErr{offset: 0, err: res.err}
+		res := <-ch
+		inFlight--
+		if res.err != nil {
+			firstErr = offsetErr{offset: 0, err: res.err}
+			break
+		}
+		reqID, data := unmarshalUint32(res.data)
+		req, ok := reqs[reqID]
+		if !ok {
+			firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
+			break
+		}
+		delete(reqs, reqID)
+		switch res.typ {
+		case ssh_FXP_STATUS:
+			if firstErr.err == nil || req.offset < firstErr.offset {
+				firstErr = offsetErr{
+					offset: req.offset,
+					err:    normaliseError(unmarshalStatus(reqID, res.data)),
+				}
 				break
 			}
-			reqID, data := unmarshalUint32(res.data)
-			req, ok := reqs[reqID]
-			if !ok {
-				firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
-				break
+		case ssh_FXP_DATA:
+			l, data := unmarshalUint32(data)
+			n := copy(req.b, data[:l])
+			read += n
+			if n < len(req.b) {
+				sendReq(req.b[l:], req.offset+uint64(l))
 			}
-			delete(reqs, reqID)
-			switch res.typ {
-			case ssh_FXP_STATUS:
-				if firstErr.err == nil || req.offset < firstErr.offset {
-					firstErr = offsetErr{
-						offset: req.offset,
-						err:    normaliseError(unmarshalStatus(reqID, res.data)),
-					}
-					break
-				}
-			case ssh_FXP_DATA:
-				l, data := unmarshalUint32(data)
-				n := copy(req.b, data[:l])
-				read += n
-				if n < len(req.b) {
-					sendReq(req.b[l:], req.offset+uint64(l))
-				}
-				if desiredInFlight < maxConcurrentRequests {
-					desiredInFlight++
-				}
-			default:
-				firstErr = offsetErr{offset: 0, err: unimplementedPacketErr(res.typ)}
-				break
+			if desiredInFlight < maxConcurrentRequests {
+				desiredInFlight++
 			}
+		default:
+			firstErr = offsetErr{offset: 0, err: unimplementedPacketErr(res.typ)}
+			break
 		}
 	}
 	// If the error is anything other than EOF, then there
@@ -796,79 +794,77 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 			}
 			break
 		}
-		select {
-		case res := <-ch:
-			inFlight--
-			if res.err != nil {
-				firstErr = offsetErr{offset: 0, err: res.err}
+		res := <-ch
+		inFlight--
+		if res.err != nil {
+			firstErr = offsetErr{offset: 0, err: res.err}
+			break
+		}
+		reqID, data := unmarshalUint32(res.data)
+		req, ok := reqs[reqID]
+		if !ok {
+			firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
+			break
+		}
+		delete(reqs, reqID)
+		switch res.typ {
+		case ssh_FXP_STATUS:
+			if firstErr.err == nil || req.offset < firstErr.offset {
+				firstErr = offsetErr{offset: req.offset, err: normaliseError(unmarshalStatus(reqID, res.data))}
 				break
 			}
-			reqID, data := unmarshalUint32(res.data)
-			req, ok := reqs[reqID]
-			if !ok {
-				firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
-				break
-			}
-			delete(reqs, reqID)
-			switch res.typ {
-			case ssh_FXP_STATUS:
-				if firstErr.err == nil || req.offset < firstErr.offset {
-					firstErr = offsetErr{offset: req.offset, err: normaliseError(unmarshalStatus(reqID, res.data))}
+		case ssh_FXP_DATA:
+			l, data := unmarshalUint32(data)
+			if req.offset == writeOffset {
+				nbytes, err := w.Write(data)
+				copied += int64(nbytes)
+				if err != nil {
+					// We will never receive another DATA with offset==writeOffset, so
+					// the loop will drain inFlight and then exit.
+					firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: err}
 					break
 				}
-			case ssh_FXP_DATA:
-				l, data := unmarshalUint32(data)
-				if req.offset == writeOffset {
-					nbytes, err := w.Write(data)
-					copied += int64(nbytes)
+				if nbytes < int(l) {
+					firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: io.ErrShortWrite}
+					break
+				}
+				switch {
+				case offset > fileSize:
+					desiredInFlight = 1
+				case desiredInFlight < maxConcurrentRequests:
+					desiredInFlight++
+				}
+				writeOffset += uint64(nbytes)
+				for {
+					pendingData, ok := pendingWrites[writeOffset]
+					if !ok {
+						break
+					}
+					// Give go a chance to free the memory.
+					delete(pendingWrites, writeOffset)
+					nbytes, err := w.Write(pendingData)
+					// Do not move writeOffset on error so subsequent iterations won't trigger
+					// any writes.
 					if err != nil {
-						// We will never receive another DATA with offset==writeOffset, so
-						// the loop will drain inFlight and then exit.
-						firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: err}
+						firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: err}
 						break
 					}
-					if nbytes < int(l) {
-						firstErr = offsetErr{offset: req.offset + uint64(nbytes), err: io.ErrShortWrite}
+					if nbytes < len(pendingData) {
+						firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: io.ErrShortWrite}
 						break
-					}
-					switch {
-					case offset > fileSize:
-						desiredInFlight = 1
-					case desiredInFlight < maxConcurrentRequests:
-						desiredInFlight++
 					}
 					writeOffset += uint64(nbytes)
-					for {
-						pendingData, ok := pendingWrites[writeOffset]
-						if !ok {
-							break
-						}
-						// Give go a chance to free the memory.
-						delete(pendingWrites, writeOffset)
-						nbytes, err := w.Write(pendingData)
-						// Do not move writeOffset on error so subsequent iterations won't trigger
-						// any writes.
-						if err != nil {
-							firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: err}
-							break
-						}
-						if nbytes < len(pendingData) {
-							firstErr = offsetErr{offset: writeOffset + uint64(nbytes), err: io.ErrShortWrite}
-							break
-						}
-						writeOffset += uint64(nbytes)
-					}
-				} else {
-					// Don't write the data yet because
-					// this response came in out of order
-					// and we need to wait for responses
-					// for earlier segments of the file.
-					pendingWrites[req.offset] = data
 				}
-			default:
-				firstErr = offsetErr{offset: 0, err: unimplementedPacketErr(res.typ)}
-				break
+			} else {
+				// Don't write the data yet because
+				// this response came in out of order
+				// and we need to wait for responses
+				// for earlier segments of the file.
+				pendingWrites[req.offset] = data
 			}
+		default:
+			firstErr = offsetErr{offset: 0, err: unimplementedPacketErr(res.typ)}
+			break
 		}
 	}
 	if firstErr.err != io.EOF {
@@ -921,28 +917,26 @@ func (f *File) Write(b []byte) (int, error) {
 		if inFlight == 0 {
 			break
 		}
-		select {
-		case res := <-ch:
-			inFlight--
-			if res.err != nil {
-				firstErr = res.err
+		res := <-ch
+		inFlight--
+		if res.err != nil {
+			firstErr = res.err
+			break
+		}
+		switch res.typ {
+		case ssh_FXP_STATUS:
+			id, _ := unmarshalUint32(res.data)
+			err := normaliseError(unmarshalStatus(id, res.data))
+			if err != nil && firstErr == nil {
+				firstErr = err
 				break
 			}
-			switch res.typ {
-			case ssh_FXP_STATUS:
-				id, _ := unmarshalUint32(res.data)
-				err := normaliseError(unmarshalStatus(id, res.data))
-				if err != nil && firstErr == nil {
-					firstErr = err
-					break
-				}
-				if desiredInFlight < maxConcurrentRequests {
-					desiredInFlight++
-				}
-			default:
-				firstErr = unimplementedPacketErr(res.typ)
-				break
+			if desiredInFlight < maxConcurrentRequests {
+				desiredInFlight++
 			}
+		default:
+			firstErr = unimplementedPacketErr(res.typ)
+			break
 		}
 	}
 	// If error is non-nil, then there may be gaps in the data written to
@@ -988,28 +982,26 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 		if inFlight == 0 {
 			break
 		}
-		select {
-		case res := <-ch:
-			inFlight--
-			if res.err != nil {
-				firstErr = res.err
+		res := <-ch
+		inFlight--
+		if res.err != nil {
+			firstErr = res.err
+			break
+		}
+		switch res.typ {
+		case ssh_FXP_STATUS:
+			id, _ := unmarshalUint32(res.data)
+			err := normaliseError(unmarshalStatus(id, res.data))
+			if err != nil && firstErr == nil {
+				firstErr = err
 				break
 			}
-			switch res.typ {
-			case ssh_FXP_STATUS:
-				id, _ := unmarshalUint32(res.data)
-				err := normaliseError(unmarshalStatus(id, res.data))
-				if err != nil && firstErr == nil {
-					firstErr = err
-					break
-				}
-				if desiredInFlight < maxConcurrentRequests {
-					desiredInFlight++
-				}
-			default:
-				firstErr = unimplementedPacketErr(res.typ)
-				break
+			if desiredInFlight < maxConcurrentRequests {
+				desiredInFlight++
 			}
+		default:
+			firstErr = unimplementedPacketErr(res.typ)
+			break
 		}
 	}
 	if firstErr == io.EOF {
