@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"testing"
 	"time"
 )
@@ -32,15 +33,38 @@ func TestLimitedServer(t *testing.T) {
 		return uploadDir + "/" + name, true, nil
 	}
 
+	fileList := []os.FileInfo{
+		&fileInfo{name: "moon-pie", size: 12345},
+		&fileInfo{name: "toaster", size: 42},
+		&fileInfo{name: "woof", size: 9999},
+	}
+	var fileListPos int
+
 	notifyChan := make(chan string)
 	uploadNotifier := func(name string) {
 		notifyChan <- name
+	}
+
+	opendirHook := func() {
+		fileListPos = 0
+	}
+
+	readdirHook := func() (string, []os.FileInfo, error) {
+		if fileListPos >= len(fileList) {
+			return "", nil, io.EOF
+		} else {
+			start := fileListPos
+			fileListPos = len(fileList)
+			return uploadPath, fileList[start:], nil
+		}
 	}
 
 	serverOptions := []ServerOption{
 		UploadPath(uploadPath),
 		FileNameMapper(fileNameMapper),
 		UploadNotifier(uploadNotifier),
+		OpendirHook(opendirHook),
+		ReaddirHook(readdirHook),
 	}
 
 	server, err := NewServer(struct {
@@ -106,6 +130,41 @@ func TestLimitedServer(t *testing.T) {
 		t.Errorf("Expected %q, got %q", fileContent, string(fc))
 	}
 
+	// Try readdir. Do it twice to make sure directory is reset for the 2nd time.
+	for i := 0; i < 2; i++ {
+		list, err := client.ReadDir(uploadPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(list) != len(fileList) {
+			t.Errorf("Wrong number of files; expect %d, got %d\n", len(fileList), len(list))
+		} else {
+			for i, f := range list {
+				if f.Name() != fileList[i].Name() {
+					t.Error("File %d wrong name\n", i)
+				}
+				if f.Size() != fileList[i].Size() {
+					t.Error("File %d wrong size\n", i)
+				}
+			}
+		}
+	}
+
+	// Try lstat.
+	fi, err := client.Lstat(uploadPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Name() != path.Base(uploadPath) {
+		t.Errorf("Lstat returned wrong file name %q", fi.Name())
+	}
+
+	// Try setstat. This is a no-op.
+	err = client.Chmod("rederivation-nubiferous", 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Try failure conditions.
 
 	// Invalid file name
@@ -136,5 +195,23 @@ func TestLimitedServer(t *testing.T) {
 	_, err = client.Open(uploadPath + "/" + "Alexure-perviously")
 	if err == nil {
 		t.Error("Read-only open didn't fail")
+	}
+
+	// Unsupported
+	err = client.Mkdir(uploadPath + "/" + "deviationist-arborous")
+	if err == nil {
+		t.Error("Mkdir didn't fail")
+	}
+
+	// Readdir of directory other than uploadPath.
+	_, err = client.ReadDir(path.Dir(uploadPath))
+	if err == nil {
+		t.Error("Bad readdir didn't fail")
+	}
+
+	// Lstat of directory other than uploadPath.
+	_, err = client.Lstat(uploadPath + "/..")
+	if err == nil {
+		t.Error("Bad lstat didn't fail")
 	}
 }

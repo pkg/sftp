@@ -38,6 +38,8 @@ type Server struct {
 	uploadPath     string
 	fileNameMapper func(string) (string, bool, error)
 	uploadNotifier func(string)
+	opendirHook    func()
+	readdirHook    func() (string, []os.FileInfo, error)
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -155,6 +157,20 @@ func UploadNotifier(f func(string)) ServerOption {
 	}
 }
 
+func ReaddirHook(f func() (string, []os.FileInfo, error)) ServerOption {
+	return func(s *Server) error {
+		s.readdirHook = f
+		return nil
+	}
+}
+
+func OpendirHook(f func()) ServerOption {
+	return func(s *Server) error {
+		s.opendirHook = f
+		return nil
+	}
+}
+
 type rxPacket struct {
 	pktType  fxp
 	pktBytes []byte
@@ -165,6 +181,10 @@ var allowedPacketTypes = map[fxp]bool{
 	ssh_FXP_OPEN:     true,
 	ssh_FXP_CLOSE:    true,
 	ssh_FXP_WRITE:    true,
+	ssh_FXP_LSTAT:    true,
+	ssh_FXP_OPENDIR:  true,
+	ssh_FXP_READDIR:  true,
+	ssh_FXP_SETSTAT:  true,
 	ssh_FXP_REALPATH: true,
 }
 
@@ -279,15 +299,19 @@ func handlePacket(s *Server, p interface{}) error {
 			info: info,
 		})
 	case *sshFxpLstatPacket:
-		// stat the requested file
-		info, err := os.Lstat(p.Path)
-		if err != nil {
-			return s.sendError(p, err)
+		// Only allow lstat of the upload path.
+		if p.Path == s.uploadPath {
+			return s.sendPacket(sshFxpStatResponse{
+				ID: p.ID,
+				info: &fileInfo{
+					name:  s.uploadPath,
+					mode:  os.ModeDir | 0755,
+					mtime: time.Now(),
+				},
+			})
+		} else {
+			return s.sendError(p, syscall.EPERM)
 		}
-		return s.sendPacket(sshFxpStatResponse{
-			ID:   p.ID,
-			info: info,
-		})
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
 		if !ok {
@@ -456,31 +480,44 @@ func (p sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
 func (p sshFxpOpenPacket) respond(svr *Server) error {
 	// This is upload only, so the file must be opened for writing. Appending
 	// is not supported.
-	if !p.hasPflags(ssh_FXF_WRITE) || p.hasPflags(ssh_FXF_APPEND) {
-		return svr.sendErrorCode(p, ssh_FX_OP_UNSUPPORTED)
-	}
-	prefix := svr.uploadPath
-	if prefix != "/" {
-		prefix += "/"
-	}
-	if !strings.HasPrefix(p.Path, prefix) {
-		return svr.sendErrorCode(p, ssh_FX_NO_SUCH_PATH)
-	}
-	fileName := p.Path[len(prefix):]
-	if strings.ContainsRune(fileName, '/') {
-		return svr.sendErrorCode(p, ssh_FX_NO_SUCH_PATH)
-	}
-	if svr.fileNameMapper != nil {
-		var ok bool
-		var err error
-		fileName, ok, err = svr.fileNameMapper(fileName)
-		if err != nil {
-			return svr.sendErrorCode(p, ssh_FX_FAILURE)
-		} else if !ok {
-			return svr.sendErrorCode(p, ssh_FX_INVALID_FILENAME)
+	var (
+		f   *os.File
+		err error
+	)
+	if p.Path == svr.uploadPath && p.readonly() {
+		// Allow open request for upload directory. /dev/null is opened so
+		// there's a file there. readdirHook must return the list of files.
+		f, err = os.Open("/dev/null")
+		if svr.opendirHook != nil {
+			svr.opendirHook()
 		}
+	} else {
+		if !p.hasPflags(ssh_FXF_WRITE) || p.hasPflags(ssh_FXF_APPEND) {
+			return svr.sendErrorCode(p, ssh_FX_OP_UNSUPPORTED)
+		}
+		prefix := svr.uploadPath
+		if prefix != "/" {
+			prefix += "/"
+		}
+		if !strings.HasPrefix(p.Path, prefix) {
+			return svr.sendErrorCode(p, ssh_FX_NO_SUCH_PATH)
+		}
+		fileName := p.Path[len(prefix):]
+		if strings.ContainsRune(fileName, '/') {
+			return svr.sendErrorCode(p, ssh_FX_NO_SUCH_PATH)
+		}
+		if svr.fileNameMapper != nil {
+			var ok bool
+			var err error
+			fileName, ok, err = svr.fileNameMapper(fileName)
+			if err != nil {
+				return svr.sendErrorCode(p, ssh_FX_FAILURE)
+			} else if !ok {
+				return svr.sendErrorCode(p, ssh_FX_INVALID_FILENAME)
+			}
+		}
+		f, err = os.Create(fileName)
 	}
-	f, err := os.Create(fileName)
 	if err != nil {
 		return svr.sendError(p, err)
 	}
@@ -495,8 +532,18 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 		return svr.sendError(p, syscall.EBADF)
 	}
 
-	dirname := f.Name()
-	dirents, err := f.Readdir(128)
+	var (
+		dirname string
+		dirents []os.FileInfo
+		err     error
+	)
+
+	if svr.readdirHook != nil {
+		dirname, dirents, err = svr.readdirHook()
+	} else {
+		dirname = f.Name()
+		dirents, err = f.Readdir(128)
+	}
 	if err != nil {
 		return svr.sendError(p, err)
 	}
@@ -513,45 +560,8 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 }
 
 func (p sshFxpSetstatPacket) respond(svr *Server) error {
-	// additional unmarshalling is required for each possibility here
-	b := p.Attrs.([]byte)
-	var err error
-
-	debug("setstat name \"%s\"", p.Path)
-	if (p.Flags & ssh_FILEXFER_ATTR_SIZE) != 0 {
-		var size uint64
-		if size, b, err = unmarshalUint64Safe(b); err == nil {
-			err = os.Truncate(p.Path, int64(size))
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_PERMISSIONS) != 0 {
-		var mode uint32
-		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = os.Chmod(p.Path, os.FileMode(mode))
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_ACMODTIME) != 0 {
-		var atime uint32
-		var mtime uint32
-		if atime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if mtime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			atimeT := time.Unix(int64(atime), 0)
-			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(p.Path, atimeT, mtimeT)
-		}
-	}
-	if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
-		var uid uint32
-		var gid uint32
-		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			err = os.Chown(p.Path, int(uid), int(gid))
-		}
-	}
-
-	return svr.sendError(p, err)
+	// This is a no-op in the limited server.
+	return svr.sendError(p, nil)
 }
 
 func (p sshFxpFsetstatPacket) respond(svr *Server) error {
