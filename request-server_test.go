@@ -165,7 +165,7 @@ func TestRequestReadFail(t *testing.T) {
 	contents := make([]byte, 5)
 	n, err := rf.Read(contents)
 	assert.Equal(t, n, 0)
-	assert.IsType(t, &StatusError{}, err)
+	assert.Exactly(t, os.ErrNotExist, err)
 }
 
 func TestRequestOpen(t *testing.T) {
