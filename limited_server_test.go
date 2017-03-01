@@ -20,7 +20,10 @@ func TestLimitedServer(t *testing.T) {
 	}
 	defer os.RemoveAll(uploadDir)
 
-	uploadPath := "/unvisioned/mockernut"
+	const (
+		uploadPath    = "/unvisioned/mockernut"
+		fileSizeLimit = 50
+	)
 
 	fileNameMapper := func(name string) (string, bool, error) {
 		switch name[0] {
@@ -65,6 +68,7 @@ func TestLimitedServer(t *testing.T) {
 		UploadNotifier(uploadNotifier),
 		OpendirHook(opendirHook),
 		ReaddirHook(readdirHook),
+		WithFileSizeLimit(fileSizeLimit),
 	}
 
 	server, err := NewServer(struct {
@@ -89,8 +93,10 @@ func TestLimitedServer(t *testing.T) {
 		t.Errorf("Expected %q, got %q", uploadPath, wd)
 	}
 
-	fileName := "Aphellogen-weatherer"
-	fileContent := "periodate-tritanopia"
+	const (
+		fileName    = "Aphellogen-weatherer"
+		fileContent = "periodate-tritanopia"
+	)
 
 	f, err := client.Create(uploadPath + "/" + fileName)
 	if err != nil {
@@ -238,5 +244,23 @@ func TestLimitedServer(t *testing.T) {
 	_, err = client.Lstat("/vestibulate/hitchhiker")
 	if err == nil {
 		t.Error("Bad lstat didn't fail")
+	}
+
+	// File too big.
+	f, err = client.Create(uploadPath + "/Adecadently-generally")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.Write([]byte("ruptured-usherism"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.Write(make([]byte, fileSizeLimit))
+	if err == nil {
+		t.Fatal("Too big file didn't fail")
+	}
+	err = f.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

@@ -42,6 +42,7 @@ type Server struct {
 	handleCount    int
 	maxTxPacket    uint32
 	uploadPath     string
+	fileSizeLimit  int64
 	fileNameMapper func(string) (string, bool, error)
 	uploadNotifier func(string)
 	opendirHook    func()
@@ -145,6 +146,14 @@ type ServerOption func(*Server) error
 func WithDebug(w io.Writer) ServerOption {
 	return func(s *Server) error {
 		s.debugStream = w
+		return nil
+	}
+}
+
+// WithFileSizeLimit sets a limit on uploaded file size. If <= 0, no limit (default).
+func WithFileSizeLimit(limit int64) ServerOption {
+	return func(s *Server) error {
+		s.fileSizeLimit = limit
 		return nil
 	}
 }
@@ -422,12 +431,17 @@ func handlePacket(s *Server, p interface{}) error {
 			Data:   data[:n],
 		})
 	case *sshFxpWritePacket:
+		var err error
 		f, ok := s.getHandle(p.Handle)
 		if !ok {
 			return s.sendError(p, syscall.EBADF)
 		}
 
-		_, err := f.WriteAt(p.Data, int64(p.Offset))
+		if s.fileSizeLimit > 0 && (int64(p.Offset)+int64(len(p.Data))) > s.fileSizeLimit {
+			err = syscall.EFBIG
+		} else {
+			_, err = f.WriteAt(p.Data, int64(p.Offset))
+		}
 		return s.sendError(p, err)
 	case serverRespondablePacket:
 		err := p.respond(s)
