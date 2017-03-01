@@ -299,12 +299,21 @@ func handlePacket(s *Server, p interface{}) error {
 			info: info,
 		})
 	case *sshFxpLstatPacket:
-		// Only allow lstat of the upload path.
+		// Only allow lstat of the upload path or its parent.
 		if p.Path == s.uploadPath {
 			return s.sendPacket(sshFxpStatResponse{
 				ID: p.ID,
 				info: &fileInfo{
 					name:  s.uploadPath,
+					mode:  os.ModeDir | 0755,
+					mtime: time.Now(),
+				},
+			})
+		} else if p.Path == s.uploadPath+"/.." {
+			return s.sendPacket(sshFxpStatResponse{
+				ID: p.ID,
+				info: &fileInfo{
+					name:  path.Dir(s.uploadPath),
 					mode:  os.ModeDir | 0755,
 					mtime: time.Now(),
 				},
