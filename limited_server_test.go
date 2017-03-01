@@ -49,13 +49,13 @@ func TestLimitedServer(t *testing.T) {
 		fileListPos = 0
 	}
 
-	readdirHook := func() (string, []os.FileInfo, error) {
+	readdirHook := func() ([]os.FileInfo, error) {
 		if fileListPos >= len(fileList) {
-			return "", nil, io.EOF
+			return nil, io.EOF
 		} else {
 			start := fileListPos
 			fileListPos = len(fileList)
-			return uploadPath, fileList[start:], nil
+			return fileList[start:], nil
 		}
 	}
 
@@ -150,14 +150,39 @@ func TestLimitedServer(t *testing.T) {
 		}
 	}
 
-	// Try lstat.
-	fi, err := client.Lstat(uploadPath)
-	if err != nil {
-		t.Fatal(err)
+	// Try readdir on ancestors of the upload path.
+
+	testReaddirAncestor := func(reqPath, expected string) {
+		list, err := client.ReadDir(reqPath)
+		if err != nil {
+			t.Fatalf("%s: %s", reqPath, err)
+		}
+		if len(list) != 1 || list[0].Name() != expected {
+			t.Errorf("%s: got %s", reqPath, list[0].Name())
+		}
 	}
-	if fi.Name() != path.Base(uploadPath) {
-		t.Errorf("Lstat returned wrong file name %q", fi.Name())
+
+	testReaddirAncestor(path.Dir(uploadPath), path.Base(uploadPath))
+	testReaddirAncestor("/", path.Base(path.Dir(uploadPath)))
+
+	// Try stat/lstat.
+
+	testStat := func(name string, statFunc func(string) (os.FileInfo, error), reqPath string) {
+		fi, err := statFunc(reqPath)
+		if err != nil {
+			t.Fatalf("%s: %s", name, err)
+		}
+		if fi.Name() != path.Base(reqPath) {
+			t.Errorf("%s: wrong file name %q", name, fi.Name())
+		}
 	}
+
+	testStat("stat upload path", client.Stat, uploadPath)
+	testStat("lstat upload path", client.Lstat, uploadPath)
+	testStat("stat upload path parent", client.Stat, path.Dir(uploadPath))
+	testStat("lstat upload path parent", client.Lstat, path.Dir(uploadPath))
+	testStat("stat /", client.Stat, "/")
+	testStat("lstat /", client.Lstat, "/")
 
 	// Try setstat. This is a no-op.
 	err = client.Chmod("rederivation-nubiferous", 0644)
@@ -203,14 +228,14 @@ func TestLimitedServer(t *testing.T) {
 		t.Error("Mkdir didn't fail")
 	}
 
-	// Readdir of directory other than uploadPath.
-	_, err = client.ReadDir(path.Dir(uploadPath))
+	// Readdir of directory outside of uploadPath.
+	_, err = client.ReadDir(path.Dir("/scintillize/rewaybill"))
 	if err == nil {
 		t.Error("Bad readdir didn't fail")
 	}
 
-	// Lstat of directory other than uploadPath.
-	_, err = client.Lstat(uploadPath + "/..")
+	// Lstat of directory outside of uploadPath.
+	_, err = client.Lstat("/vestibulate/hitchhiker")
 	if err == nil {
 		t.Error("Bad lstat didn't fail")
 	}

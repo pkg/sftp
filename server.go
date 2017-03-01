@@ -22,6 +22,11 @@ const (
 	sftpServerWorkerCount = 8
 )
 
+type openDirInfo struct {
+	name string
+	read bool
+}
+
 // Server is an SSH File Transfer Protocol (sftp) server.
 // This is intended to provide the sftp subsystem to an ssh server daemon.
 // This implementation currently supports most of sftp server protocol version 3,
@@ -32,6 +37,7 @@ type Server struct {
 	readOnly       bool
 	pktChan        chan rxPacket
 	openFiles      map[string]*os.File
+	openDirs       map[string]*openDirInfo
 	openFilesLock  sync.RWMutex
 	handleCount    int
 	maxTxPacket    uint32
@@ -39,15 +45,18 @@ type Server struct {
 	fileNameMapper func(string) (string, bool, error)
 	uploadNotifier func(string)
 	opendirHook    func()
-	readdirHook    func() (string, []os.FileInfo, error)
+	readdirHook    func() ([]os.FileInfo, error)
 }
 
-func (svr *Server) nextHandle(f *os.File) string {
+func (svr *Server) nextHandle(f *os.File, dirName string) string {
 	svr.openFilesLock.Lock()
 	defer svr.openFilesLock.Unlock()
 	svr.handleCount++
 	handle := strconv.Itoa(svr.handleCount)
 	svr.openFiles[handle] = f
+	if dirName != "" {
+		svr.openDirs[handle] = &openDirInfo{name: dirName}
+	}
 	return handle
 }
 
@@ -56,9 +65,13 @@ func (svr *Server) closeHandle(handle string) error {
 	defer svr.openFilesLock.Unlock()
 	if f, ok := svr.openFiles[handle]; ok {
 		delete(svr.openFiles, handle)
+		_, isDir := svr.openDirs[handle]
+		if isDir {
+			delete(svr.openDirs, handle)
+		}
 		fileName := f.Name()
 		err := f.Close()
-		if svr.uploadNotifier != nil {
+		if svr.uploadNotifier != nil && !isDir {
 			go svr.uploadNotifier(fileName)
 		}
 		return err
@@ -72,6 +85,13 @@ func (svr *Server) getHandle(handle string) (*os.File, bool) {
 	defer svr.openFilesLock.RUnlock()
 	f, ok := svr.openFiles[handle]
 	return f, ok
+}
+
+func (svr *Server) getHandleDirInfo(handle string) (*openDirInfo, bool) {
+	svr.openFilesLock.RLock()
+	defer svr.openFilesLock.RUnlock()
+	di, ok := svr.openDirs[handle]
+	return di, ok
 }
 
 type serverRespondablePacket interface {
@@ -96,6 +116,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		debugStream: ioutil.Discard,
 		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
 		openFiles:   make(map[string]*os.File),
+		openDirs:    make(map[string]*openDirInfo),
 		maxTxPacket: 1 << 15,
 	}
 
@@ -157,7 +178,7 @@ func UploadNotifier(f func(string)) ServerOption {
 	}
 }
 
-func ReaddirHook(f func() (string, []os.FileInfo, error)) ServerOption {
+func ReaddirHook(f func() ([]os.FileInfo, error)) ServerOption {
 	return func(s *Server) error {
 		s.readdirHook = f
 		return nil
@@ -181,6 +202,7 @@ var allowedPacketTypes = map[fxp]bool{
 	ssh_FXP_OPEN:     true,
 	ssh_FXP_CLOSE:    true,
 	ssh_FXP_WRITE:    true,
+	ssh_FXP_STAT:     true,
 	ssh_FXP_LSTAT:    true,
 	ssh_FXP_OPENDIR:  true,
 	ssh_FXP_READDIR:  true,
@@ -284,43 +306,36 @@ func (svr *Server) sftpServerWorker() error {
 	return nil
 }
 
+func (s *Server) isUploadDirOrAncestor(dir string) bool {
+	if dir == s.uploadPath || dir == "/" {
+		return true
+	}
+	return strings.HasPrefix(s.uploadPath, dir+"/")
+}
+
 func handlePacket(s *Server, p interface{}) error {
-	switch p := p.(type) {
-	case *sshFxInitPacket:
-		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
-	case *sshFxpStatPacket:
-		// stat the requested file
-		info, err := os.Stat(p.Path)
-		if err != nil {
-			return s.sendError(p, err)
-		}
-		return s.sendPacket(sshFxpStatResponse{
-			ID:   p.ID,
-			info: info,
-		})
-	case *sshFxpLstatPacket:
-		// Only allow lstat of the upload path or its parent.
-		if p.Path == s.uploadPath {
+	doStat := func(p id, reqPath string) error {
+		reqPath = path.Clean(reqPath)
+		if s.isUploadDirOrAncestor(reqPath) {
 			return s.sendPacket(sshFxpStatResponse{
-				ID: p.ID,
+				ID: p.id(),
 				info: &fileInfo{
-					name:  s.uploadPath,
-					mode:  os.ModeDir | 0755,
-					mtime: time.Now(),
-				},
-			})
-		} else if p.Path == s.uploadPath+"/.." {
-			return s.sendPacket(sshFxpStatResponse{
-				ID: p.ID,
-				info: &fileInfo{
-					name:  path.Dir(s.uploadPath),
+					name:  reqPath,
 					mode:  os.ModeDir | 0755,
 					mtime: time.Now(),
 				},
 			})
 		} else {
-			return s.sendError(p, syscall.EPERM)
+			return s.sendError(p, syscall.ENOENT)
 		}
+	}
+	switch p := p.(type) {
+	case *sshFxInitPacket:
+		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
+	case *sshFxpStatPacket:
+		return doStat(p, p.Path)
+	case *sshFxpLstatPacket:
+		return doStat(p, p.Path)
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
 		if !ok {
@@ -370,11 +385,17 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 
 	case *sshFxpRealpathPacket:
+		var retPath string
+		if p.Path[0] != '/' {
+			retPath = path.Clean(s.uploadPath + "/" + p.Path)
+		} else {
+			retPath = path.Clean(p.Path)
+		}
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{
-				Name:     s.uploadPath,
-				LongName: s.uploadPath,
+				Name:     retPath,
+				LongName: retPath,
 				Attrs:    emptyFileStat,
 			}},
 		})
@@ -490,12 +511,15 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	// This is upload only, so the file must be opened for writing. Appending
 	// is not supported.
 	var (
-		f   *os.File
-		err error
+		f       *os.File
+		err     error
+		dirName string
 	)
-	if p.Path == svr.uploadPath && p.readonly() {
-		// Allow open request for upload directory. /dev/null is opened so
-		// there's a file there. readdirHook must return the list of files.
+	reqPath := path.Clean(p.Path)
+	if svr.isUploadDirOrAncestor(reqPath) && p.readonly() {
+		// Allow open request for upload directory or ancestor.
+		// /dev/null is opened so there's a file there.
+		dirName = reqPath
 		f, err = os.Open("/dev/null")
 		if svr.opendirHook != nil {
 			svr.opendirHook()
@@ -531,7 +555,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		return svr.sendError(p, err)
 	}
 
-	handle := svr.nextHandle(f)
+	handle := svr.nextHandle(f, dirName)
 	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
 }
 
@@ -548,7 +572,40 @@ func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	)
 
 	if svr.readdirHook != nil {
-		dirname, dirents, err = svr.readdirHook()
+		dirInfo, ok := svr.getHandleDirInfo(p.Handle)
+		if !ok {
+			return svr.sendError(p, syscall.EBADF)
+		}
+		dirPath := dirInfo.name
+		if dirPath == svr.uploadPath {
+			dirents, err = svr.readdirHook()
+		} else if svr.isUploadDirOrAncestor(dirPath) {
+			if dirInfo.read {
+				err = io.EOF
+			} else {
+				var prefixLen int
+				if dirPath == "/" {
+					prefixLen = 1
+				} else {
+					prefixLen = len(dirPath) + 1
+				}
+				childDirName := svr.uploadPath[prefixLen:]
+				if i := strings.Index(childDirName, "/"); i != -1 {
+					childDirName = childDirName[:i]
+				}
+				dirents = []os.FileInfo{
+					&fileInfo{
+						name:  childDirName,
+						mode:  os.ModeDir | 0755,
+						mtime: time.Now(),
+					},
+				}
+				dirInfo.read = true
+			}
+		} else {
+			// Shouldn't happen
+			return svr.sendError(p, syscall.EBADF)
+		}
 	} else {
 		dirname = f.Name()
 		dirents, err = f.Readdir(128)
