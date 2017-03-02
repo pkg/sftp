@@ -238,9 +238,7 @@ func TestRequestStat(t *testing.T) {
 	assert.Equal(t, fi.Name(), "foo")
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
-	fstat := fi.Sys().(*FileStat)
-	assert.Equal(t, fstat.UID, uint32(65534))
-	assert.Equal(t, fstat.GID, uint32(65534))
+	assert.NoError(t, testOsSys(fi.Sys()))
 }
 
 func TestRequestStatFail(t *testing.T) {
