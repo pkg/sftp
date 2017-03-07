@@ -6,6 +6,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -120,7 +121,10 @@ func main() {
 
 		root := sftp.InMemHandler()
 		server := sftp.NewRequestServer(channel, root)
-		if err := server.Serve(); err != nil {
+		if err := server.Serve(); err == io.EOF {
+			server.Close()
+			log.Print("sftp client exited session.")
+		} else if err != nil {
 			log.Fatal("sftp server completed with error:", err)
 		}
 	}
