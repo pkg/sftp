@@ -94,6 +94,17 @@ func (svr *Server) getHandle(handle string) (*fileHandle, bool) {
 	return f, ok
 }
 
+func (svr *Server) getHandleByPath(path string) (*fileHandle, bool) {
+	svr.openFilesLock.RLock()
+	defer svr.openFilesLock.RUnlock()
+	for _, f := range svr.openFiles {
+		if f.Path == path {
+			return f, true
+		}
+	}
+	return nil, false
+}
+
 type serverRespondablePacket interface {
 	encoding.BinaryUnmarshaler
 	id() uint32
@@ -247,20 +258,27 @@ func handlePacket(s *Server, p interface{}) error {
 	case *sshFxInitPacket:
 		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 	case *sshFxpStatPacket:
-
-		// stat the requested file
-		info, err := s.driver.Stat(p.Path)
-		if err != nil {
-			return s.sendError(p, err)
-		}
-		return s.sendPacket(sshFxpStatResponse{
-			ID:   p.ID,
-			info: info,
-		})
 	case *sshFxpLstatPacket:
 		// stat the requested file
 		info, err := s.driver.Stat(p.Path)
 		if err != nil {
+			if err != os.ErrNotExist {
+				return s.sendError(p, err)
+			}
+			// if the file doesn't exist, see if we have an open handle for that file, and send info based on that
+			// this is to match the behavior of servers that flush to disk immediately (OpenSSH)
+			if f, ok := s.getHandleByPath(p.Path); ok && !f.IsDir {
+				return s.sendPacket(sshFxpStatResponse{
+					ID: p.ID,
+					info: &fileInfo{
+						name:  p.Path,
+						mode:  os.ModePerm,
+						size:  int64(f.Position),
+						mtime: time.Now(),
+					},
+				})
+			}
+			// otherwise, just send the original error
 			return s.sendError(p, err)
 		}
 		return s.sendPacket(sshFxpStatResponse{
@@ -272,9 +290,21 @@ func handlePacket(s *Server, p interface{}) error {
 		if !ok || f.IsDir {
 			return s.sendError(p, syscall.EBADF)
 		}
-
 		info, err := s.driver.Stat(f.Path)
+
 		if err != nil {
+			// if the file doesn't exist, send info based on the handle instead
+			if err == os.ErrNotExist {
+				return s.sendPacket(sshFxpStatResponse{
+					ID: p.ID,
+					info: &fileInfo{
+						name:  f.Path,
+						mode:  os.ModePerm,
+						size:  int64(f.Position),
+						mtime: time.Now(),
+					},
+				})
+			}
 			return s.sendError(p, err)
 		}
 
@@ -344,9 +374,8 @@ func handlePacket(s *Server, p interface{}) error {
 	case serverRespondablePacket:
 		err := p.respond(s)
 		return errors.Wrap(err, "pkt.respond failed")
-	default:
-		return errors.Errorf("unexpected packet type %T", p)
 	}
+	return errors.Errorf("unexpected packet type %T", p)
 }
 
 // Serve serves SFTP connections until the streams stop or the SFTP subsystem
