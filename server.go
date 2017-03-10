@@ -266,8 +266,8 @@ func handlePacket(s *Server, p interface{}) error {
 				return s.sendError(p, err)
 			}
 			// if the file doesn't exist, see if we have an open handle for that file, and send info based on that
-			f, ok := s.getHandleByPath(p.Path)
-			if ok && !f.IsDir {
+			// this is to match the behavior of servers that flush to disk immediately (OpenSSH)
+			if f, ok := s.getHandleByPath(p.Path); ok && !f.IsDir {
 				return s.sendPacket(sshFxpStatResponse{
 					ID: p.ID,
 					info: &fileInfo{
@@ -293,9 +293,6 @@ func handlePacket(s *Server, p interface{}) error {
 		info, err := s.driver.Stat(f.Path)
 
 		if err != nil {
-			if err != os.ErrNotExist {
-				return s.sendError(p, err)
-			}
 			// if the file doesn't exist, send info based on the handle instead
 			if err == os.ErrNotExist {
 				return s.sendPacket(sshFxpStatResponse{
@@ -308,6 +305,7 @@ func handlePacket(s *Server, p interface{}) error {
 					},
 				})
 			}
+			return s.sendError(p, err)
 		}
 
 		return s.sendPacket(sshFxpStatResponse{
@@ -376,7 +374,6 @@ func handlePacket(s *Server, p interface{}) error {
 	case serverRespondablePacket:
 		err := p.respond(s)
 		return errors.Wrap(err, "pkt.respond failed")
-	default:
 	}
 	return errors.Errorf("unexpected packet type %T", p)
 }
