@@ -28,6 +28,7 @@ type S3Driver struct {
 	bucket   string
 	prefix   string
 	homePath string
+	kmsKeyID *string
 }
 
 func (d S3Driver) Stat(path string) (os.FileInfo, error) {
@@ -142,13 +143,18 @@ func (d S3Driver) Rename(oldpath string, newpath string) error {
 	if err != nil {
 		return err
 	}
-
-	if _, err := d.s3.CopyObject(&s3.CopyObjectInput{
-		Bucket:               aws.String(d.bucket),
-		CopySource:           aws.String(d.bucket + "/" + translatedOldpath),
-		Key:                  &translatedNewpath,
-		ServerSideEncryption: aws.String("AES256"),
-	}); err != nil {
+	input := &s3.CopyObjectInput{
+		Bucket:     aws.String(d.bucket),
+		CopySource: aws.String(d.bucket + "/" + translatedOldpath),
+		Key:        &translatedNewpath,
+	}
+	if d.kmsKeyID == nil {
+		input.ServerSideEncryption = aws.String("AES256")
+	} else {
+		input.ServerSideEncryption = aws.String("aws:kms")
+		input.SSEKMSKeyId = aws.String(*d.kmsKeyID)
+	}
+	if _, err := d.s3.CopyObject(input); err != nil {
 		return err
 	}
 
@@ -170,13 +176,18 @@ func (d S3Driver) MakeDir(path string) error {
 	if !strings.HasSuffix(localPath, "/") {
 		localPath += "/"
 	}
-
-	_, err = d.s3.PutObject(&s3.PutObjectInput{
-		Bucket:               aws.String(d.bucket),
-		Key:                  aws.String(localPath),
-		ServerSideEncryption: aws.String("AES256"),
-		Body:                 bytes.NewReader([]byte{}),
-	})
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(d.bucket),
+		Key:    aws.String(localPath),
+		Body:   bytes.NewReader([]byte{}),
+	}
+	if d.kmsKeyID == nil {
+		input.ServerSideEncryption = aws.String("AES256")
+	} else {
+		input.ServerSideEncryption = aws.String("aws:kms")
+		input.SSEKMSKeyId = aws.String(*d.kmsKeyID)
+	}
+	_, err = d.s3.PutObject(input)
 	return err
 }
 
@@ -205,13 +216,18 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-
-	_, err = d.s3.PutObject(&s3.PutObjectInput{
-		Bucket:               aws.String(d.bucket),
-		Key:                  aws.String(localPath),
-		ServerSideEncryption: aws.String("AES256"),
-		Body:                 bytes.NewReader(rawData),
-	})
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(d.bucket),
+		Key:    aws.String(localPath),
+		Body:   bytes.NewReader(rawData),
+	}
+	if d.kmsKeyID == nil {
+		input.ServerSideEncryption = aws.String("AES256")
+	} else {
+		input.ServerSideEncryption = aws.String("aws:kms")
+		input.SSEKMSKeyId = aws.String(*d.kmsKeyID)
+	}
+	_, err = d.s3.PutObject(input)
 	return err
 }
 
@@ -249,7 +265,7 @@ func TranslatePath(prefix, home, path string) (string, error) {
 // bucket: name of S3 bucket
 // prefix: key within the S3 bucket, if applicable
 // homePath: default home directory for user (can be different from prefix)
-func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string) *S3Driver {
+func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string, kmsKeyID *string) *S3Driver {
 	config := aws.NewConfig().
 		WithRegion(region).
 		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, awsToken))
@@ -259,5 +275,6 @@ func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey,
 		bucket:   bucket,
 		prefix:   prefix,
 		homePath: homePath,
+		kmsKeyID: kmsKeyID,
 	}
 }
