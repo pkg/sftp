@@ -408,8 +408,11 @@ func (svr *Server) Serve() error {
 
 	// close any still-open files
 	for handle, file := range svr.openFiles {
-		fmt.Fprintf(svr.debugStream, "sftp server file with handle %q left open: %v\n", handle, file.TempHandle.Name())
-		file.TempHandle.Close()
+		if !file.IsDir {
+			fmt.Fprintf(svr.debugStream, "sftp server file with handle %q left open: %v\n",
+				handle, file.TempHandle.Name())
+			file.TempHandle.Close()
+		}
 	}
 	return err // error from recvPacket
 }
