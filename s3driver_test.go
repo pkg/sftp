@@ -282,3 +282,28 @@ func TestPutFile(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestPutFileWithKmsKeyID(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mockS3API := NewMockS3API(mockCtrl)
+	kmsKeyID := "123456"
+
+	mockS3API.EXPECT().PutObject(&s3.PutObjectInput{
+		Bucket:               aws.String("bucket"),
+		Key:                  aws.String("home/dir/file"),
+		ServerSideEncryption: aws.String("aws:kms"),
+		SSEKMSKeyId:          aws.String(kmsKeyID),
+		Body:                 bytes.NewReader([]byte{1, 2, 3}),
+	}).Return(nil, nil)
+
+	driver := &S3Driver{
+		s3:       mockS3API,
+		bucket:   "bucket",
+		homePath: "home",
+		kmsKeyID: &kmsKeyID,
+	}
+	err := driver.PutFile("../../dir/file", bytes.NewReader([]byte{1, 2, 3}))
+
+	assert.NoError(t, err)
+}
