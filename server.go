@@ -29,7 +29,7 @@ type Server struct {
 	serverConn
 	debugStream   io.Writer
 	readOnly      bool
-	pktChan       chan rxPacket
+	pktChan       chan packet
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int
@@ -83,7 +83,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 			},
 		},
 		debugStream: ioutil.Discard,
-		pktChan:     make(chan rxPacket, sftpServerWorkerCount),
+		pktChan:     make(chan packet, sftpServerWorkerCount),
 		openFiles:   make(map[string]*os.File),
 		maxTxPacket: 1 << 15,
 	}
@@ -123,12 +123,7 @@ type rxPacket struct {
 
 // Up to N parallel servers
 func (svr *Server) sftpServerWorker() error {
-	for p := range svr.pktChan {
-
-		pkt, err := makePacket(p)
-		if err != nil {
-			return err
-		}
+	for pkt := range svr.pktChan {
 
 		// readonly checks
 		readonly := true
@@ -297,6 +292,7 @@ func (svr *Server) Serve() error {
 	}
 
 	var err error
+	var pkt packet
 	var pktType uint8
 	var pktBytes []byte
 	for {
@@ -304,7 +300,14 @@ func (svr *Server) Serve() error {
 		if err != nil {
 			break
 		}
-		svr.pktChan <- rxPacket{fxp(pktType), pktBytes}
+
+		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
+		if err != nil {
+			svr.conn.Close() // shuts down recvPacket
+			break
+		}
+
+		svr.pktChan <- pkt
 	}
 
 	close(svr.pktChan) // shuts down sftpServerWorkers
