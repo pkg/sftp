@@ -253,38 +253,43 @@ func (svr *Server) sftpServerWorker() error {
 	return nil
 }
 
+func handleStatPacket(s *Server, p id, path string, id uint32) error {
+	// stat the requested file
+	info, err := s.driver.Stat(path)
+	if err != nil {
+		if err != os.ErrNotExist {
+			return s.sendError(p, err)
+		}
+		// if the file doesn't exist, see if we have an open handle for that file, and send info based on that
+		// this is to match the behavior of servers that flush to disk immediately (OpenSSH)
+		if f, ok := s.getHandleByPath(path); ok && !f.IsDir {
+			return s.sendPacket(sshFxpStatResponse{
+				ID: id,
+				info: &fileInfo{
+					name:  path,
+					mode:  os.ModePerm,
+					size:  int64(f.Position),
+					mtime: time.Now(),
+				},
+			})
+		}
+		// otherwise, just send the original error
+		return s.sendError(p, err)
+	}
+	return s.sendPacket(sshFxpStatResponse{
+		ID:   id,
+		info: info,
+	})
+}
+
 func handlePacket(s *Server, p interface{}) error {
 	switch p := p.(type) {
 	case *sshFxInitPacket:
 		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 	case *sshFxpStatPacket:
+		return handleStatPacket(s, p, p.Path, p.ID)
 	case *sshFxpLstatPacket:
-		// stat the requested file
-		info, err := s.driver.Stat(p.Path)
-		if err != nil {
-			if err != os.ErrNotExist {
-				return s.sendError(p, err)
-			}
-			// if the file doesn't exist, see if we have an open handle for that file, and send info based on that
-			// this is to match the behavior of servers that flush to disk immediately (OpenSSH)
-			if f, ok := s.getHandleByPath(p.Path); ok && !f.IsDir {
-				return s.sendPacket(sshFxpStatResponse{
-					ID: p.ID,
-					info: &fileInfo{
-						name:  p.Path,
-						mode:  os.ModePerm,
-						size:  int64(f.Position),
-						mtime: time.Now(),
-					},
-				})
-			}
-			// otherwise, just send the original error
-			return s.sendError(p, err)
-		}
-		return s.sendPacket(sshFxpStatResponse{
-			ID:   p.ID,
-			info: info,
-		})
+		return handleStatPacket(s, p, p.Path, p.ID)
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
 		if !ok || f.IsDir {
