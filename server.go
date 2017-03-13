@@ -143,40 +143,32 @@ func (svr *Server) sftpServerWorker() error {
 			pkt = &sshFxpReadPacket{}
 		case ssh_FXP_WRITE:
 			pkt = &sshFxpWritePacket{}
-			readonly = false
 		case ssh_FXP_FSTAT:
 			pkt = &sshFxpFstatPacket{}
 		case ssh_FXP_SETSTAT:
 			pkt = &sshFxpSetstatPacket{}
-			readonly = false
 		case ssh_FXP_FSETSTAT:
 			pkt = &sshFxpFsetstatPacket{}
-			readonly = false
 		case ssh_FXP_OPENDIR:
 			pkt = &sshFxpOpendirPacket{}
 		case ssh_FXP_READDIR:
 			pkt = &sshFxpReaddirPacket{}
 		case ssh_FXP_REMOVE:
 			pkt = &sshFxpRemovePacket{}
-			readonly = false
 		case ssh_FXP_MKDIR:
 			pkt = &sshFxpMkdirPacket{}
-			readonly = false
 		case ssh_FXP_RMDIR:
 			pkt = &sshFxpRmdirPacket{}
-			readonly = false
 		case ssh_FXP_REALPATH:
 			pkt = &sshFxpRealpathPacket{}
 		case ssh_FXP_STAT:
 			pkt = &sshFxpStatPacket{}
 		case ssh_FXP_RENAME:
 			pkt = &sshFxpRenamePacket{}
-			readonly = false
 		case ssh_FXP_READLINK:
 			pkt = &sshFxpReadlinkPacket{}
 		case ssh_FXP_SYMLINK:
 			pkt = &sshFxpSymlinkPacket{}
-			readonly = false
 		case ssh_FXP_EXTENDED:
 			pkt = &sshFxpExtendedPacket{}
 		default:
@@ -186,8 +178,10 @@ func (svr *Server) sftpServerWorker() error {
 			return err
 		}
 
-		// handle FXP_OPENDIR specially
+		// readonly checks
 		switch pkt := pkt.(type) {
+		case notReadOnly:
+			readonly = false
 		case *sshFxpOpenPacket:
 			readonly = pkt.readonly()
 		case *sshFxpExtendedPacket:

@@ -32,6 +32,10 @@ type isOpener interface {
 	isOpener()
 }
 
+type notReadOnly interface {
+	notReadOnly()
+}
+
 //// define types by adding methods
 // hasPath
 func (p sshFxpLstatPacket) getPath() string    { return p.Path }
@@ -58,6 +62,16 @@ func (p sshFxpFsetstatPacket) getHandle() string { return p.Handle }
 func (p sshFxpReadPacket) getHandle() string     { return p.Handle }
 func (p sshFxpWritePacket) getHandle() string    { return p.Handle }
 func (p sshFxpReaddirPacket) getHandle() string  { return p.Handle }
+
+// notReadOnly
+func (p sshFxpWritePacket) notReadOnly()    {}
+func (p sshFxpSetstatPacket) notReadOnly()  {}
+func (p sshFxpFsetstatPacket) notReadOnly() {}
+func (p sshFxpRemovePacket) notReadOnly()   {}
+func (p sshFxpMkdirPacket) notReadOnly()    {}
+func (p sshFxpRmdirPacket) notReadOnly()    {}
+func (p sshFxpRenamePacket) notReadOnly()   {}
+func (p sshFxpSymlinkPacket) notReadOnly()  {}
 
 // this has a handle, but is only used for close
 func (p sshFxpClosePacket) getHandle() string { return p.Handle }
