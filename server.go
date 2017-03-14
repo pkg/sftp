@@ -29,7 +29,7 @@ type Server struct {
 	serverConn
 	debugStream   io.Writer
 	readOnly      bool
-	pktChan       chan packet
+	pktChan       chan requestPacket
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int
@@ -83,7 +83,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 			},
 		},
 		debugStream: ioutil.Discard,
-		pktChan:     make(chan packet, sftpServerWorkerCount),
+		pktChan:     make(chan requestPacket, sftpServerWorkerCount),
 		openFiles:   make(map[string]*os.File),
 		maxTxPacket: 1 << 15,
 	}
@@ -292,7 +292,7 @@ func (svr *Server) Serve() error {
 	}
 
 	var err error
-	var pkt packet
+	var pkt requestPacket
 	var pktType uint8
 	var pktBytes []byte
 	for {

@@ -7,7 +7,7 @@ import (
 )
 
 // all incoming packets
-type packet interface {
+type requestPacket interface {
 	encoding.BinaryUnmarshaler
 	id() uint32
 }
@@ -18,12 +18,12 @@ type responsePacket interface {
 
 // interfaces to group types
 type hasPath interface {
-	packet
+	requestPacket
 	getPath() string
 }
 
 type hasHandle interface {
-	packet
+	requestPacket
 	getHandle() string
 }
 
@@ -83,8 +83,8 @@ func (p sshFxpStatResponse) id() uint32 { return p.ID }
 func (p sshFxpNamePacket) id() uint32   { return p.ID }
 
 // take raw incoming packet data and build packet objects
-func makePacket(p rxPacket) (packet, error) {
-	var pkt packet
+func makePacket(p rxPacket) (requestPacket, error) {
+	var pkt requestPacket
 	switch p.pktType {
 	case ssh_FXP_INIT:
 		pkt = &sshFxInitPacket{}

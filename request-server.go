@@ -27,7 +27,7 @@ type Handlers struct {
 type RequestServer struct {
 	serverConn
 	Handlers        Handlers
-	pktChan         chan packet
+	pktChan         chan requestPacket
 	openRequests    map[string]Request
 	openRequestLock sync.RWMutex
 	handleCount     int
@@ -44,7 +44,7 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 			},
 		},
 		Handlers:     h,
-		pktChan:      make(chan packet, sftpServerWorkerCount),
+		pktChan:      make(chan requestPacket, sftpServerWorkerCount),
 		openRequests: make(map[string]Request),
 	}
 }
@@ -166,7 +166,7 @@ func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
 	}
 }
 
-func (rs *RequestServer) handle(request Request, pkt packet) responsePacket {
+func (rs *RequestServer) handle(request Request, pkt requestPacket) responsePacket {
 	// fmt.Println("Request Method: ", request.Method)
 	rpkt, err := request.handle(rs.Handlers)
 	if err != nil {
