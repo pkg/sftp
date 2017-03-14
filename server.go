@@ -321,7 +321,7 @@ func (svr *Server) Serve() error {
 	return err // error from recvPacket
 }
 
-type id interface {
+type ider interface {
 	id() uint32
 }
 
@@ -516,7 +516,7 @@ func translateErrno(errno syscall.Errno) uint32 {
 	return ssh_FX_FAILURE
 }
 
-func statusFromError(p id, err error) sshFxpStatusPacket {
+func statusFromError(p ider, err error) sshFxpStatusPacket {
 	ret := sshFxpStatusPacket{
 		ID: p.id(),
 		StatusError: StatusError{

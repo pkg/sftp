@@ -126,6 +126,6 @@ type serverConn struct {
 	conn
 }
 
-func (s *serverConn) sendError(p id, err error) error {
+func (s *serverConn) sendError(p ider, err error) error {
 	return s.sendPacket(statusFromError(p, err))
 }
