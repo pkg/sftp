@@ -1,9 +1,6 @@
 package sftp
 
-import (
-	"encoding"
-	"sort"
-)
+import "encoding"
 
 // The goal of the packetManager is to keep the outgoing packets in the same
 // order as the incoming. This is due to some sftp clients requiring this
@@ -35,13 +32,6 @@ func newPktMgr(sender packetSender) packetManager {
 	return s
 }
 
-// for sorting/ordering incoming/outgoing
-type responsePackets []responsePacket
-
-func (r responsePackets) Len() int           { return len(r) }
-func (r responsePackets) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
-func (r responsePackets) Less(i, j int) bool { return r[i].id() < r[j].id() }
-
 // register incoming packets to be handled
 // send id of 0 for packets without id
 func (s packetManager) incomingPacket(pkt requestPacket) {
@@ -69,7 +59,7 @@ func (s *packetManager) worker() {
 			debug("outgoing pkt: %v", pkt.id())
 			s.outgoing = append(s.outgoing, pkt)
 			if len(s.outgoing) > 1 {
-				sort.Sort(s.outgoing)
+				s.outgoing.Sort()
 			}
 		case <-s.fini:
 			return
