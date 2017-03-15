@@ -30,6 +30,7 @@ type Server struct {
 	debugStream   io.Writer
 	readOnly      bool
 	pktChan       chan requestPacket
+	pktMgr        packetManager
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int
@@ -75,15 +76,17 @@ type serverRespondablePacket interface {
 //
 // A subsequent call to Serve() is required to begin serving files over SFTP.
 func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error) {
-	s := &Server{
-		serverConn: serverConn{
-			conn: conn{
-				Reader:      rwc,
-				WriteCloser: rwc,
-			},
+	svrConn := serverConn{
+		conn: conn{
+			Reader:      rwc,
+			WriteCloser: rwc,
 		},
+	}
+	s := &Server{
+		serverConn:  svrConn,
 		debugStream: ioutil.Discard,
 		pktChan:     make(chan requestPacket, sftpServerWorkerCount),
+		pktMgr:      newPktMgr(&svrConn),
 		openFiles:   make(map[string]*os.File),
 		maxTxPacket: 1 << 15,
 	}
@@ -303,15 +306,18 @@ func (svr *Server) Serve() error {
 
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
+			debug("makePacket err: %v", err)
 			svr.conn.Close() // shuts down recvPacket
 			break
 		}
 
+		svr.pktMgr.incomingPacket(pkt)
 		svr.pktChan <- pkt
 	}
 
 	close(svr.pktChan) // shuts down sftpServerWorkers
 	wg.Wait()          // wait for all workers to exit
+	svr.pktMgr.close() // shuts down packetManager
 
 	// close any still-open files
 	for handle, file := range svr.openFiles {
@@ -319,6 +325,20 @@ func (svr *Server) Serve() error {
 		file.Close()
 	}
 	return err // error from recvPacket
+}
+
+// Wrap underlying connection methods to use packetManager
+func (svr Server) sendPacket(m encoding.BinaryMarshaler) error {
+	if pkt, ok := m.(responsePacket); ok {
+		svr.pktMgr.readyPacket(pkt)
+	} else {
+		return errors.Errorf("unexpected packet type %T", m)
+	}
+	return nil
+}
+
+func (svr Server) sendError(p ider, err error) error {
+	return svr.sendPacket(statusFromError(p, err))
 }
 
 type ider interface {
