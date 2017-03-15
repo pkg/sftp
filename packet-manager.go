@@ -29,8 +29,8 @@ type packetManager struct {
 	requests  chan requestPacket
 	responses chan responsePacket
 	fini      chan struct{}
-	incoming  []uint32
-	outgoing  []responsePacket
+	incoming  uint32s
+	outgoing  responsePackets
 	sender    packetSender // connection object
 }
 
@@ -46,6 +46,18 @@ func newPktMgr(sender packetSender) packetManager {
 	go s.worker()
 	return s
 }
+
+// for sorting/ordering incoming/outgoing
+type uint32s []uint32
+type responsePackets []responsePacket
+
+func (u uint32s) Len() int           { return len(u) }
+func (u uint32s) Swap(i, j int)      { u[i], u[j] = u[j], u[i] }
+func (u uint32s) Less(i, j int) bool { return u[i] < u[j] }
+
+func (r responsePackets) Len() int           { return len(r) }
+func (r responsePackets) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
+func (r responsePackets) Less(i, j int) bool { return r[i].id() < r[j].id() }
 
 // register incoming packets to be handled
 // send id of 0 for packets without id
@@ -71,17 +83,13 @@ func (s *packetManager) worker() {
 			debug("incoming id: %v", pkt.id())
 			s.incoming = append(s.incoming, pkt.id())
 			if len(s.incoming) > 1 {
-				sort.Slice(s.incoming, func(i, j int) bool {
-					return s.incoming[i] < s.incoming[j]
-				})
+				sort.Sort(s.incoming)
 			}
 		case pkt := <-s.responses:
 			debug("outgoing pkt: %v", pkt.id())
 			s.outgoing = append(s.outgoing, pkt)
 			if len(s.outgoing) > 1 {
-				sort.Slice(s.outgoing, func(i, j int) bool {
-					return s.outgoing[i].id() < s.outgoing[j].id()
-				})
+				sort.Sort(s.outgoing)
 			}
 		case <-s.fini:
 			return
@@ -100,8 +108,8 @@ func (s *packetManager) maybeSendPackets() {
 		}
 		out := s.outgoing[0]
 		in := s.incoming[0]
-		debug("incoming: %v", s.incoming)
-		debug("outgoing: %v", outfilter(s.outgoing))
+		// 		debug("incoming: %v", s.incoming)
+		// 		debug("outgoing: %v", outfilter(s.outgoing))
 		if in == out.id() {
 			s.sender.sendPacket(out)
 			// pop off heads
