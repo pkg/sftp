@@ -29,7 +29,7 @@ type packetManager struct {
 	requests  chan requestPacket
 	responses chan responsePacket
 	fini      chan struct{}
-	incoming  uint32s
+	incoming  []uint32
 	outgoing  responsePackets
 	sender    packetSender // connection object
 }
@@ -48,12 +48,7 @@ func newPktMgr(sender packetSender) packetManager {
 }
 
 // for sorting/ordering incoming/outgoing
-type uint32s []uint32
 type responsePackets []responsePacket
-
-func (u uint32s) Len() int           { return len(u) }
-func (u uint32s) Swap(i, j int)      { u[i], u[j] = u[j], u[i] }
-func (u uint32s) Less(i, j int) bool { return u[i] < u[j] }
 
 func (r responsePackets) Len() int           { return len(r) }
 func (r responsePackets) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
@@ -82,9 +77,6 @@ func (s *packetManager) worker() {
 		case pkt := <-s.requests:
 			debug("incoming id: %v", pkt.id())
 			s.incoming = append(s.incoming, pkt.id())
-			if len(s.incoming) > 1 {
-				sort.Sort(s.incoming)
-			}
 		case pkt := <-s.responses:
 			debug("outgoing pkt: %v", pkt.id())
 			s.outgoing = append(s.outgoing, pkt)
