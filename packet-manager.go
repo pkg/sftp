@@ -5,21 +5,9 @@ import (
 	"sort"
 )
 
-// --------------------------------------------------------------------
-// Process with 2 branch select, listening to each channel.
-// 0) start of loop
-
-// Branch A
-// 1) Wait for ids to come in and add them to id list.
-
-// Branch B
-// 1) Wait for a packet comes in.
-// 2) Add it to the packet list.
-// 3) The heads of each list are then compared and if they have the same ids
-//    the packet is sent out and the entries removed.
-// 4) Goto step 2 Until the lists are emptied or the ids don't match.
-// 5) Goto step 0.
-// --------------------------------------------------------------------
+// The goal of the packetManager is to keep the outgoing packets in the same
+// order as the incoming. This is due to some sftp clients requiring this
+// behavior (eg. winscp).
 
 type packetSender interface {
 	sendPacket(encoding.BinaryMarshaler) error
