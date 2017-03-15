@@ -14,6 +14,7 @@ type requestPacket interface {
 
 type responsePacket interface {
 	encoding.BinaryMarshaler
+	id() uint32
 }
 
 // interfaces to group types
@@ -81,6 +82,8 @@ func (p sshFxpDataPacket) id() uint32   { return p.ID }
 func (p sshFxpStatusPacket) id() uint32 { return p.ID }
 func (p sshFxpStatResponse) id() uint32 { return p.ID }
 func (p sshFxpNamePacket) id() uint32   { return p.ID }
+func (p sshFxpHandlePacket) id() uint32 { return p.ID }
+func (p sshFxVersionPacket) id() uint32 { return 0 }
 
 // take raw incoming packet data and build packet objects
 func makePacket(p rxPacket) (requestPacket, error) {
