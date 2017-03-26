@@ -13,8 +13,7 @@ import (
 )
 
 var (
-	errShortPacket           = errors.New("packet too short")
-	errUnknownExtendedPacket = errors.New("unknown extended packet")
+	errShortPacket = errors.New("packet too short")
 )
 
 const (
@@ -836,7 +835,7 @@ func (p *StatVFS) FreeSpace() uint64 {
 	return p.Frsize * p.Bfree
 }
 
-// Convert to ssh_FXP_EXTENDED_REPLY packet binary format
+// MarshalBinary converts the packet to ssh_FXP_EXTENDED_REPLY packet binary format
 func (p *StatVFS) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
 	buf.Write([]byte{ssh_FXP_EXTENDED_REPLY})
@@ -874,7 +873,7 @@ func (p *sshFxpExtendedPacket) UnmarshalBinary(b []byte) error {
 	case "statvfs@openssh.com":
 		p.SpecificPacket = &sshFxpExtendedPacketStatVFS{}
 	default:
-		return errUnknownExtendedPacket
+		return fmt.Errorf("unknown extended packet: %s", p.ExtendedRequest)
 	}
 
 	return p.SpecificPacket.UnmarshalBinary(bOrig)
