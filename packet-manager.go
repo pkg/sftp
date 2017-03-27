@@ -14,7 +14,7 @@ type packetManager struct {
 	requests  chan requestPacket
 	responses chan responsePacket
 	fini      chan struct{}
-	incoming  []uint32
+	incoming  requestPacketIDs
 	outgoing  responsePackets
 	sender    packetSender // connection object
 }
@@ -55,6 +55,9 @@ func (s *packetManager) worker() {
 		case pkt := <-s.requests:
 			debug("incoming id: %v", pkt.id())
 			s.incoming = append(s.incoming, pkt.id())
+			if len(s.incoming) > 1 {
+				s.incoming.Sort()
+			}
 		case pkt := <-s.responses:
 			debug("outgoing pkt: %v", pkt.id())
 			s.outgoing = append(s.outgoing, pkt)

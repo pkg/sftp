@@ -11,3 +11,11 @@ func (r responsePackets) Sort() {
 		return r[i].id() < r[j].id()
 	})
 }
+
+type requestPacketIDs []uint32
+
+func (r requestPacketIDs) Sort() {
+	sort.Slice(r, func(i, j int) bool {
+		return r[i] < r[j]
+	})
+}
