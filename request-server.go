@@ -186,7 +186,7 @@ func (rs *RequestServer) handle(request Request, pkt requestPacket) responsePack
 }
 
 // Wrap underlying connection methods to use packetManager
-func (rs RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
+func (rs *RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
 	if pkt, ok := m.(responsePacket); ok {
 		rs.pktMgr.readyPacket(pkt)
 	} else {
@@ -195,7 +195,7 @@ func (rs RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
 	return nil
 }
 
-func (rs RequestServer) sendError(p ider, err error) error {
+func (rs *RequestServer) sendError(p ider, err error) error {
 	return rs.sendPacket(statusFromError(p, err))
 }
 
