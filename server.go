@@ -328,7 +328,7 @@ func (svr *Server) Serve() error {
 }
 
 // Wrap underlying connection methods to use packetManager
-func (svr Server) sendPacket(m encoding.BinaryMarshaler) error {
+func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
 	if pkt, ok := m.(responsePacket); ok {
 		svr.pktMgr.readyPacket(pkt)
 	} else {
@@ -337,7 +337,7 @@ func (svr Server) sendPacket(m encoding.BinaryMarshaler) error {
 	return nil
 }
 
-func (svr Server) sendError(p ider, err error) error {
+func (svr *Server) sendError(p ider, err error) error {
 	return svr.sendPacket(statusFromError(p, err))
 }
 
