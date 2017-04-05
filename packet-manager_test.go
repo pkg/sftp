@@ -39,6 +39,7 @@ type pair struct {
 	out fakepacket
 }
 
+// basic test
 var ttable1 = []pair{
 	pair{fakepacket(0), fakepacket(0)},
 	pair{fakepacket(1), fakepacket(1)},
@@ -46,6 +47,7 @@ var ttable1 = []pair{
 	pair{fakepacket(3), fakepacket(3)},
 }
 
+// outgoing packets out of order
 var ttable2 = []pair{
 	pair{fakepacket(0), fakepacket(0)},
 	pair{fakepacket(1), fakepacket(4)},
@@ -54,15 +56,20 @@ var ttable2 = []pair{
 	pair{fakepacket(4), fakepacket(2)},
 }
 
-var tables = [][]pair{ttable1, ttable2}
+// incoming packets out of order
+var ttable3 = []pair{
+	pair{fakepacket(2), fakepacket(0)},
+	pair{fakepacket(1), fakepacket(1)},
+	pair{fakepacket(3), fakepacket(2)},
+	pair{fakepacket(0), fakepacket(3)},
+}
+
+var tables = [][]pair{ttable1, ttable2, ttable3}
 
 func TestPacketManager(t *testing.T) {
 	sender := newsender()
 	s := newPktMgr(sender)
-	// 	go func() {
-	// 		for _ = range s.workers {
-	// 		}
-	// 	}()
+
 	for i := range tables {
 		table := tables[i]
 		for _, p := range table {
@@ -71,10 +78,10 @@ func TestPacketManager(t *testing.T) {
 		for _, p := range table {
 			s.readyPacket(p.out)
 		}
-		for _, p := range table {
+		for i := 0; i < len(table); i++ {
 			pkt := <-sender.sent
 			id := pkt.(fakepacket).id()
-			assert.Equal(t, id, p.in.id())
+			assert.Equal(t, id, uint32(i))
 		}
 	}
 	s.close()
