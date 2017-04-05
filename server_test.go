@@ -46,8 +46,10 @@ func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
 
 // test that errors are sent back when we request an invalid extended packet operation
 func TestInvalidExtendedPacket(t *testing.T) {
-	client, _ := clientServerPair(t)
+	client, server := clientServerPair(t)
 	defer client.Close()
+	defer server.Close()
+
 	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
 	_, _, err := client.clientConn.sendPacket(badPacket)
 	if err == nil {
