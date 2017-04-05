@@ -11,6 +11,13 @@ os:
   - linux
   - osx
 
+matrix:
+  exclude:
+    - os: osx
+      go: 1.7.x
+    - os: osx
+      go: tip
+
 sudo: false
 
 addons:
