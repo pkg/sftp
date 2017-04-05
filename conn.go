@@ -102,11 +102,13 @@ func (c *clientConn) sendPacket(p idmarshaler) (byte, []byte, error) {
 func (c *clientConn) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.Lock()
 	c.inflight[p.id()] = ch
+	c.Unlock()
 	if err := c.conn.sendPacket(p); err != nil {
+		c.Lock()
 		delete(c.inflight, p.id())
+		c.Unlock()
 		ch <- result{err: err}
 	}
-	c.Unlock()
 }
 
 // broadcastErr sends an error to all goroutines waiting for a response.
