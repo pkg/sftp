@@ -56,9 +56,9 @@ func (c *clientConn) loop() {
 // appropriate channel.
 func (c *clientConn) recv() error {
 	defer func() {
-		c.Lock()
+		c.conn.Lock()
 		c.conn.Close()
-		c.Unlock()
+		c.conn.Unlock()
 	}()
 	for {
 		typ, data, err := c.recvPacket()
