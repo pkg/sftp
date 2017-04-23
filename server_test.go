@@ -82,7 +82,7 @@ func TestCloseOutOfOrder(t *testing.T) {
 	}
 
 	recvChan := make(chan requestPacket, len(packets)+1)
-	sender := newsender()
+	sender := newTestSender()
 	pm := newPktMgr(sender)
 	svr := Server{pktMgr: pm}
 	wg := sync.WaitGroup{}
@@ -109,10 +109,10 @@ func TestCloseOutOfOrder(t *testing.T) {
 		received = append(received, p)
 	}
 	if received[len(received)-2].id() != packets[len(packets)-2].id() {
-		t.Fatal("Packets processed out of order.")
+		t.Fatal("Packets processed out of order1:", received, packets)
 	}
 	if received[len(received)-1].id() != packets[len(packets)-1].id() {
-		t.Fatal("Packets processed out of order.")
+		t.Fatal("Packets processed out of order2:", received, packets)
 	}
 }
 

@@ -7,15 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type _sender struct {
+type _testSender struct {
 	sent chan encoding.BinaryMarshaler
 }
 
-func newsender() *_sender {
-	return &_sender{make(chan encoding.BinaryMarshaler)}
+func newTestSender() *_testSender {
+	return &_testSender{make(chan encoding.BinaryMarshaler)}
 }
 
-func (s _sender) sendPacket(p encoding.BinaryMarshaler) error {
+func (s _testSender) sendPacket(p encoding.BinaryMarshaler) error {
 	s.sent <- p
 	return nil
 }
@@ -67,7 +67,7 @@ var ttable3 = []pair{
 var tables = [][]pair{ttable1, ttable2, ttable3}
 
 func TestPacketManager(t *testing.T) {
-	sender := newsender()
+	sender := newTestSender()
 	s := newPktMgr(sender)
 
 	for i := range tables {
