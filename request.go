@@ -17,6 +17,7 @@ type Request struct {
 	// Rmdir, Mkdir, List, Readlink, Symlink
 	Method   string
 	Filepath string
+	Flags    uint32
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// packet data
@@ -47,6 +48,7 @@ func requestFromPacket(pkt hasPath) Request {
 	request.pkt_id = pkt.id()
 	switch p := pkt.(type) {
 	case *sshFxpSetstatPacket:
+		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
 		request.Target = filepath.Clean(p.Newpath)
