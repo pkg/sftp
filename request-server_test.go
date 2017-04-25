@@ -241,6 +241,24 @@ func TestRequestStat(t *testing.T) {
 	assert.NoError(t, testOsSys(fi.Sys()))
 }
 
+// NOTE: Setstat is a noop in the request server tests, but we want to test
+// that is does nothing without crapping out.
+func TestRequestSetstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	mode := os.FileMode(0644)
+	err = p.cli.Chmod("/foo", mode)
+	assert.Nil(t, err)
+	fi, err := p.cli.Stat("/foo")
+	assert.Nil(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(5))
+	assert.Equal(t, fi.Mode(), os.FileMode(0644))
+	assert.NoError(t, testOsSys(fi.Sys()))
+}
+
 func TestRequestStatFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()

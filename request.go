@@ -13,7 +13,7 @@ import (
 
 // Request contains the data and state for the incoming service request.
 type Request struct {
-	// Get, Put, SetStat, Stat, Rename, Remove
+	// Get, Put, Setstat, Stat, Rename, Remove
 	// Rmdir, Mkdir, List, Readlink, Symlink
 	Method   string
 	Filepath string
@@ -128,10 +128,12 @@ func (r Request) handle(handlers Handlers) (responsePacket, error) {
 		rpkt, err = fileget(handlers.FileGet, r)
 	case "Put": // add "Append" to this to handle append only file writes
 		rpkt, err = fileput(handlers.FilePut, r)
-	case "SetStat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
+	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		rpkt, err = filecmd(handlers.FileCmd, r)
 	case "List", "Stat", "Readlink":
 		rpkt, err = fileinfo(handlers.FileInfo, r)
+	default:
+		return rpkt, errors.Errorf("unexpected method: %s", r.Method)
 	}
 	return rpkt, err
 }
