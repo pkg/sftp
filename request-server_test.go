@@ -259,6 +259,21 @@ func TestRequestSetstat(t *testing.T) {
 	assert.NoError(t, testOsSys(fi.Sys()))
 }
 
+func TestRequestFstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	fp, err := p.cli.Open("/foo")
+	assert.Nil(t, err)
+	fi, err := fp.Stat()
+	assert.Nil(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(5))
+	assert.Equal(t, fi.Mode(), os.FileMode(0644))
+	assert.NoError(t, testOsSys(fi.Sys()))
+}
+
 func TestRequestStatFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
