@@ -270,11 +270,6 @@ func (r *Request) update(p hasHandle) error {
 		pd.offset = int64(p.Offset)
 	case *sshFxpReaddirPacket:
 		r.Method = "List"
-	case *sshFxpFsetstatPacket:
-		r.Method = "Setstat"
-		r.Attrs = p.Attrs.([]byte)
-	case *sshFxpFstatPacket:
-		r.Method = "Stat"
 	default:
 		return errors.Errorf("unexpected packet type %T", p)
 	}
