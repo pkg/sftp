@@ -28,6 +28,7 @@ import (
 	"sort"
 
 	"github.com/kr/fs"
+	"sort"
 )
 
 const (
