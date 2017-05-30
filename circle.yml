@@ -1,7 +1,7 @@
 machine:
   post:
   - cd $HOME && git clone --depth 1 -v git@github.com:clever/ci-scripts.git && cd ci-scripts && git show --oneline -s
-  - $HOME/ci-scripts/circleci/golang-install 1.7
+  - $HOME/ci-scripts/circleci/golang-install 1.8
   services:
   - docker
 checkout:
