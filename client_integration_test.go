@@ -1902,6 +1902,88 @@ func BenchmarkWrite4MiBDelay150Msec(b *testing.B) {
 	benchmarkWrite(b, 4*1024*1024, 150*time.Millisecond)
 }
 
+func benchmarkReadFrom(b *testing.B, bufsize int, delay time.Duration) {
+	size := 10*1024*1024 + 123 // ~10MiB
+
+	// open sftp client
+	sftp, cmd := testClient(b, false, delay)
+	defer cmd.Wait()
+	// defer sftp.Close()
+
+	data := make([]byte, size)
+
+	b.ResetTimer()
+	b.SetBytes(int64(size))
+
+	for i := 0; i < b.N; i++ {
+		f, err := ioutil.TempFile("", "sftptest")
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer os.Remove(f.Name())
+
+		f2, err := sftp.Create(f.Name())
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer f2.Close()
+
+		f2.ReadFrom(bytes.NewReader(data))
+		f2.Close()
+
+		fi, err := os.Stat(f.Name())
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		if fi.Size() != int64(size) {
+			b.Fatalf("wrong file size: want %d, got %d", size, fi.Size())
+		}
+
+		os.Remove(f.Name())
+	}
+}
+
+func BenchmarkReadFrom1k(b *testing.B) {
+	benchmarkReadFrom(b, 1*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom16k(b *testing.B) {
+	benchmarkReadFrom(b, 16*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom32k(b *testing.B) {
+	benchmarkReadFrom(b, 32*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom128k(b *testing.B) {
+	benchmarkReadFrom(b, 128*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom512k(b *testing.B) {
+	benchmarkReadFrom(b, 512*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom1MiB(b *testing.B) {
+	benchmarkReadFrom(b, 1024*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom4MiB(b *testing.B) {
+	benchmarkReadFrom(b, 4*1024*1024, NO_DELAY)
+}
+
+func BenchmarkReadFrom4MiBDelay10Msec(b *testing.B) {
+	benchmarkReadFrom(b, 4*1024*1024, 10*time.Millisecond)
+}
+
+func BenchmarkReadFrom4MiBDelay50Msec(b *testing.B) {
+	benchmarkReadFrom(b, 4*1024*1024, 50*time.Millisecond)
+}
+
+func BenchmarkReadFrom4MiBDelay150Msec(b *testing.B) {
+	benchmarkReadFrom(b, 4*1024*1024, 150*time.Millisecond)
+}
+
 func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
 	// Create a temp file and fill it with zero's.
 	src, err := ioutil.TempFile("", "sftptest")
