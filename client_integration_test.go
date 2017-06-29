@@ -1711,6 +1711,35 @@ func TestServerRoughDisconnect(t *testing.T) {
 	io.Copy(ioutil.Discard, f)
 }
 
+// sftp/issue/181, abrupt server hangup would result in client hangs.
+// due to broadcastErr filling up the request channel
+// this reproduces it about 50% of the time
+func TestServerRoughDisconnect2(t *testing.T) {
+	if *testServerImpl {
+		t.Skipf("skipping with -testserver")
+	}
+	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := sftp.Open("/dev/zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	b := make([]byte, 32768*100)
+	go func() {
+		time.Sleep(1 * time.Millisecond)
+		cmd.Process.Kill()
+	}()
+	for {
+		_, err = f.Read(b)
+		if err != nil {
+			break
+		}
+	}
+}
+
 // sftp/issue/26 writing to a read only file caused client to loop.
 func TestClientWriteToROFile(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
