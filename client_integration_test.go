@@ -92,7 +92,7 @@ func (w delayedWriter) Close() error {
 
 // netPipe provides a pair of io.ReadWriteClosers connected to each other.
 // The functions is identical to os.Pipe with the exception that netPipe
-// provides the Read/Close guarentees that os.File derrived pipes do not.
+// provides the Read/Close guarantees that os.File derrived pipes do not.
 func netPipe(t testing.TB) (io.ReadWriteCloser, io.ReadWriteCloser) {
 	type result struct {
 		net.Conn
