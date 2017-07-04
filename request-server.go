@@ -26,7 +26,7 @@ type Handlers struct {
 
 // RequestServer abstracts the sftp protocol with an http request-like protocol
 type RequestServer struct {
-	serverConn
+	*serverConn
 	Handlers        Handlers
 	pktMgr          packetManager
 	openRequests    map[string]Request
@@ -37,7 +37,7 @@ type RequestServer struct {
 // NewRequestServer creates/allocates/returns new RequestServer.
 // Normally there there will be one server per user-session.
 func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
-	svrConn := serverConn{
+	svrConn := &serverConn{
 		conn: conn{
 			Reader:      rwc,
 			WriteCloser: rwc,
@@ -46,7 +46,7 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 	return &RequestServer{
 		serverConn:   svrConn,
 		Handlers:     h,
-		pktMgr:       newPktMgr(&svrConn),
+		pktMgr:       newPktMgr(svrConn),
 		openRequests: make(map[string]Request),
 	}
 }
