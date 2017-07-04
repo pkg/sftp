@@ -282,15 +282,16 @@ func handlePacket(s *Server, p interface{}) error {
 // is stopped.
 func (svr *Server) Serve() error {
 	var wg sync.WaitGroup
-	wg.Add(1)
-	workerFunc := func(ch requestChan) {
+	runWorker := func(ch requestChan) {
 		wg.Add(1)
-		defer wg.Done()
-		if err := svr.sftpServerWorker(ch); err != nil {
-			svr.conn.Close() // shuts down recvPacket
-		}
+		go func() {
+			defer wg.Done()
+			if err := svr.sftpServerWorker(ch); err != nil {
+				svr.conn.Close() // shuts down recvPacket
+			}
+		}()
 	}
-	pktChan := svr.pktMgr.workerChan(workerFunc)
+	pktChan := svr.pktMgr.workerChan(runWorker)
 
 	var err error
 	var pkt requestPacket
@@ -311,7 +312,6 @@ func (svr *Server) Serve() error {
 
 		pktChan <- pkt
 	}
-	wg.Done()
 
 	close(pktChan) // shuts down sftpServerWorkers
 	wg.Wait()      // wait for all workers to exit

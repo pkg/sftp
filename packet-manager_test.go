@@ -108,18 +108,20 @@ func TestCloseOutOfOrder(t *testing.T) {
 	pktMgr := newPktMgr(sender)
 	wg := sync.WaitGroup{}
 	wg.Add(len(packets))
-	worker := func(ch requestChan) {
-		for pkt := range ch {
-			if _, ok := pkt.(*sshFxpWritePacket); ok {
-				// sleep to cause writes to come after close/remove
-				time.Sleep(time.Millisecond)
+	runWorker := func(ch requestChan) {
+		go func() {
+			for pkt := range ch {
+				if _, ok := pkt.(*sshFxpWritePacket); ok {
+					// sleep to cause writes to come after close/remove
+					time.Sleep(time.Millisecond)
+				}
+				pktMgr.working.Done()
+				recvChan <- pkt
+				wg.Done()
 			}
-			pktMgr.working.Done()
-			recvChan <- pkt
-			wg.Done()
-		}
+		}()
 	}
-	pktChan := pktMgr.workerChan(worker)
+	pktChan := pktMgr.workerChan(runWorker)
 	for _, p := range packets {
 		pktChan <- p
 	}
