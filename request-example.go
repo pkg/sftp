@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -104,13 +106,32 @@ func (fs *root) Fileinfo(r Request) ([]os.FileInfo, error) {
 	defer fs.filesLock.Unlock()
 	switch r.Method {
 	case "List":
+		var err error
 		list := []os.FileInfo{}
+		batch_size := 10
+		current_offset := 0
+		if token := r.LsNext(); token != "" {
+			current_offset, err = strconv.Atoi(token)
+			if err != nil {
+				return list, os.ErrInvalid
+			}
+		}
 		for fn, fi := range fs.files {
 			if filepath.Dir(fn) == r.Filepath {
 				list = append(list, fi)
 			}
 		}
-		return list, nil
+		sort.Slice(list,
+			func(i, j int) bool { return list[i].Name() < list[j].Name() })
+		if len(list) < current_offset {
+			return nil, io.EOF
+		}
+		new_offset := current_offset + batch_size
+		if new_offset > len(list) {
+			new_offset = len(list)
+		}
+		r.LsSave(strconv.Itoa(new_offset))
+		return list[current_offset:new_offset], nil
 	case "Stat":
 		file, err := fs.fetch(r.Filepath)
 		if err != nil {
