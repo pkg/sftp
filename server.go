@@ -8,8 +8,9 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
+	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -226,12 +227,11 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 
 	case *sshFxpRealpathPacket:
-		f, err := filepath.Abs(p.Path)
-		if err != nil {
-			return s.sendError(p, err)
+		f := p.Path
+		if strings.HasPrefix(p.Path, "/") {
+			f = "/" + f
 		}
-		f = filepath.Clean(f)
-		f = filepath.ToSlash(f) // make path more Unix like on windows servers
+		f = path.Clean(f)
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{

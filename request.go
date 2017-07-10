@@ -4,7 +4,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -51,16 +50,16 @@ func requestFromPacket(pkt hasPath) Request {
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
-		request.Target = filepath.Clean(p.Newpath)
+		request.Target = path.Clean(p.Newpath)
 	case *sshFxpSymlinkPacket:
-		request.Target = filepath.Clean(p.Linkpath)
+		request.Target = path.Clean(p.Linkpath)
 	}
 	return request
 }
 
 // NewRequest creates a new Request object.
-func NewRequest(method, path string) Request {
-	request := Request{Method: method, Filepath: filepath.Clean(path)}
+func NewRequest(method, rpath string) Request {
+	request := Request{Method: method, Filepath: path.Clean(rpath)}
 	request.packets = make(chan packet_data, sftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}

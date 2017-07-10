@@ -3,8 +3,8 @@ package sftp
 import (
 	"fmt"
 	"io"
-	"net"
 	"os"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -16,47 +16,21 @@ var _ = fmt.Print
 type csPair struct {
 	cli *Client
 	svr *RequestServer
+
+	cleanup func()
 }
 
 // these must be closed in order, else client.Close will hang
 func (cs csPair) Close() {
 	cs.svr.Close()
 	cs.cli.Close()
-	os.Remove(sock)
+	if cs.cleanup != nil {
+		cs.cleanup()
+	}
 }
 
 func (cs csPair) testHandler() *root {
 	return cs.svr.Handlers.FileGet.(*root)
-}
-
-const sock = "/tmp/rstest.sock"
-
-func clientRequestServerPair(t *testing.T) *csPair {
-	ready := make(chan bool)
-	os.Remove(sock) // either this or signal handling
-	var server *RequestServer
-	go func() {
-		l, err := net.Listen("unix", sock)
-		if err != nil {
-			// neither assert nor t.Fatal reliably exit before Accept errors
-			panic(err)
-		}
-		ready <- true
-		fd, err := l.Accept()
-		assert.Nil(t, err)
-		handlers := InMemHandler()
-		server = NewRequestServer(fd, handlers)
-		server.Serve()
-	}()
-	<-ready
-	defer os.Remove(sock)
-	c, err := net.Dial("unix", sock)
-	assert.Nil(t, err)
-	client, err := NewClientPipe(c, c)
-	if err != nil {
-		t.Fatalf("%+v\n", err)
-	}
-	return &csPair{client, server}
 }
 
 // after adding logging, maybe check log to make sure packet handling
@@ -71,7 +45,8 @@ func TestRequestSplitWrite(t *testing.T) {
 	w.Write([]byte(contents))
 	w.Close()
 	r := p.testHandler()
-	f, _ := r.fetch("/foo")
+	f, err := r.fetch("/foo")
+	assert.Nil(t, err)
 	assert.Equal(t, contents, string(f.content))
 }
 
@@ -272,6 +247,13 @@ func TestRequestFstat(t *testing.T) {
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
+	fstat := fi.Sys().(*FileStat)
+
+	// Windows does not suppot UID or GID.
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, fstat.UID, uint32(65534))
+		assert.Equal(t, fstat.GID, uint32(65534))
+	}
 }
 
 func TestRequestStatFail(t *testing.T) {

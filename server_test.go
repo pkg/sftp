@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"io"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -76,14 +77,19 @@ func TestConcurrentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
+	name := "/etc/passwd"
+	if runtime.GOOS == "windows" {
+		name = `C:\windows\win.ini`
+	}
 	for i := 0; i < concurrency; i++ {
 		go func() {
 			defer wg.Done()
 
 			for j := 0; j < 1024; j++ {
-				f, err := client.Open("/etc/passwd")
+				f, err := client.Open(name)
 				if err != nil {
 					t.Errorf("failed to open file: %v", err)
+					continue
 				}
 				if err := f.Close(); err != nil {
 					t.Errorf("failed t close file: %v", err)
