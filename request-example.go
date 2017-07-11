@@ -107,22 +107,25 @@ func (fs *root) Fileinfo(r Request) ([]os.FileInfo, error) {
 	switch r.Method {
 	case "List":
 		var err error
-		list := []os.FileInfo{}
 		batch_size := 10
 		current_offset := 0
 		if token := r.LsNext(); token != "" {
 			current_offset, err = strconv.Atoi(token)
 			if err != nil {
-				return list, os.ErrInvalid
+				return nil, os.ErrInvalid
 			}
 		}
-		for fn, fi := range fs.files {
+		ordered_names := []string{}
+		for fn, _ := range fs.files {
 			if filepath.Dir(fn) == r.Filepath {
-				list = append(list, fi)
+				ordered_names = append(ordered_names, fn)
 			}
 		}
-		sort.Slice(list,
-			func(i, j int) bool { return list[i].Name() < list[j].Name() })
+		sort.Sort(sort.StringSlice(ordered_names))
+		list := make([]os.FileInfo, len(ordered_names))
+		for i, fn := range ordered_names {
+			list[i] = fs.files[fn]
+		}
 		if len(list) < current_offset {
 			return nil, io.EOF
 		}
