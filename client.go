@@ -14,11 +14,23 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// MaxPacket sets the maximum size of the payload.
+// This is based on Openssh's max accepted size of 1<<18 - overhead
+const maxMaxPacket = (1 << 18) - 1024
+
+// MaxPacket sets the maximum size of the payload. The size param must be
+// between 32768 (1<<15) and 261120 ((1 << 18) - 1024). The minimum size is
+// given by the RFC, while the maximum size is a de-facto standard based on
+// Openssh's SFTP server which won't accept packets much larger than that.
+//
+// Note if you aren't using Openssh's sftp server and get the error "failed to
+// send packet header: EOF" when copying a large file try lowering this number.
 func MaxPacket(size int) func(*Client) error {
 	return func(c *Client) error {
 		if size < 1<<15 {
 			return errors.Errorf("size must be greater or equal to 32k")
+		}
+		if size > maxMaxPacket {
+			return errors.Errorf("max packet size is too large (see docs)")
 		}
 		c.maxPacket = size
 		return nil
