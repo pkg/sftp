@@ -14,6 +14,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// A ClientOption is a function which applies configuration to a Client.
+type ClientOption func(*Client) error
+
 // This is based on Openssh's max accepted size of 1<<18 - overhead
 const maxMaxPacket = (1 << 18) - 1024
 
@@ -24,7 +27,7 @@ const maxMaxPacket = (1 << 18) - 1024
 //
 // Note if you aren't using Openssh's sftp server and get the error "failed to
 // send packet header: EOF" when copying a large file try lowering this number.
-func MaxPacket(size int) func(*Client) error {
+func MaxPacket(size int) ClientOption {
 	return func(c *Client) error {
 		if size < 1<<15 {
 			return errors.Errorf("size must be greater or equal to 32k")
@@ -39,7 +42,7 @@ func MaxPacket(size int) func(*Client) error {
 
 // NewClient creates a new SFTP client on conn, using zero or more option
 // functions.
-func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
+func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
 		return nil, err
@@ -62,7 +65,7 @@ func NewClient(conn *ssh.Client, opts ...func(*Client) error) (*Client, error) {
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
 // This can be used for connecting to an SFTP server over TCP/TLS or by using
 // the system's ssh client program (e.g. via exec.Command).
-func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...func(*Client) error) (*Client, error) {
+func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Client, error) {
 	sftp := &Client{
 		clientConn: clientConn{
 			conn: conn{
@@ -623,7 +626,7 @@ func (c *Client) Mkdir(path string) error {
 
 // applyOptions applies options functions to the Client.
 // If an error is encountered, option processing ceases.
-func (c *Client) applyOptions(opts ...func(*Client) error) error {
+func (c *Client) applyOptions(opts ...ClientOption) error {
 	for _, f := range opts {
 		if err := f(c); err != nil {
 			return err
