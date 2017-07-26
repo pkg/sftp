@@ -14,6 +14,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// InternalInconsistency indicates the packets sent and the data queued to be
+// written to the file don't match up. It is an unusual error and if you get it
+// you should file a ticket.
+var InternalInconsistency = errors.New("internal inconsistency")
+
 // A ClientOption is a function which applies configuration to a Client.
 type ClientOption func(*Client) error
 
@@ -806,7 +811,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 
 		if inFlight == 0 {
 			if firstErr.err == nil && len(pendingWrites) > 0 {
-				return copied, errors.New("internal inconsistency")
+				return copied, InternalInconsistency
 			}
 			break
 		}
