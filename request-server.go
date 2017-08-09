@@ -186,7 +186,8 @@ func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
 		path = "/" + path
 	} // all paths are absolute
 
-	cleaned_path := filepath.Clean(path)
+	cleaned_path := filepath.ToSlash(filepath.Clean(path))
+
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []sshFxpNameAttr{{
