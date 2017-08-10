@@ -4,13 +4,15 @@ package sftp
 
 import (
 	"os"
+	"time"
+	"fmt"
 )
 
 func runLs(dirname string, dirent os.FileInfo) string {
 	typeword := runLsTypeWord(dirent)
 	numLinks := 1
-	username := ""
-	groupname := ""
+	username := "-"
+	groupname := "-"
 	mtime := dirent.ModTime()
 	monthStr := mtime.Month().String()[0:3]
 	day := mtime.Day()
