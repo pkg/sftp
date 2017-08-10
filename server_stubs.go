@@ -11,8 +11,11 @@ import (
 func runLs(dirname string, dirent os.FileInfo) string {
 	typeword := runLsTypeWord(dirent)
 	numLinks := 1
-	username := "-"
-	groupname := "-"
+	if dirent.IsDir() {
+		numLinks = 0
+	}
+	username := "root"
+	groupname := "root"
 	mtime := dirent.ModTime()
 	monthStr := mtime.Month().String()[0:3]
 	day := mtime.Day()
