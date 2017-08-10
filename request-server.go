@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/pkg/errors"
+	"strings"
 )
 
 var maxTxPacket uint32 = 1 << 15
@@ -183,7 +184,8 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
 	path := pkt.getPath()
 	if !filepath.IsAbs(path) {
-		path = "/" + path
+		// prevent double slash (e.g. on windows, / paths are not absolute)
+		path = "/" + strings.TrimPrefix(path, "/")
 	} // all paths are absolute
 
 	cleaned_path := filepath.ToSlash(filepath.Clean(path))
