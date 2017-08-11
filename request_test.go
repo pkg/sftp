@@ -65,7 +65,7 @@ func testRequest(method string) Request {
 		Method:    method,
 		Attrs:     []byte("foo"),
 		Target:    "foo",
-		packets:   make(chan packet_data, sftpServerWorkerCount),
+		packets:   make(chan packet_data, SftpServerWorkerCount),
 		state:     &state{},
 		stateLock: &sync.RWMutex{},
 	}

@@ -66,7 +66,7 @@ func requestFromPacket(pkt hasPath) Request {
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) Request {
 	request := Request{Method: method, Filepath: filepath.Clean(path)}
-	request.packets = make(chan packet_data, sftpServerWorkerCount)
+	request.packets = make(chan packet_data, SftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}
 	return request
