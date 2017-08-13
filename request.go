@@ -27,8 +27,8 @@ type Request struct {
 	pkt_id  uint32
 	packets chan packet_data
 	// reader/writer/readdir from handlers
-	stateLock *sync.RWMutex
-	state     *state
+	stateLock sync.RWMutex
+	state
 }
 
 type state struct {
@@ -47,7 +47,7 @@ type packet_data struct {
 }
 
 // New Request initialized based on packet data
-func requestFromPacket(pkt hasPath) Request {
+func requestFromPacket(pkt hasPath) *Request {
 	method := requestMethod(pkt)
 	request := NewRequest(method, pkt.getPath())
 	request.pkt_id = pkt.id()
@@ -64,16 +64,16 @@ func requestFromPacket(pkt hasPath) Request {
 }
 
 // NewRequest creates a new Request object.
-func NewRequest(method, path string) Request {
-	request := Request{Method: method, Filepath: filepath.Clean(path)}
-	request.packets = make(chan packet_data, SftpServerWorkerCount)
-	request.state = &state{}
-	request.stateLock = &sync.RWMutex{}
-	return request
+func NewRequest(method, path string) *Request {
+	return &Request{
+		Method:   method,
+		Filepath: filepath.Clean(path),
+		packets:  make(chan packet_data, SftpServerWorkerCount),
+	}
 }
 
 // Returns current offset for file list, and sets next offset
-func (r Request) lsNext(offset int64) (current int64) {
+func (r *Request) lsNext(offset int64) (current int64) {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	current = r.state.lsoffset
@@ -82,7 +82,7 @@ func (r Request) lsNext(offset int64) (current int64) {
 }
 
 // manage file read/write state
-func (r Request) setFileState(s interface{}) {
+func (r *Request) setFileState(s interface{}) {
 	r.stateLock.Lock()
 	defer r.stateLock.Unlock()
 	switch s := s.(type) {
@@ -97,19 +97,19 @@ func (r Request) setFileState(s interface{}) {
 	}
 }
 
-func (r Request) getWriter() io.WriterAt {
+func (r *Request) getWriter() io.WriterAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.writerAt
 }
 
-func (r Request) getReader() io.ReaderAt {
+func (r *Request) getReader() io.ReaderAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.readerAt
 }
 
-func (r Request) getLister() ListerAt {
+func (r *Request) getLister() ListerAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.listerAt
@@ -117,20 +117,20 @@ func (r Request) getLister() ListerAt {
 
 // For backwards compatibility. The Handler didn't have batch handling at
 // first, and just always assumed 1 batch. This preserves that behavior.
-func (r Request) setEOD(eod bool) {
+func (r *Request) setEOD(eod bool) {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	r.state.endofdir = eod
 }
 
-func (r Request) getEOD() bool {
+func (r *Request) getEOD() bool {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.endofdir
 }
 
 // Close reader/writer if possible
-func (r Request) close() {
+func (r *Request) close() {
 	rd := r.getReader()
 	if c, ok := rd.(io.Closer); ok {
 		c.Close()
@@ -142,7 +142,7 @@ func (r Request) close() {
 }
 
 // push packet_data into fifo
-func (r Request) pushPacket(pd packet_data) {
+func (r *Request) pushPacket(pd packet_data) {
 	r.packets <- pd
 }
 
@@ -152,26 +152,23 @@ func (r *Request) popPacket() packet_data {
 }
 
 // called from worker to handle packet/request
-func (r Request) handle(handlers Handlers) (responsePacket, error) {
-	var err error
-	var rpkt responsePacket
+func (r *Request) handle(handlers Handlers) (responsePacket, error) {
 	switch r.Method {
 	case "Get":
-		rpkt, err = fileget(handlers.FileGet, r)
+		return fileget(handlers.FileGet, r)
 	case "Put": // add "Append" to this to handle append only file writes
-		rpkt, err = fileput(handlers.FilePut, r)
+		return fileput(handlers.FilePut, r)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
-		rpkt, err = filecmd(handlers.FileCmd, r)
+		return filecmd(handlers.FileCmd, r)
 	case "List", "Stat", "Readlink":
-		rpkt, err = filelist(handlers.FileList, r)
+		return filelist(handlers.FileList, r)
 	default:
-		return rpkt, errors.Errorf("unexpected method: %s", r.Method)
+		return nil, errors.Errorf("unexpected method: %s", r.Method)
 	}
-	return rpkt, err
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r Request) (responsePacket, error) {
+func fileget(h FileReader, r *Request) (responsePacket, error) {
 	var err error
 	reader := r.getReader()
 	if reader == nil {
@@ -197,7 +194,7 @@ func fileget(h FileReader, r Request) (responsePacket, error) {
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r Request) (responsePacket, error) {
+func fileput(h FileWriter, r *Request) (responsePacket, error) {
 	var err error
 	writer := r.getWriter()
 	if writer == nil {
@@ -221,7 +218,7 @@ func fileput(h FileWriter, r Request) (responsePacket, error) {
 }
 
 // wrap FileCmder handler
-func filecmd(h FileCmder, r Request) (responsePacket, error) {
+func filecmd(h FileCmder, r *Request) (responsePacket, error) {
 	err := h.Filecmd(r)
 	if err != nil {
 		return nil, err
@@ -234,7 +231,7 @@ func filecmd(h FileCmder, r Request) (responsePacket, error) {
 }
 
 // wrap FileLister handler
-func filelist(h FileLister, r Request) (responsePacket, error) {
+func filelist(h FileLister, r *Request) (responsePacket, error) {
 	var err error
 	lister := r.getLister()
 	if lister == nil {
@@ -323,26 +320,27 @@ func (r *Request) update(p hasHandle) error {
 }
 
 // init attributes of request object from packet data
-func requestMethod(p hasPath) (method string) {
+func requestMethod(p hasPath) string {
 	switch p.(type) {
 	case *sshFxpOpenPacket, *sshFxpOpendirPacket:
-		method = "Open"
+		return "Open"
 	case *sshFxpSetstatPacket:
-		method = "Setstat"
+		return "Setstat"
 	case *sshFxpRenamePacket:
-		method = "Rename"
+		return "Rename"
 	case *sshFxpSymlinkPacket:
-		method = "Symlink"
+		return "Symlink"
 	case *sshFxpRemovePacket:
-		method = "Remove"
+		return "Remove"
 	case *sshFxpStatPacket, *sshFxpLstatPacket:
-		method = "Stat"
+		return "Stat"
 	case *sshFxpRmdirPacket:
-		method = "Rmdir"
+		return "Rmdir"
 	case *sshFxpReadlinkPacket:
-		method = "Readlink"
+		return "Readlink"
 	case *sshFxpMkdirPacket:
-		method = "Mkdir"
+		return "Mkdir"
+	default:
+		return ""
 	}
-	return method
 }

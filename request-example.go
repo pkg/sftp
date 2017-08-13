@@ -25,7 +25,7 @@ func InMemHandler() Handlers {
 }
 
 // Handlers
-func (fs *root) Fileread(r Request) (io.ReaderAt, error) {
+func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
@@ -41,7 +41,7 @@ func (fs *root) Fileread(r Request) (io.ReaderAt, error) {
 	return file.ReaderAt()
 }
 
-func (fs *root) Filewrite(r Request) (io.WriterAt, error) {
+func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
@@ -59,7 +59,7 @@ func (fs *root) Filewrite(r Request) (io.WriterAt, error) {
 	return file.WriterAt()
 }
 
-func (fs *root) Filecmd(r Request) error {
+func (fs *root) Filecmd(r *Request) error {
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 	switch r.Method {
@@ -115,7 +115,7 @@ func (f listerat) ListAt(ls []os.FileInfo, offset int64) (int, error) {
 	return n, nil
 }
 
-func (fs *root) Filelist(r Request) (ListerAt, error) {
+func (fs *root) Filelist(r *Request) (ListerAt, error) {
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 

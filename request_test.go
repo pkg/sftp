@@ -1,8 +1,6 @@
 package sftp
 
 import (
-	"sync"
-
 	"github.com/stretchr/testify/assert"
 
 	"bytes"
@@ -18,28 +16,25 @@ type testHandler struct {
 	err          error       // dummy error, should be file related
 }
 
-func (t *testHandler) Fileread(r Request) (io.ReaderAt, error) {
+func (t *testHandler) Fileread(r *Request) (io.ReaderAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
 	return bytes.NewReader(t.filecontents), nil
 }
 
-func (t *testHandler) Filewrite(r Request) (io.WriterAt, error) {
+func (t *testHandler) Filewrite(r *Request) (io.WriterAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
 	return io.WriterAt(t.output), nil
 }
 
-func (t *testHandler) Filecmd(r Request) error {
-	if t.err != nil {
-		return t.err
-	}
-	return nil
+func (t *testHandler) Filecmd(r *Request) error {
+	return t.err
 }
 
-func (t *testHandler) Filelist(r Request) (ListerAt, error) {
+func (t *testHandler) Filelist(r *Request) (ListerAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
@@ -59,15 +54,13 @@ type fakefile [10]byte
 
 var filecontents = []byte("file-data.")
 
-func testRequest(method string) Request {
-	request := Request{
-		Filepath:  "./request_test.go",
-		Method:    method,
-		Attrs:     []byte("foo"),
-		Target:    "foo",
-		packets:   make(chan packet_data, SftpServerWorkerCount),
-		state:     &state{},
-		stateLock: &sync.RWMutex{},
+func testRequest(method string) *Request {
+	request := &Request{
+		Filepath: "./request_test.go",
+		Method:   method,
+		Attrs:    []byte("foo"),
+		Target:   "foo",
+		packets:  make(chan packet_data, SftpServerWorkerCount),
 	}
 	for _, p := range []packet_data{
 		packet_data{id: 1, data: filecontents[:5], length: 5},
