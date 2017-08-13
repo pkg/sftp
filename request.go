@@ -152,26 +152,23 @@ func (r *Request) popPacket() packet_data {
 }
 
 // called from worker to handle packet/request
-func (r Request) handle(handlers Handlers) (responsePacket, error) {
-	var err error
-	var rpkt responsePacket
+func (r *Request) handle(handlers Handlers) (responsePacket, error) {
 	switch r.Method {
 	case "Get":
-		rpkt, err = fileget(handlers.FileGet, r)
+		return fileget(handlers.FileGet, r)
 	case "Put": // add "Append" to this to handle append only file writes
-		rpkt, err = fileput(handlers.FilePut, r)
+		return fileput(handlers.FilePut, r)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
-		rpkt, err = filecmd(handlers.FileCmd, r)
+		return filecmd(handlers.FileCmd, r)
 	case "List", "Stat", "Readlink":
-		rpkt, err = filelist(handlers.FileList, r)
+		return filelist(handlers.FileList, r)
 	default:
-		return rpkt, errors.Errorf("unexpected method: %s", r.Method)
+		return nil, errors.Errorf("unexpected method: %s", r.Method)
 	}
-	return rpkt, err
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r Request) (responsePacket, error) {
+func fileget(h FileReader, r *Request) (responsePacket, error) {
 	var err error
 	reader := r.getReader()
 	if reader == nil {
@@ -197,7 +194,7 @@ func fileget(h FileReader, r Request) (responsePacket, error) {
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r Request) (responsePacket, error) {
+func fileput(h FileWriter, r *Request) (responsePacket, error) {
 	var err error
 	writer := r.getWriter()
 	if writer == nil {
@@ -217,11 +214,12 @@ func fileput(h FileWriter, r Request) (responsePacket, error) {
 		ID: pd.id,
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
-		}}, nil
+		},
+	}, nil
 }
 
 // wrap FileCmder handler
-func filecmd(h FileCmder, r Request) (responsePacket, error) {
+func filecmd(h FileCmder, r *Request) (responsePacket, error) {
 	err := h.Filecmd(r)
 	if err != nil {
 		return nil, err
@@ -230,11 +228,12 @@ func filecmd(h FileCmder, r Request) (responsePacket, error) {
 		ID: r.pkt_id,
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
-		}}, nil
+		},
+	}, nil
 }
 
 // wrap FileLister handler
-func filelist(h FileLister, r Request) (responsePacket, error) {
+func filelist(h FileLister, r *Request) (responsePacket, error) {
 	var err error
 	lister := r.getLister()
 	if lister == nil {
