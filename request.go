@@ -52,17 +52,17 @@ func requestFromPacket(pkt hasPath) Request {
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
-		request.Target = filepath.ToSlash(filepath.Clean(p.Newpath))
+		request.Target = cleanPath(p.Newpath)
 	case *sshFxpSymlinkPacket:
-		request.Target = filepath.ToSlash(filepath.Clean(p.Linkpath))
+		request.Target = cleanPath(p.Linkpath)
 	}
 	return request
 }
 
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) Request {
-	request := Request{Method: method, Filepath: filepath.ToSlash(filepath.Clean(path))}
-	request.packets = make(chan packet_data, sftpServerWorkerCount)
+	request := Request{Method: method, Filepath: cleanPath(path)}
+	request.packets = make(chan packet_data, SftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}
 	return request

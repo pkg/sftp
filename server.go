@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	sftpServerWorkerCount = 8
+	SftpServerWorkerCount = 8
 )
 
 // Server is an SSH File Transfer Protocol (sftp) server.
@@ -230,8 +230,7 @@ func handlePacket(s *Server, p interface{}) error {
 		if err != nil {
 			return s.sendError(p, err)
 		}
-		f = filepath.Clean(f)
-		f = filepath.ToSlash(f) // make path more Unix like on windows servers
+		f = cleanPath(f)
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{

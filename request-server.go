@@ -131,7 +131,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			rs.closeRequest(handle)
 			rpkt = statusFromError(pkt, nil)
 		case *sshFxpRealpathPacket:
-			rpkt = cleanPath(pkt)
+			rpkt = cleanPacketPath(pkt)
 		case isOpener:
 			handle := rs.nextRequest(requestFromPacket(pkt))
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
@@ -181,23 +181,24 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 	return nil
 }
 
-func cleanPath(pkt *sshFxpRealpathPacket) responsePacket {
-	path := pkt.getPath()
-	if !filepath.IsAbs(path) {
-		// prevent double slash (e.g. on windows, / paths are not absolute)
-		path = "/" + strings.TrimPrefix(path, "/")
-	} // all paths are absolute
-
-	cleaned_path := filepath.ToSlash(filepath.Clean(path))
-
+func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
+	path := cleanPath(pkt.getPath())
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []sshFxpNameAttr{{
-			Name:     cleaned_path,
-			LongName: cleaned_path,
+			Name:     path,
+			LongName: path,
 			Attrs:    emptyFileStat,
 		}},
 	}
+}
+
+func cleanPath(path string) string {
+	cleanSlashPath := filepath.ToSlash(filepath.Clean(path))
+	if !strings.HasPrefix(cleanSlashPath, "/") {
+		return "/" + cleanSlashPath
+	}
+	return cleanSlashPath
 }
 
 func (rs *RequestServer) handle(request Request, pkt requestPacket) responsePacket {
