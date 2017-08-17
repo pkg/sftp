@@ -56,16 +56,16 @@ func requestFromPacket(pkt hasPath) Request {
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
-		request.Target = filepath.Clean(p.Newpath)
+		request.Target = cleanPath(p.Newpath)
 	case *sshFxpSymlinkPacket:
-		request.Target = filepath.Clean(p.Linkpath)
+		request.Target = cleanPath(p.Linkpath)
 	}
 	return request
 }
 
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) Request {
-	request := Request{Method: method, Filepath: filepath.Clean(path)}
+	request := Request{Method: method, Filepath: cleanPath(path)}
 	request.packets = make(chan packet_data, SftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}
@@ -269,7 +269,7 @@ func filelist(h FileLister, r Request) (responsePacket, error) {
 	switch r.Method {
 	case "List":
 		pd := r.popPacket()
-		dirname := path.Base(r.Filepath)
+		dirname := filepath.ToSlash(path.Base(r.Filepath))
 		ret := &sshFxpNamePacket{ID: pd.id}
 
 		for _, fi := range finfo {

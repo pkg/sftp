@@ -70,8 +70,8 @@ func testRequest(method string) Request {
 		stateLock: &sync.RWMutex{},
 	}
 	for _, p := range []packet_data{
-		packet_data{id: 1, data: filecontents[:5], length: 5},
-		packet_data{id: 2, data: filecontents[5:], length: 5, offset: 5}} {
+		{id: 1, data: filecontents[:5], length: 5},
+		{id: 2, data: filecontents[5:], length: 5, offset: 5}} {
 		request.packets <- p
 	}
 	return request

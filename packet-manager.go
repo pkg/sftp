@@ -147,10 +147,10 @@ func (s *packetManager) maybeSendPackets() {
 	}
 }
 
-func outfilter(o []responsePacket) []uint32 {
-	res := make([]uint32, 0, len(o))
-	for _, v := range o {
-		res = append(res, v.id())
-	}
-	return res
-}
+//func outfilter(o []responsePacket) []uint32 {
+//	res := make([]uint32, 0, len(o))
+//	for _, v := range o {
+//		res = append(res, v.id())
+//	}
+//	return res
+//}
