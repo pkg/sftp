@@ -554,6 +554,8 @@ func statusFromError(p ider, err error) sshFxpStatusPacket {
 		ret.StatusError.msg = err.Error()
 		if err == io.EOF {
 			ret.StatusError.Code = ssh_FX_EOF
+		} else if err == os.ErrNotExist {
+			ret.StatusError.Code = ssh_FX_NO_SUCH_FILE
 		} else if errno, ok := err.(syscall.Errno); ok {
 			ret.StatusError.Code = translateErrno(errno)
 		} else if pathError, ok := err.(*os.PathError); ok {

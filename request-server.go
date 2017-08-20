@@ -3,14 +3,13 @@ package sftp
 import (
 	"encoding"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/pkg/errors"
-	"strings"
 )
 
 var maxTxPacket uint32 = 1 << 15
@@ -205,7 +204,6 @@ func (rs *RequestServer) handle(request Request, pkt requestPacket) responsePack
 	// fmt.Println("Request Method: ", request.Method)
 	rpkt, err := request.handle(rs.Handlers)
 	if err != nil {
-		err = errorAdapter(err)
 		rpkt = statusFromError(pkt, err)
 	}
 	return rpkt
@@ -223,13 +221,4 @@ func (rs *RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
 
 func (rs *RequestServer) sendError(p ider, err error) error {
 	return rs.sendPacket(statusFromError(p, err))
-}
-
-// os.ErrNotExist should convert to ssh_FX_NO_SUCH_FILE, but is not recognized
-// by statusFromError. So we convert to syscall.ENOENT which it does.
-func errorAdapter(err error) error {
-	if err == os.ErrNotExist {
-		return syscall.ENOENT
-	}
-	return err
 }
