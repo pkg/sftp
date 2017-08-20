@@ -29,7 +29,7 @@ type Server struct {
 	*serverConn
 	debugStream   io.Writer
 	readOnly      bool
-	pktMgr        packetManager
+	pktMgr        *packetManager
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int

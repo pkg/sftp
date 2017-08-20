@@ -28,7 +28,7 @@ type Handlers struct {
 type RequestServer struct {
 	*serverConn
 	Handlers        Handlers
-	pktMgr          packetManager
+	pktMgr          *packetManager
 	openRequests    map[string]Request
 	openRequestLock sync.RWMutex
 	handleCount     int
