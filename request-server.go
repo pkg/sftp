@@ -142,7 +142,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			} else {
 				request = requestFromPacket(
 					&sshFxpStatPacket{ID: pkt.id(), Path: request.Filepath})
-				rpkt = rs.handle(request, pkt)
+				rpkt = request.handle(rs.Handlers)
 			}
 		case *sshFxpFsetstatPacket:
 			handle := pkt.getHandle()
@@ -154,7 +154,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 					&sshFxpSetstatPacket{ID: pkt.id(), Path: request.Filepath,
 						Flags: pkt.Flags, Attrs: pkt.Attrs,
 					})
-				rpkt = rs.handle(request, pkt)
+				rpkt = request.handle(rs.Handlers)
 			}
 		case hasHandle:
 			handle := pkt.getHandle()
@@ -163,11 +163,11 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
-				rpkt = rs.handle(request, pkt)
+				rpkt = request.handle(rs.Handlers)
 			}
 		case hasPath:
 			request := requestFromPacket(pkt)
-			rpkt = rs.handle(request, pkt)
+			rpkt = request.handle(rs.Handlers)
 		default:
 			return errors.Errorf("unexpected packet type %T", pkt)
 		}
@@ -198,15 +198,6 @@ func cleanPath(path string) string {
 		return "/" + cleanSlashPath
 	}
 	return cleanSlashPath
-}
-
-func (rs *RequestServer) handle(request Request, pkt requestPacket) responsePacket {
-	// fmt.Println("Request Method: ", request.Method)
-	rpkt, err := request.handle(rs.Handlers)
-	if err != nil {
-		rpkt = statusFromError(pkt, err)
-	}
-	return rpkt
 }
 
 // Wrap underlying connection methods to use packetManager
