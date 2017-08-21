@@ -29,7 +29,7 @@ type FileLister interface {
 }
 
 // ListerAt does for file lists what io.ReaderAt does for files.
-// ListerAt should return the number of entries copied and an io.EOF
+// ListAt should return the number of entries copied and an io.EOF
 // error if at end of list. This is testable by comparing how many you
 // copied to how many could be copied (eg. n < len(ls) below).
 // The copy() builtin is best for the copying.
