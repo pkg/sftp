@@ -89,8 +89,8 @@ func (r *Request) lsNext() int64 {
 
 // Increases next offset
 func (r *Request) lsInc(offset int64) {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
+	r.stateLock.Lock()
+	defer r.stateLock.Unlock()
 	r.state.lsoffset = r.state.lsoffset + offset
 }
 
