@@ -51,20 +51,22 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 	}
 }
 
-func (rs *RequestServer) nextRequest(r Request) string {
+// Note that we are explicitly saving the Request as a value.
+func (rs *RequestServer) nextRequest(r *Request) string {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
 	rs.handleCount++
 	handle := strconv.Itoa(rs.handleCount)
-	rs.openRequests[handle] = r
+	rs.openRequests[handle] = *r
 	return handle
 }
 
-func (rs *RequestServer) getRequest(handle string) (Request, bool) {
+// Returns pointer to new copy of Request object
+func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
 	rs.openRequestLock.RLock()
 	defer rs.openRequestLock.RUnlock()
 	r, ok := rs.openRequests[handle]
-	return r, ok
+	return &r, ok
 }
 
 func (rs *RequestServer) closeRequest(handle string) {

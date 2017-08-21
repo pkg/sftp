@@ -51,7 +51,7 @@ func (pd packet_data) id() uint32 {
 }
 
 // New Request initialized based on packet data
-func requestFromPacket(pkt hasPath) Request {
+func requestFromPacket(pkt hasPath) *Request {
 	method := requestMethod(pkt)
 	request := NewRequest(method, pkt.getPath())
 	request.pkt_id = pkt.id()
@@ -68,20 +68,20 @@ func requestFromPacket(pkt hasPath) Request {
 }
 
 // NewRequest creates a new Request object.
-func NewRequest(method, path string) Request {
-	request := Request{Method: method, Filepath: cleanPath(path)}
+func NewRequest(method, path string) *Request {
+	request := &Request{Method: method, Filepath: cleanPath(path)}
 	request.packets = make(chan packet_data, SftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}
 	return request
 }
 
-func (r Request) id() uint32 {
+func (r *Request) id() uint32 {
 	return r.pkt_id
 }
 
 // Returns current offset for file list, and sets next offset
-func (r Request) lsNext(offset int64) (current int64) {
+func (r *Request) lsNext(offset int64) (current int64) {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	current = r.state.lsoffset
@@ -90,7 +90,7 @@ func (r Request) lsNext(offset int64) (current int64) {
 }
 
 // manage file read/write state
-func (r Request) setFileState(s interface{}) {
+func (r *Request) setFileState(s interface{}) {
 	r.stateLock.Lock()
 	defer r.stateLock.Unlock()
 	switch s := s.(type) {
@@ -105,19 +105,19 @@ func (r Request) setFileState(s interface{}) {
 	}
 }
 
-func (r Request) getWriter() io.WriterAt {
+func (r *Request) getWriter() io.WriterAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.writerAt
 }
 
-func (r Request) getReader() io.ReaderAt {
+func (r *Request) getReader() io.ReaderAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.readerAt
 }
 
-func (r Request) getLister() ListerAt {
+func (r *Request) getLister() ListerAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.listerAt
@@ -125,20 +125,20 @@ func (r Request) getLister() ListerAt {
 
 // For backwards compatibility. The Handler didn't have batch handling at
 // first, and just always assumed 1 batch. This preserves that behavior.
-func (r Request) setEOD(eod bool) {
+func (r *Request) setEOD(eod bool) {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	r.state.endofdir = eod
 }
 
-func (r Request) getEOD() bool {
+func (r *Request) getEOD() bool {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.endofdir
 }
 
 // Close reader/writer if possible
-func (r Request) close() {
+func (r *Request) close() {
 	rd := r.getReader()
 	if c, ok := rd.(io.Closer); ok {
 		c.Close()
@@ -150,7 +150,7 @@ func (r Request) close() {
 }
 
 // push packet_data into fifo
-func (r Request) pushPacket(pd packet_data) {
+func (r *Request) pushPacket(pd packet_data) {
 	r.packets <- pd
 }
 

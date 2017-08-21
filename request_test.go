@@ -56,8 +56,8 @@ type fakefile [10]byte
 
 var filecontents = []byte("file-data.")
 
-func testRequest(method string) Request {
-	request := Request{
+func testRequest(method string) *Request {
+	request := &Request{
 		Filepath:  "./request_test.go",
 		Method:    method,
 		Attrs:     []byte("foo"),
