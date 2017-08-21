@@ -80,13 +80,18 @@ func (r *Request) id() uint32 {
 	return r.pkt_id
 }
 
-// Returns current offset for file list, and sets next offset
-func (r *Request) lsNext(offset int64) (current int64) {
+// Returns current offset for file list
+func (r *Request) lsNext() int64 {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
-	current = r.state.lsoffset
+	return r.state.lsoffset
+}
+
+// Increases next offset
+func (r *Request) lsInc(offset int64) {
+	r.stateLock.RLock()
+	defer r.stateLock.RUnlock()
 	r.state.lsoffset = r.state.lsoffset + offset
-	return current
 }
 
 // manage file read/write state
@@ -251,9 +256,10 @@ func filelist(h FileLister, r *Request) responsePacket {
 		r.setFileState(lister)
 	}
 
-	offset := r.lsNext(MaxFilelist)
+	offset := r.lsNext()
 	finfo := make([]os.FileInfo, MaxFilelist)
 	n, err := lister.ListAt(finfo, offset)
+	r.lsInc(int64(n))
 	// ignore EOF as we only return it when there are no results
 	finfo = finfo[:n] // avoid need for nil tests below
 
