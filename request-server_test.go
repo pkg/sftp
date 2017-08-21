@@ -328,3 +328,20 @@ func TestRequestReaddir(t *testing.T) {
 	names := []string{di[18].Name(), di[81].Name()}
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
 }
+
+func TestCleanPath(t *testing.T) {
+	assert.Equal(t, "/", cleanPath("/"))
+	assert.Equal(t, "/", cleanPath("//"))
+	assert.Equal(t, "/a", cleanPath("/a/"))
+	assert.Equal(t, "/a", cleanPath("a/"))
+	assert.Equal(t, "/a/b/c", cleanPath("/a//b//c/"))
+
+	// filepath.ToSlash does not touch \ as char on unix systems, so os.PathSeparator is used for windows compatible tests
+	bslash := string(os.PathSeparator)
+	assert.Equal(t, "/", cleanPath(bslash))
+	assert.Equal(t, "/", cleanPath(bslash+bslash))
+	assert.Equal(t, "/a", cleanPath(bslash+"a"+bslash))
+	assert.Equal(t, "/a", cleanPath("a"+bslash))
+	assert.Equal(t, "/a/b/c", cleanPath(bslash+"a"+bslash+bslash+"b"+bslash+bslash+"c"+bslash))
+
+}

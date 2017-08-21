@@ -40,14 +40,18 @@ type state struct {
 }
 
 type packet_data struct {
-	id     uint32
+	_id    uint32
 	data   []byte
 	length uint32
 	offset int64
 }
 
+func (pd packet_data) id() uint32 {
+	return pd._id
+}
+
 // New Request initialized based on packet data
-func requestFromPacket(pkt hasPath) Request {
+func requestFromPacket(pkt hasPath) *Request {
 	method := requestMethod(pkt)
 	request := NewRequest(method, pkt.getPath())
 	request.pkt_id = pkt.id()
@@ -56,38 +60,42 @@ func requestFromPacket(pkt hasPath) Request {
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
-		request.Target = filepath.Clean(p.Newpath)
+		request.Target = cleanPath(p.Newpath)
 	case *sshFxpSymlinkPacket:
-		request.Target = filepath.Clean(p.Linkpath)
+		request.Target = cleanPath(p.Linkpath)
 	}
 	return request
 }
 
 // NewRequest creates a new Request object.
-func NewRequest(method, path string) Request {
-	request := Request{Method: method, Filepath: filepath.Clean(path)}
+func NewRequest(method, path string) *Request {
+	request := &Request{Method: method, Filepath: cleanPath(path)}
 	request.packets = make(chan packet_data, SftpServerWorkerCount)
 	request.state = &state{}
 	request.stateLock = &sync.RWMutex{}
 	return request
 }
 
+func (r *Request) id() uint32 {
+	return r.pkt_id
+}
+
 // Returns current offset for file list
-func (r Request) lsNext() int64 {
+func (r *Request) lsNext() int64 {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.lsoffset
 }
 
 // Increases next offset
-func (r Request) lsInc(offset int64) {
+func (r *Request) lsInc(offset int64) {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	r.state.lsoffset = r.state.lsoffset + offset
 }
 
 // manage file read/write state
-func (r Request) setFileState(s interface{}) {
+func (r *Request) setFileState(s interface{}) {
 	r.stateLock.Lock()
 	defer r.stateLock.Unlock()
 	switch s := s.(type) {
@@ -102,19 +110,19 @@ func (r Request) setFileState(s interface{}) {
 	}
 }
 
-func (r Request) getWriter() io.WriterAt {
+func (r *Request) getWriter() io.WriterAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.writerAt
 }
 
-func (r Request) getReader() io.ReaderAt {
+func (r *Request) getReader() io.ReaderAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.readerAt
 }
 
-func (r Request) getLister() ListerAt {
+func (r *Request) getLister() ListerAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.listerAt
@@ -122,20 +130,20 @@ func (r Request) getLister() ListerAt {
 
 // For backwards compatibility. The Handler didn't have batch handling at
 // first, and just always assumed 1 batch. This preserves that behavior.
-func (r Request) setEOD(eod bool) {
+func (r *Request) setEOD(eod bool) {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	r.state.endofdir = eod
 }
 
-func (r Request) getEOD() bool {
+func (r *Request) getEOD() bool {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.endofdir
 }
 
 // Close reader/writer if possible
-func (r Request) close() {
+func (r *Request) close() {
 	rd := r.getReader()
 	if c, ok := rd.(io.Closer); ok {
 		c.Close()
@@ -147,7 +155,7 @@ func (r Request) close() {
 }
 
 // push packet_data into fifo
-func (r Request) pushPacket(pd packet_data) {
+func (r *Request) pushPacket(pd packet_data) {
 	r.packets <- pd
 }
 
@@ -157,58 +165,56 @@ func (r *Request) popPacket() packet_data {
 }
 
 // called from worker to handle packet/request
-func (r Request) handle(handlers Handlers) (responsePacket, error) {
-	var err error
-	var rpkt responsePacket
+func (r *Request) handle(handlers Handlers) responsePacket {
 	switch r.Method {
 	case "Get":
-		rpkt, err = fileget(handlers.FileGet, r)
+		return fileget(handlers.FileGet, r)
 	case "Put": // add "Append" to this to handle append only file writes
-		rpkt, err = fileput(handlers.FilePut, r)
+		return fileput(handlers.FilePut, r)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
-		rpkt, err = filecmd(handlers.FileCmd, r)
+		return filecmd(handlers.FileCmd, r)
 	case "List", "Stat", "Readlink":
-		rpkt, err = filelist(handlers.FileList, r)
+		return filelist(handlers.FileList, r)
 	default:
-		return rpkt, errors.Errorf("unexpected method: %s", r.Method)
+		return statusFromError(r,
+			errors.Errorf("unexpected method: %s", r.Method))
 	}
-	return rpkt, err
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r Request) (responsePacket, error) {
+func fileget(h FileReader, r *Request) responsePacket {
 	var err error
 	reader := r.getReader()
+	pd := r.popPacket()
 	if reader == nil {
 		reader, err = h.Fileread(r)
 		if err != nil {
-			return nil, err
+			return statusFromError(pd, err)
 		}
 		r.setFileState(reader)
 	}
 
-	pd := r.popPacket()
 	data := make([]byte, clamp(pd.length, maxTxPacket))
 	n, err := reader.ReadAt(data, pd.offset)
 	// only return EOF erro if no data left to read
 	if err != nil && (err != io.EOF || n == 0) {
-		return nil, err
+		return statusFromError(pd, err)
 	}
 	return &sshFxpDataPacket{
-		ID:     pd.id,
+		ID:     pd.id(),
 		Length: uint32(n),
 		Data:   data[:n],
-	}, nil
+	}
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r Request) (responsePacket, error) {
+func fileput(h FileWriter, r *Request) responsePacket {
 	var err error
 	writer := r.getWriter()
 	if writer == nil {
 		writer, err = h.Filewrite(r)
 		if err != nil {
-			return nil, err
+			return statusFromError(r, err)
 		}
 		r.setFileState(writer)
 	}
@@ -216,36 +222,36 @@ func fileput(h FileWriter, r Request) (responsePacket, error) {
 	pd := r.popPacket()
 	_, err = writer.WriteAt(pd.data, pd.offset)
 	if err != nil {
-		return nil, err
+		return statusFromError(pd, err)
 	}
 	return &sshFxpStatusPacket{
-		ID: pd.id,
+		ID: pd.id(),
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
-		}}, nil
+		}}
 }
 
 // wrap FileCmder handler
-func filecmd(h FileCmder, r Request) (responsePacket, error) {
+func filecmd(h FileCmder, r *Request) responsePacket {
 	err := h.Filecmd(r)
 	if err != nil {
-		return nil, err
+		return statusFromError(r, err)
 	}
 	return &sshFxpStatusPacket{
 		ID: r.pkt_id,
 		StatusError: StatusError{
 			Code: ssh_FX_OK,
-		}}, nil
+		}}
 }
 
 // wrap FileLister handler
-func filelist(h FileLister, r Request) (responsePacket, error) {
+func filelist(h FileLister, r *Request) responsePacket {
 	var err error
 	lister := r.getLister()
 	if lister == nil {
 		lister, err = h.Filelist(r)
 		if err != nil {
-			return nil, err
+			return statusFromError(r, err)
 		}
 		r.setFileState(lister)
 	}
@@ -255,28 +261,19 @@ func filelist(h FileLister, r Request) (responsePacket, error) {
 	n, err := lister.ListAt(finfo, offset)
 	r.lsInc(int64(n))
 	// ignore EOF as we only return it when there are no results
-	if err != nil && err != io.EOF {
-		return nil, err
-	}
 	finfo = finfo[:n] // avoid need for nil tests below
-
-	// no results
-	if n == 0 {
-		switch r.Method {
-		case "List":
-			return nil, io.EOF
-		case "Stat", "Readlink":
-			err = &os.PathError{Op: "readlink", Path: r.Filepath,
-				Err: syscall.ENOENT}
-			return nil, err
-		}
-	}
 
 	switch r.Method {
 	case "List":
 		pd := r.popPacket()
-		dirname := path.Base(r.Filepath)
-		ret := &sshFxpNamePacket{ID: pd.id}
+		if err != nil && err != io.EOF {
+			return statusFromError(pd, err)
+		}
+		if n == 0 {
+			return statusFromError(pd, io.EOF)
+		}
+		dirname := filepath.ToSlash(path.Base(r.Filepath))
+		ret := &sshFxpNamePacket{ID: pd.id()}
 
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
@@ -285,13 +282,29 @@ func filelist(h FileLister, r Request) (responsePacket, error) {
 				Attrs:    []interface{}{fi},
 			})
 		}
-		return ret, nil
+		return ret
 	case "Stat":
+		if err != nil && err != io.EOF {
+			return statusFromError(r, err)
+		}
+		if n == 0 {
+			err = &os.PathError{Op: "stat", Path: r.Filepath,
+				Err: syscall.ENOENT}
+			return statusFromError(r, err)
+		}
 		return &sshFxpStatResponse{
 			ID:   r.pkt_id,
 			info: finfo[0],
-		}, nil
+		}
 	case "Readlink":
+		if err != nil && err != io.EOF {
+			return statusFromError(r, err)
+		}
+		if n == 0 {
+			err = &os.PathError{Op: "readlink", Path: r.Filepath,
+				Err: syscall.ENOENT}
+			return statusFromError(r, err)
+		}
 		filename := finfo[0].Name()
 		return &sshFxpNamePacket{
 			ID: r.pkt_id,
@@ -300,15 +313,16 @@ func filelist(h FileLister, r Request) (responsePacket, error) {
 				LongName: filename,
 				Attrs:    emptyFileStat,
 			}},
-		}, nil
+		}
 	default:
-		return nil, errors.Errorf("unexpected method: %s", r.Method)
+		err = errors.Errorf("unexpected method: %s", r.Method)
+		return statusFromError(r, err)
 	}
 }
 
 // file data for additional read/write packets
 func (r *Request) update(p hasHandle) error {
-	pd := packet_data{id: p.id()}
+	pd := packet_data{_id: p.id()}
 	switch p := p.(type) {
 	case *sshFxpReadPacket:
 		r.Method = "Get"
