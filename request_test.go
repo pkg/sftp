@@ -122,7 +122,7 @@ func TestRequestGet(t *testing.T) {
 	request := testRequest("Get")
 	// req.length is 5, so we test reads in 5 byte chunks
 	for i, txt := range []string{"file-", "data."} {
-		pkt := request.handle(handlers)
+		pkt := request.callHandler(handlers)
 		dpkt := pkt.(*sshFxpDataPacket)
 		assert.Equal(t, dpkt.id(), uint32(i+1))
 		assert.Equal(t, string(dpkt.Data), txt)
@@ -132,9 +132,9 @@ func TestRequestGet(t *testing.T) {
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
-	pkt := request.handle(handlers)
+	pkt := request.callHandler(handlers)
 	statusOk(t, pkt)
-	pkt = request.handle(handlers)
+	pkt = request.callHandler(handlers)
 	statusOk(t, pkt)
 	assert.Equal(t, "file-data.", handlers.getOutString())
 }
@@ -142,11 +142,11 @@ func TestRequestPut(t *testing.T) {
 func TestRequestCmdr(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Mkdir")
-	pkt := request.handle(handlers)
+	pkt := request.callHandler(handlers)
 	statusOk(t, pkt)
 
 	handlers.returnError()
-	pkt = request.handle(handlers)
+	pkt = request.callHandler(handlers)
 	assert.Equal(t, pkt, statusFromError(pkt, errTest))
 }
 
@@ -155,7 +155,7 @@ func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
 func TestRequestInfoStat(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
-	pkt := request.handle(handlers)
+	pkt := request.callHandler(handlers)
 	spkt, ok := pkt.(*sshFxpStatResponse)
 	assert.True(t, ok)
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
@@ -164,7 +164,7 @@ func TestRequestInfoStat(t *testing.T) {
 func testInfoMethod(t *testing.T, method string) {
 	handlers := newTestHandlers()
 	request := testRequest(method)
-	pkt := request.handle(handlers)
+	pkt := request.callHandler(handlers)
 	npkt, ok := pkt.(*sshFxpNamePacket)
 	assert.True(t, ok)
 	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])

@@ -165,7 +165,7 @@ func (r *Request) popPacket() packet_data {
 }
 
 // called from worker to handle packet/request
-func (r *Request) handle(handlers Handlers) responsePacket {
+func (r *Request) callHandler(handlers Handlers) responsePacket {
 	switch r.Method {
 	case "Get":
 		return fileget(handlers.FileGet, r)
