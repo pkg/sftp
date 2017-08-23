@@ -35,7 +35,6 @@ type state struct {
 	writerAt io.WriterAt
 	readerAt io.ReaderAt
 	listerAt ListerAt
-	endofdir bool // in case handler doesn't use EOF on file list
 	lsoffset int64
 }
 
@@ -126,20 +125,6 @@ func (r *Request) getLister() ListerAt {
 	r.stateLock.RLock()
 	defer r.stateLock.RUnlock()
 	return r.state.listerAt
-}
-
-// For backwards compatibility. The Handler didn't have batch handling at
-// first, and just always assumed 1 batch. This preserves that behavior.
-func (r *Request) setEOD(eod bool) {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
-	r.state.endofdir = eod
-}
-
-func (r *Request) getEOD() bool {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
-	return r.state.endofdir
 }
 
 // Close reader/writer if possible
