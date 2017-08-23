@@ -62,14 +62,8 @@ func testRequest(method string) *Request {
 		Method:    method,
 		Attrs:     []byte("foo"),
 		Target:    "foo",
-		packets:   make(chan packet_data, SftpServerWorkerCount),
 		state:     &state{},
 		stateLock: &sync.RWMutex{},
-	}
-	for _, p := range []packet_data{
-		{_id: 1, data: filecontents[:5], length: 5},
-		{_id: 2, data: filecontents[5:], length: 5, offset: 5}} {
-		request.packets <- p
 	}
 	return request
 }
@@ -117,14 +111,30 @@ func statusOk(t *testing.T, p interface{}) {
 	}
 }
 
+// fake/test packet
+type fakePacket struct {
+	myid   uint32
+	handle string
+}
+
+func (f fakePacket) id() uint32 {
+	return f.myid
+}
+
+func (f fakePacket) getHandle() string {
+	return f.handle
+}
+func (fakePacket) UnmarshalBinary(d []byte) error { return nil }
+
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
 	// req.length is 5, so we test reads in 5 byte chunks
 	for i, txt := range []string{"file-", "data."} {
-		pkt := request.callHandler(handlers)
-		dpkt := pkt.(*sshFxpDataPacket)
-		assert.Equal(t, dpkt.id(), uint32(i+1))
+		pkt := &sshFxpReadPacket{uint32(i), "a", uint64(i * 5), 5}
+		rpkt := request.call(handlers, pkt)
+		dpkt := rpkt.(*sshFxpDataPacket)
+		assert.Equal(t, dpkt.id(), uint32(i))
 		assert.Equal(t, string(dpkt.Data), txt)
 	}
 }
@@ -132,22 +142,25 @@ func TestRequestGet(t *testing.T) {
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
-	pkt := request.callHandler(handlers)
-	statusOk(t, pkt)
-	pkt = request.callHandler(handlers)
-	statusOk(t, pkt)
+	pkt := &sshFxpWritePacket{0, "a", 0, 5, []byte("file-")}
+	rpkt := request.call(handlers, pkt)
+	statusOk(t, rpkt)
+	pkt = &sshFxpWritePacket{1, "a", 5, 5, []byte("data.")}
+	rpkt = request.call(handlers, pkt)
+	statusOk(t, rpkt)
 	assert.Equal(t, "file-data.", handlers.getOutString())
 }
 
 func TestRequestCmdr(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Mkdir")
-	pkt := request.callHandler(handlers)
-	statusOk(t, pkt)
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt)
+	statusOk(t, rpkt)
 
 	handlers.returnError()
-	pkt = request.callHandler(handlers)
-	assert.Equal(t, pkt, statusFromError(pkt, errTest))
+	rpkt = request.call(handlers, pkt)
+	assert.Equal(t, rpkt, statusFromError(rpkt, errTest))
 }
 
 func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }
@@ -155,8 +168,9 @@ func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
 func TestRequestInfoStat(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
-	pkt := request.callHandler(handlers)
-	spkt, ok := pkt.(*sshFxpStatResponse)
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt)
+	spkt, ok := rpkt.(*sshFxpStatResponse)
 	assert.True(t, ok)
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
 }
@@ -164,8 +178,9 @@ func TestRequestInfoStat(t *testing.T) {
 func testInfoMethod(t *testing.T, method string) {
 	handlers := newTestHandlers()
 	request := testRequest(method)
-	pkt := request.callHandler(handlers)
-	npkt, ok := pkt.(*sshFxpNamePacket)
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt)
+	npkt, ok := rpkt.(*sshFxpNamePacket)
 	assert.True(t, ok)
 	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
 	assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
