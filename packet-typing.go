@@ -51,6 +51,7 @@ func (p sshFxpSetstatPacket) getPath() string  { return p.Path }
 func (p sshFxpStatvfsPacket) getPath() string  { return p.Path }
 func (p sshFxpRemovePacket) getPath() string   { return p.Filename }
 func (p sshFxpRenamePacket) getPath() string   { return p.Oldpath }
+func (p sshFxpExtendedPacketPosixRename) getPath() string { return p.Oldpath }
 func (p sshFxpSymlinkPacket) getPath() string  { return p.Targetpath }
 
 // Openers implement hasPath and isOpener
@@ -74,6 +75,7 @@ func (p sshFxpRemovePacket) notReadOnly()   {}
 func (p sshFxpMkdirPacket) notReadOnly()    {}
 func (p sshFxpRmdirPacket) notReadOnly()    {}
 func (p sshFxpRenamePacket) notReadOnly()   {}
+func (p sshFxpExtendedPacketPosixRename) notReadOnly() {}
 func (p sshFxpSymlinkPacket) notReadOnly()  {}
 
 // this has a handle, but is only used for close

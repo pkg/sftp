@@ -217,6 +217,22 @@ func TestRequestRename(t *testing.T) {
 	assert.Equal(t, err, os.ErrNotExist)
 }
 
+func TestRequestPosixRename(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	r := p.testHandler()
+	_, err = r.fetch("/foo")
+	assert.Nil(t, err)
+	err = p.cli.PosixRename("/foo", "/bar")
+	assert.Nil(t, err)
+	_, err = r.fetch("/bar")
+	assert.Nil(t, err)
+	_, err = r.fetch("/foo")
+	assert.Equal(t, err, os.ErrNotExist)
+}
+
 func TestRequestRenameFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -226,6 +242,17 @@ func TestRequestRenameFail(t *testing.T) {
 	assert.Nil(t, err)
 	err = p.cli.Rename("/foo", "/bar")
 	assert.IsType(t, &StatusError{}, err)
+}
+
+func TestRequestPosixRenameReplaceSuccess(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	_, err = putTestFile(p.cli, "/bar", "goodbye")
+	assert.Nil(t, err)
+	err = p.cli.PosixRename("/foo", "/bar")
+	assert.Nil(t, err)
 }
 
 func TestRequestStat(t *testing.T) {
