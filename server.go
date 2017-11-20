@@ -395,7 +395,7 @@ func handlePacket(s *Server, p interface{}) error {
 
 	case *sshFxpRealpathPacket:
 		var retPath string
-		if p.Path[0] != '/' {
+		if p.Path == "" || p.Path[0] != '/' {
 			retPath = path.Clean(s.uploadPath + "/" + p.Path)
 		} else {
 			retPath = path.Clean(p.Path)
