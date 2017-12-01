@@ -399,6 +399,10 @@ func (c *Client) OpenFile(path string, f int) (*File, error) {
 }
 
 func (c *Client) open(path string, pflags uint32) (*File, error) {
+	fi, err := c.Stat(path)
+	if err != nil {
+		return nil, err
+	}
 	id := c.nextID()
 	typ, data, err := c.sendPacket(sshFxpOpenPacket{
 		ID:     id,
@@ -415,7 +419,7 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
-		return &File{c: c, path: path, handle: handle}, nil
+		return &File{c: c, path: path, handle: handle, size: fi.Size()}, nil
 	case ssh_FXP_STATUS:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
@@ -648,6 +652,7 @@ type File struct {
 	path   string
 	handle string
 	offset uint64 // current offset within remote file
+	size   int64
 }
 
 // Close closes the File, rendering it unusable for I/O. It returns an
@@ -763,15 +768,11 @@ func (f *File) Read(b []byte) (int, error) {
 // WriteTo writes the file to w. The return value is the number of bytes
 // written. Any error encountered during the write is also returned.
 func (f *File) WriteTo(w io.Writer) (int64, error) {
-	fi, err := f.Stat()
-	if err != nil {
-		return 0, err
-	}
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
 	writeOffset := offset
-	fileSize := uint64(fi.Size())
+	fileSize := uint64(f.size)
 	// see comment on same line in Read() above
 	ch := make(chan result, maxConcurrentRequests)
 	type inflightRead struct {
@@ -1046,11 +1047,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	case os.SEEK_CUR:
 		f.offset = uint64(int64(f.offset) + offset)
 	case os.SEEK_END:
-		fi, err := f.Stat()
-		if err != nil {
-			return int64(f.offset), err
-		}
-		f.offset = uint64(fi.Size() + offset)
+		f.offset = uint64(f.size + offset)
 	default:
 		return int64(f.offset), unimplementedSeekWhence(whence)
 	}
