@@ -199,6 +199,12 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 
 func cleanPath(path string) string {
 	cleanSlashPath := filepath.ToSlash(filepath.Clean(path))
+	if cleanSlashPath == "." || cleanSlashPath == ".." {
+		//At this stage, the path is not valid
+		//This occurs when there is root .. or . in the path, which clean did not remove. This will point to root.
+		return "/"
+	}
+
 	if !strings.HasPrefix(cleanSlashPath, "/") {
 		return "/" + cleanSlashPath
 	}

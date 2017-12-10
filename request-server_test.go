@@ -335,6 +335,12 @@ func TestCleanPath(t *testing.T) {
 	assert.Equal(t, "/a", cleanPath("/a/"))
 	assert.Equal(t, "/a", cleanPath("a/"))
 	assert.Equal(t, "/a/b/c", cleanPath("/a//b//c/"))
+	assert.Equal(t, "/", cleanPath("/."))
+	assert.Equal(t, "/", cleanPath("."))
+	assert.Equal(t, "/", cleanPath(".."))
+	assert.Equal(t, "/", cleanPath("/./a/.."))
+	assert.Equal(t, "/", cleanPath("/a/.."))
+	assert.Equal(t, "/", cleanPath("/.."))
 
 	// filepath.ToSlash does not touch \ as char on unix systems, so os.PathSeparator is used for windows compatible tests
 	bslash := string(os.PathSeparator)
