@@ -69,13 +69,14 @@ func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
 	return &r, ok
 }
 
-func (rs *RequestServer) closeRequest(handle string) {
+func (rs *RequestServer) closeRequest(handle string) error {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
 	if r, ok := rs.openRequests[handle]; ok {
-		r.close()
 		delete(rs.openRequests, handle)
+		return r.close()
 	}
+	return syscall.EBADF
 }
 
 // Close the read/write/closer to trigger exiting the main server loop
@@ -129,8 +130,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			rpkt = sshFxVersionPacket{sftpProtocolVersion, nil}
 		case *sshFxpClosePacket:
 			handle := pkt.getHandle()
-			rs.closeRequest(handle)
-			rpkt = statusFromError(pkt, nil)
+			rpkt = statusFromError(pkt, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
 			rpkt = cleanPacketPath(pkt)
 		case isOpener:

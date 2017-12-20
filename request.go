@@ -123,15 +123,16 @@ func (r *Request) getLister() ListerAt {
 }
 
 // Close reader/writer if possible
-func (r *Request) close() {
+func (r *Request) close() error {
 	rd := r.getReader()
 	if c, ok := rd.(io.Closer); ok {
-		c.Close()
+		return c.Close()
 	}
 	wt := r.getWriter()
 	if c, ok := wt.(io.Closer); ok {
-		c.Close()
+		return c.Close()
 	}
+	return nil
 }
 
 // called from worker to handle packet/request
