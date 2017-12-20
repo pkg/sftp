@@ -123,9 +123,6 @@ func (rs *RequestServer) Serve() error {
 
 func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 	for pkt := range pktChan {
-		if p, ok := pkt.(*sshFxpExtendedPacket); ok {
-			pkt = p.SpecificPacket
-		}
 		var rpkt responsePacket
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:

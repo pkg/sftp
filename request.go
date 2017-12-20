@@ -21,9 +21,8 @@ type Request struct {
 	Method   string
 	Filepath string
 	Flags    uint32
-	Attrs    []byte      // convert to sub-struct
-	Target   string      // for renames and sym-links
-	Packet   interface{} // original request packet, can be used to distinguish flattened methods.
+	Attrs    []byte // convert to sub-struct
+	Target   string // for renames and sym-links
 	// reader/writer/readdir from handlers
 	stateLock *sync.RWMutex
 	state     *state
@@ -51,15 +50,12 @@ func (pd packet_data) id() uint32 {
 func requestFromPacket(pkt hasPath) *Request {
 	method := requestMethod(pkt)
 	request := NewRequest(method, pkt.getPath())
-	request.Packet = pkt
 	switch p := pkt.(type) {
 	case *sshFxpSetstatPacket:
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
 		request.Target = cleanPath(p.Newpath)
-	case *sshFxpExtendedPacketPosixRename:
-		request.Target = filepath.Clean(p.Newpath)
 	case *sshFxpSymlinkPacket:
 		request.Target = cleanPath(p.Linkpath)
 	}
@@ -329,7 +325,7 @@ func requestMethod(p hasPath) (method string) {
 		method = "Open"
 	case *sshFxpSetstatPacket:
 		method = "Setstat"
-	case *sshFxpRenamePacket, *sshFxpExtendedPacketPosixRename:
+	case *sshFxpRenamePacket:
 		method = "Rename"
 	case *sshFxpSymlinkPacket:
 		method = "Symlink"
