@@ -3,9 +3,9 @@ package sftp
 import (
 	"encoding"
 	"io"
+	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -197,12 +197,13 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 	}
 }
 
-func cleanPath(path string) string {
-	cleanSlashPath := filepath.ToSlash(filepath.Clean(path))
-	if !strings.HasPrefix(cleanSlashPath, "/") {
-		return "/" + cleanSlashPath
+// Makes sure we have a clean POSIX (/) absolute path to work with
+func cleanPath(p string) string {
+	p = filepath.ToSlash(p)
+	if !path.IsAbs(p) {
+		p = "/" + p
 	}
-	return cleanSlashPath
+	return path.Clean(p)
 }
 
 // Wrap underlying connection methods to use packetManager
