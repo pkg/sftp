@@ -127,6 +127,20 @@ func TestRequestWrite(t *testing.T) {
 	assert.Equal(t, f.content, []byte("hello"))
 }
 
+func TestRequestWriteEmpty(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	n, err := putTestFile(p.cli, "/foo", "")
+	assert.Nil(t, err)
+	assert.Equal(t, 0, n)
+	r := p.testHandler()
+	f, err := r.fetch("/foo")
+	if assert.Nil(t, err) {
+		assert.False(t, f.isdir)
+		assert.Equal(t, f.content, []byte(""))
+	}
+}
+
 // needs fail check
 func TestRequestFilename(t *testing.T) {
 	p := clientRequestServerPair(t)
