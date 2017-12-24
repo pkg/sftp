@@ -82,19 +82,20 @@ func (r *Request) lsInc(offset int64) {
 }
 
 // manage file read/write state
-func (r *Request) setFileState(s interface{}) {
+func (r *Request) setWriterState(wa io.WriterAt) {
 	r.stateLock.Lock()
 	defer r.stateLock.Unlock()
-	switch s := s.(type) {
-	case io.WriterAt:
-		r.state.writerAt = s
-	case io.ReaderAt:
-		r.state.readerAt = s
-	case ListerAt:
-		r.state.listerAt = s
-	case int64:
-		r.state.lsoffset = s
-	}
+	r.state.writerAt = wa
+}
+func (r *Request) setReaderState(ra io.ReaderAt) {
+	r.stateLock.Lock()
+	defer r.stateLock.Unlock()
+	r.state.readerAt = ra
+}
+func (r *Request) setListerState(la ListerAt) {
+	r.stateLock.Lock()
+	defer r.stateLock.Unlock()
+	r.state.listerAt = la
 }
 
 func (r *Request) getWriter() io.WriterAt {
@@ -170,7 +171,7 @@ func fileget(h FileReader, r *Request, pd packet_data) responsePacket {
 		if err != nil {
 			return statusFromError(pd, err)
 		}
-		r.setFileState(reader)
+		r.setReaderState(reader)
 	}
 
 	data := make([]byte, clamp(pd.length, maxTxPacket))
@@ -195,7 +196,7 @@ func fileput(h FileWriter, r *Request, pd packet_data) responsePacket {
 		if err != nil {
 			return statusFromError(pd, err)
 		}
-		r.setFileState(writer)
+		r.setWriterState(writer)
 	}
 
 	_, err = writer.WriteAt(pd.data, pd.offset)
@@ -231,7 +232,7 @@ func filelist(h FileLister, r *Request, pd packet_data) responsePacket {
 		if err != nil {
 			return statusFromError(pd, err)
 		}
-		r.setFileState(lister)
+		r.setListerState(lister)
 	}
 
 	offset := r.lsNext()
