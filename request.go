@@ -24,8 +24,8 @@ type Request struct {
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// reader/writer/readdir from handlers
-	stateLock *sync.RWMutex
-	state     *state
+	stateLock sync.RWMutex
+	state     state
 }
 
 type state struct {
@@ -62,16 +62,9 @@ func requestFromPacket(pkt hasPath) *Request {
 	return request
 }
 
-func newRequest() *Request {
-	return &Request{state: &state{}, stateLock: &sync.RWMutex{}}
-}
-
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
-	request := newRequest()
-	request.Method = method
-	request.Filepath = cleanPath(path)
-	return request
+	return &Request{Method: method, Filepath: cleanPath(path)}
 }
 
 // Returns current offset for file list
@@ -304,27 +297,18 @@ func filelist(h FileLister, r *Request, pd packet_data) responsePacket {
 	}
 }
 
-// file data for additional read/write packets
-func (r *Request) updateMethod(p hasHandle) error {
-	switch p := p.(type) {
-	case *sshFxpReadPacket:
-		r.Method = "Get"
-	case *sshFxpWritePacket:
-		r.Method = "Put"
-	case *sshFxpReaddirPacket:
-		r.Method = "List"
-	default:
-		return errors.Errorf("unexpected packet type %T", p)
-	}
-	return nil
-}
-
 // init attributes of request object from packet data
-func requestMethod(p hasPath) (method string) {
+func requestMethod(p requestPacket) (method string) {
 	switch p.(type) {
+	case *sshFxpReadPacket:
+		method = "Get"
+	case *sshFxpWritePacket:
+		method = "Put"
+	case *sshFxpReaddirPacket:
+		method = "List"
 	case *sshFxpOpenPacket, *sshFxpOpendirPacket:
 		method = "Open"
-	case *sshFxpSetstatPacket:
+	case *sshFxpSetstatPacket, *sshFxpFsetstatPacket:
 		method = "Setstat"
 	case *sshFxpRenamePacket:
 		method = "Rename"
@@ -332,7 +316,7 @@ func requestMethod(p hasPath) (method string) {
 		method = "Symlink"
 	case *sshFxpRemovePacket:
 		method = "Remove"
-	case *sshFxpStatPacket, *sshFxpLstatPacket:
+	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket:
 		method = "Stat"
 	case *sshFxpRmdirPacket:
 		method = "Rmdir"

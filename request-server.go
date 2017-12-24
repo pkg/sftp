@@ -29,7 +29,7 @@ type RequestServer struct {
 	*serverConn
 	Handlers        Handlers
 	pktMgr          *packetManager
-	openRequests    map[string]Request
+	openRequests    map[string]*Request
 	openRequestLock sync.RWMutex
 	handleCount     int
 }
@@ -47,26 +47,44 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 		serverConn:   svrConn,
 		Handlers:     h,
 		pktMgr:       newPktMgr(svrConn),
-		openRequests: make(map[string]Request),
+		openRequests: make(map[string]*Request),
 	}
 }
 
-// Note that we are explicitly saving the Request as a value.
+// New Open packet/Request
 func (rs *RequestServer) nextRequest(r *Request) string {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
 	rs.handleCount++
 	handle := strconv.Itoa(rs.handleCount)
-	rs.openRequests[handle] = *r
+	rs.openRequests[handle] = r
 	return handle
 }
 
-// Returns pointer to new copy of Request object
-func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
+// Returns Request from openRequests, bool is false if it is missing
+// If the method is different, save/return a new Request w/ that Method.
+//
+// The Requests in openRequests work essentially as open file descriptors that
+// you can do different things with. What you are doing with it are denoted by
+// the first packet of that type (read/write/etc). We create a new Request when
+// it changes to set the request.Method attribute in a thread safe way.
+func (rs *RequestServer) getRequest(handle, method string) (*Request, bool) {
 	rs.openRequestLock.RLock()
-	defer rs.openRequestLock.RUnlock()
 	r, ok := rs.openRequests[handle]
-	return &r, ok
+	rs.openRequestLock.RUnlock()
+	if !ok || r.Method == method {
+		return r, ok
+	}
+	// if we make it here we need to replace the request
+	rs.openRequestLock.Lock()
+	defer rs.openRequestLock.Unlock()
+	r, ok = rs.openRequests[handle]
+	if !ok || r.Method == method { // re-check needed b/c lock race
+		return r, ok
+	}
+	r = &Request{Method: method, Filepath: r.Filepath, state: r.state}
+	rs.openRequests[handle] = r
+	return r, ok
 }
 
 func (rs *RequestServer) closeRequest(handle string) error {
@@ -138,7 +156,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case *sshFxpFstatPacket:
 			handle := pkt.getHandle()
-			request, ok := rs.getRequest(handle)
+			request, ok := rs.getRequest(handle, requestMethod(pkt))
 			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
@@ -148,7 +166,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			}
 		case *sshFxpFsetstatPacket:
 			handle := pkt.getHandle()
-			request, ok := rs.getRequest(handle)
+			request, ok := rs.getRequest(handle, requestMethod(pkt))
 			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
@@ -160,12 +178,8 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			}
 		case hasHandle:
 			handle := pkt.getHandle()
-			request, ok := rs.getRequest(handle)
-			uerr := request.updateMethod(pkt)
-			if !ok || uerr != nil {
-				if uerr == nil {
-					uerr = syscall.EBADF
-				}
+			request, ok := rs.getRequest(handle, requestMethod(pkt))
+			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
 				rpkt = request.call(rs.Handlers, pkt)
