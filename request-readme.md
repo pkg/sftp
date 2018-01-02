@@ -25,13 +25,18 @@ then sends to the client.
 ### Filewrite(*Request) (io.Writer, error)
 
 Handler for "Put" method and returns an io.Writer for the file which the server
-then writes the uploaded file to.
+then writes the uploaded file to. The file opening "pflags" are currently
+preserved in the Request.Flags field as a 32bit bitmask value. See the [SFTP
+spec](https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-6.3) for
+details.
 
 ###    Filecmd(*Request) error
 
 Handles "SetStat", "Rename", "Rmdir", "Mkdir"  and "Symlink" methods. Makes the
 appropriate changes and returns nil for success or an filesystem like error
-(eg. os.ErrNotExist).
+(eg. os.ErrNotExist). The attributes are currently propagated in their raw form
+([]byte) and will need to be unmarshalled to be useful. See the respond method
+on sshFxpSetstatPacket for example of you might want to do this.
 
 ### Fileinfo(*Request) ([]os.FileInfo, error)
 
@@ -44,5 +49,4 @@ Readlink).
 
 - Add support for API users to see trace/debugging info of what is going on
 inside SFTP server.
-- Consider adding support for SFTP file append only mode.
-
+- Unmarshal the file attributes into a structure on the Request object.
