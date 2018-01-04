@@ -11,7 +11,8 @@ manner.
 The Request structure has 5 public fields which you will deal with.
 
 - Method (string) - string name of incoming call
-- Filepath (string) - path of file to act on
+- Filepath (string) - POSIX path of file to act on
+- Flags (uint32) - 32bit bitmask value of file open/create flags
 - Attrs ([]byte) - byte string of file attribute data
 - Target (string) - target path for renames and sym-links
 
