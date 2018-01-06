@@ -51,6 +51,8 @@ func requestFromPacket(pkt hasPath) *Request {
 	method := requestMethod(pkt)
 	request := NewRequest(method, pkt.getPath())
 	switch p := pkt.(type) {
+	case *sshFxpOpenPacket:
+		request.Flags = p.Flags
 	case *sshFxpSetstatPacket:
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
