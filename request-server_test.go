@@ -280,11 +280,12 @@ func TestRequestFstat(t *testing.T) {
 	fp, err := p.cli.Open("/foo")
 	assert.Nil(t, err)
 	fi, err := fp.Stat()
-	assert.Nil(t, err)
-	assert.Equal(t, fi.Name(), "foo")
-	assert.Equal(t, fi.Size(), int64(5))
-	assert.Equal(t, fi.Mode(), os.FileMode(0644))
-	assert.NoError(t, testOsSys(fi.Sys()))
+	if assert.NoError(t, err) {
+		assert.Equal(t, fi.Name(), "foo")
+		assert.Equal(t, fi.Size(), int64(5))
+		assert.Equal(t, fi.Mode(), os.FileMode(0644))
+		assert.NoError(t, testOsSys(fi.Sys()))
+	}
 }
 
 func TestRequestStatFail(t *testing.T) {
