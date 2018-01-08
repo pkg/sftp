@@ -141,7 +141,6 @@ func TestRequestWriteEmpty(t *testing.T) {
 	}
 }
 
-// needs fail check
 func TestRequestFilename(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -149,8 +148,10 @@ func TestRequestFilename(t *testing.T) {
 	assert.Nil(t, err)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, f.Name(), "foo")
+	f, err = r.fetch("/bar")
+	assert.Error(t, err)
 }
 
 func TestRequestRead(t *testing.T) {
