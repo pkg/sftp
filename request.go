@@ -191,28 +191,13 @@ func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
 
 	data, offset, _ := packetData(pkt)
 	_, err = writer.WriteAt(data, offset)
-	if err != nil {
-		return statusFromError(pkt, err)
-	}
-
-	return &sshFxpStatusPacket{
-		ID: pkt.id(),
-		StatusError: StatusError{
-			Code: ssh_FX_OK,
-		}}
+	return statusFromError(pkt, err)
 }
 
 // wrap FileCmder handler
 func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 	err := h.Filecmd(r)
-	if err != nil {
-		return statusFromError(pkt, err)
-	}
-	return &sshFxpStatusPacket{
-		ID: pkt.id(),
-		StatusError: StatusError{
-			Code: ssh_FX_OK,
-		}}
+	return statusFromError(pkt, err)
 }
 
 // wrap FileLister handler
