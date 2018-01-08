@@ -151,14 +151,19 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 			rpkt = statusFromError(pkt, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
 			rpkt = cleanPacketPath(pkt)
-		case isOpener:
+		case *sshFxpOpendirPacket:
 			request := requestFromPacket(pkt)
 			handle := rs.nextRequest(request)
-			p, ok := pkt.(*sshFxpOpenPacket)
-			if ok && p.hasPflags(ssh_FXF_CREAT) {
-				request.call(rs.Handlers, pkt)
-			}
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
+		case *sshFxpOpenPacket:
+			request := requestFromPacket(pkt)
+			handle := rs.nextRequest(request)
+			rpkt = sshFxpHandlePacket{pkt.id(), handle}
+			if pkt.hasPflags(ssh_FXF_CREAT) {
+				if p := request.call(rs.Handlers, pkt); !isOk(p) {
+					rpkt = p // if error in write, return it
+				}
+			}
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle, requestMethod(pkt))
@@ -182,6 +187,13 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 	return nil
 }
 
+// True is responsePacket is an OK status packet
+func isOk(rpkt responsePacket) bool {
+	p, ok := rpkt.(sshFxpStatusPacket)
+	return ok && p.StatusError.Code == ssh_FX_OK
+}
+
+// clean and return name packet for file
 func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 	path := cleanPath(pkt.getPath())
 	return &sshFxpNamePacket{

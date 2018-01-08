@@ -131,7 +131,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	n, err := putTestFile(p.cli, "/foo", "")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, 0, n)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
@@ -139,13 +139,18 @@ func TestRequestWriteEmpty(t *testing.T) {
 		assert.False(t, f.isdir)
 		assert.Equal(t, f.content, []byte(""))
 	}
+	// lets test with an error
+	writeErr = os.ErrInvalid
+	n, err = putTestFile(p.cli, "/bar", "")
+	assert.Error(t, err)
+	writeErr = nil
 }
 
 func TestRequestFilename(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
 	assert.NoError(t, err)
