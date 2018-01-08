@@ -159,28 +159,6 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 				request.call(rs.Handlers, pkt)
 			}
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
-		case *sshFxpFstatPacket:
-			handle := pkt.getHandle()
-			request, ok := rs.getRequest(handle, requestMethod(pkt))
-			if !ok {
-				rpkt = statusFromError(pkt, syscall.EBADF)
-			} else {
-				request = requestFromPacket(
-					&sshFxpStatPacket{ID: pkt.id(), Path: request.Filepath})
-				rpkt = request.call(rs.Handlers, pkt)
-			}
-		case *sshFxpFsetstatPacket:
-			handle := pkt.getHandle()
-			request, ok := rs.getRequest(handle, requestMethod(pkt))
-			if !ok {
-				rpkt = statusFromError(pkt, syscall.EBADF)
-			} else {
-				request = requestFromPacket(
-					&sshFxpSetstatPacket{ID: pkt.id(), Path: request.Filepath,
-						Flags: pkt.Flags, Attrs: pkt.Attrs,
-					})
-				rpkt = request.call(rs.Handlers, pkt)
-			}
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle, requestMethod(pkt))
