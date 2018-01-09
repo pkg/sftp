@@ -125,7 +125,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 	switch r.Method {
 	case "Get":
 		return fileget(handlers.FileGet, r, pkt)
-	case "Put", "Open": // add "Append" to handle append only file writes
+	case "Put", "Open":
 		return fileput(handlers.FilePut, r, pkt)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		return filecmd(handlers.FileCmd, r, pkt)
