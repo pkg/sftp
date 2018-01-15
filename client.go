@@ -24,27 +24,55 @@ var InternalInconsistency = errors.New("internal inconsistency")
 // A ClientOption is a function which applies configuration to a Client.
 type ClientOption func(*Client) error
 
-// This is based on Openssh's max accepted size of 1<<18 - overhead
-const maxMaxPacket = (1 << 18) - 1024
-
-// MaxPacket sets the maximum size of the payload. The size param must be
-// between 32768 (1<<15) and 261120 ((1 << 18) - 1024). The minimum size is
-// given by the RFC, while the maximum size is a de-facto standard based on
-// Openssh's SFTP server which won't accept packets much larger than that.
+// MaxPacketChecked sets the maximum size of the payload, measured in bytes.
+// This option only accepts sizes servers should support, ie. <= 32768 bytes.
 //
-// Note if you aren't using Openssh's sftp server and get the error "failed to
-// send packet header: EOF" when copying a large file try lowering this number.
-func MaxPacket(size int) ClientOption {
+// If you get the error "failed to send packet header: EOF" when copying a
+// large file, try lowering this number.
+//
+// The default packet size is 32768 bytes.
+func MaxPacketChecked(size int) ClientOption {
 	return func(c *Client) error {
-		if size < 1<<15 {
-			return errors.Errorf("size must be greater or equal to 32k")
+		if size < 1 {
+			return errors.Errorf("size must be greater or equal to 1")
 		}
-		if size > maxMaxPacket {
-			return errors.Errorf("max packet size is too large (see docs)")
+		if size > 32768 {
+			return errors.Errorf("sizes larger than 32KB might not work with all servers")
 		}
 		c.maxPacket = size
 		return nil
 	}
+}
+
+// MaxPacketUnchecked sets the maximum size of the payload, measured in bytes.
+// It accepts sizes larger than the 32768 bytes all servers should support.
+// Only use a setting higher than 32768 if your application always connects to
+// the same server or after sufficiently broad testing.
+//
+// If you get the error "failed to send packet header: EOF" when copying a
+// large file, try lowering this number.
+//
+// The default packet size is 32768 bytes.
+func MaxPacketUnchecked(size int) ClientOption {
+	return func(c *Client) error {
+		if size < 1 {
+			return errors.Errorf("size must be greater or equal to 1")
+		}
+		c.maxPacket = size
+		return nil
+	}
+}
+
+// MaxPacket sets the maximum size of the payload, measured in bytes.
+// This option only accepts sizes servers should support, ie. <= 32768 bytes.
+// This is a synonym for MaxPacketChecked that provides backward compatibility.
+//
+// If you get the error "failed to send packet header: EOF" when copying a
+// large file, try lowering this number.
+//
+// The default packet size is 32768 bytes.
+func MaxPacket(size int) ClientOption {
+	return MaxPacketChecked(size)
 }
 
 // NewClient creates a new SFTP client on conn, using zero or more option
