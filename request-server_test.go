@@ -140,10 +140,10 @@ func TestRequestWriteEmpty(t *testing.T) {
 		assert.Equal(t, f.content, []byte(""))
 	}
 	// lets test with an error
-	writeErr = os.ErrInvalid
+	r.returnErr(os.ErrInvalid)
 	n, err = putTestFile(p.cli, "/bar", "")
 	assert.Error(t, err)
-	writeErr = nil
+	r.returnErr(nil)
 }
 
 func TestRequestFilename(t *testing.T) {
