@@ -96,15 +96,15 @@ func (h Handlers) getOutString() string {
 
 var errTest = errors.New("test error")
 
-func (h *Handlers) returnError() {
+func (h *Handlers) returnError(err error) {
 	handler := h.FilePut.(*testHandler)
-	handler.err = errTest
+	handler.err = err
 }
 
 func statusOk(t *testing.T, p interface{}) {
-	if pkt, ok := p.(*sshFxpStatusPacket); ok {
-		assert.Equal(t, pkt.StatusError.Code, uint32(ssh_FX_OK))
-	}
+	pkt := p.(sshFxpStatusPacket)
+	assert.Equal(t, pkt.StatusError.Code, uint32(ssh_FX_OK),
+		"sshFxpStatusPacket not OK\n", pkt.StatusError.msg)
 }
 
 // fake/test packet
@@ -135,6 +135,16 @@ func TestRequestGet(t *testing.T) {
 	}
 }
 
+func TestRequestCustomError(t *testing.T) {
+	handlers := newTestHandlers()
+	request := testRequest("Stat")
+	pkt := fakePacket{myid: 1}
+	cmdErr := errors.New("stat not supported")
+	handlers.returnError(cmdErr)
+	rpkt := request.call(handlers, pkt)
+	assert.Equal(t, rpkt, statusFromError(rpkt, cmdErr))
+}
+
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
@@ -154,7 +164,7 @@ func TestRequestCmdr(t *testing.T) {
 	rpkt := request.call(handlers, pkt)
 	statusOk(t, rpkt)
 
-	handlers.returnError()
+	handlers.returnError(errTest)
 	rpkt = request.call(handlers, pkt)
 	assert.Equal(t, rpkt, statusFromError(rpkt, errTest))
 }
