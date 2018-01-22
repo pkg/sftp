@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"context"
 	"io"
 	"os"
 	"path"
@@ -26,6 +27,7 @@ type Request struct {
 	// reader/writer/readdir from handlers
 	stateLock sync.RWMutex
 	state     state
+	ctx       context.Context
 }
 
 type state struct {
@@ -56,6 +58,41 @@ func requestFromPacket(pkt hasPath) *Request {
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
 	return &Request{Method: method, Filepath: cleanPath(path)}
+}
+
+// Context returns the request's context. To change the context,
+// use WithContext.
+//
+// The returned context is always non-nil; it defaults to the
+// background context.
+//
+// For incoming server requests, the context is canceled when the
+// client's connection closes.
+func (r *Request) Context() context.Context {
+	if r.ctx != nil {
+		return r.ctx
+	}
+	return context.Background()
+}
+
+// WithContext returns a copy of r with its context changed to ctx.
+// The provided ctx must be non-nil.
+func (r *Request) WithContext(ctx context.Context) *Request {
+	if ctx == nil {
+		panic("nil context")
+	}
+	r.stateLock.Lock()
+	defer r.stateLock.Unlock()
+	r2 := &Request{
+		Method:   r.Method,
+		Filepath: r.Filepath,
+		Target:   r.Target,
+		Flags:    r.Flags,
+		Attrs:    r.Attrs,
+		state:    r.state,
+		ctx:      ctx,
+	}
+	return r2
 }
 
 // Returns current offset for file list
