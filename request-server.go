@@ -59,8 +59,8 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 
 // New Open packet/Request
 func (rs *RequestServer) nextRequest(r *Request) string {
-	rs.openRequestLock.Lock()
-	defer rs.openRequestLock.Unlock()
+	rs.openRequestLock.RLock()
+	defer rs.openRequestLock.RUnlock()
 	rs.handleCount++
 	handle := strconv.Itoa(rs.handleCount)
 
@@ -73,7 +73,7 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 	return handle
 }
 
-// Returns openRequest from openRequests, bool is false if it is missing
+// Returns Request from openRequests, bool is false if it is missing
 // If the method is different, save/return a new Request w/ that Method.
 //
 // The Requests in openRequests work essentially as open file descriptors that
@@ -86,7 +86,8 @@ func (rs *RequestServer) getRequest(handle, method string) (*Request, bool) {
 	rs.openRequestLock.RUnlock()
 	if !ok {
 		return nil, ok
-	} else if or.r.Method == method {
+	}
+	if or.r.Method == method {
 		return or.r, ok
 	}
 	// if we make it here we need to replace the request
@@ -95,7 +96,8 @@ func (rs *RequestServer) getRequest(handle, method string) (*Request, bool) {
 	or, ok = rs.openRequests[handle]
 	if !ok {
 		return nil, ok
-	} else if or.r.Method == method { // re-check needed b/c lock race
+	}
+	if or.r.Method == method { // re-check needed b/c lock race
 		return or.r, ok
 	}
 	or = &openRequest{
