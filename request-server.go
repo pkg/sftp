@@ -59,8 +59,8 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 
 // New Open packet/Request
 func (rs *RequestServer) nextRequest(r *Request) string {
-	rs.openRequestLock.RLock()
-	defer rs.openRequestLock.RUnlock()
+	rs.openRequestLock.Lock()
+	defer rs.openRequestLock.Unlock()
 	rs.handleCount++
 	handle := strconv.Itoa(rs.handleCount)
 

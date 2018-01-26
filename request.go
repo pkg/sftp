@@ -81,8 +81,8 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
 	}
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
+	r.stateLock.RLock()
+	defer r.stateLock.RUnlock()
 	r2 := &Request{
 		Method:   r.Method,
 		Filepath: r.Filepath,
