@@ -564,6 +564,8 @@ func statusFromError(p ider, err error) sshFxpStatusPacket {
 		if errno, ok := e.Err.(syscall.Errno); ok {
 			ret.StatusError.Code = translateErrno(errno)
 		}
+	case fxerr:
+		ret.StatusError.Code = uint32(e)
 	default:
 		switch e {
 		case io.EOF:
