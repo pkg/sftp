@@ -137,6 +137,13 @@ func (rs *RequestServer) Serve() error {
 	close(pktChan) // shuts down sftpServerWorkers
 	wg.Wait()      // wait for all workers to exit
 
+	// make sure all open requests are properly closed
+	// (eg. possible on dropped connections, client crashes, etc.)
+	for handle, req := range rs.openRequests {
+		delete(rs.openRequests, handle)
+		req.close()
+	}
+
 	return err
 }
 
@@ -175,6 +182,7 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 		case hasPath:
 			request := requestFromPacket(pkt)
 			rpkt = request.call(rs.Handlers, pkt)
+			request.close()
 		default:
 			return errors.Errorf("unexpected packet type %T", pkt)
 		}
