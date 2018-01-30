@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -83,11 +84,19 @@ func TestRequestCache(t *testing.T) {
 	bh := p.svr.nextRequest(bar)
 	assert.Len(t, p.svr.openRequests, 2)
 	_foo, ok := p.svr.getRequest(fh, "")
-	assert.Equal(t, foo, _foo)
+	assert.Equal(t, foo.Method, _foo.Method)
+	assert.Equal(t, foo.Filepath, _foo.Filepath)
+	assert.Equal(t, foo.Target, _foo.Target)
+	assert.Equal(t, foo.Flags, _foo.Flags)
+	assert.Equal(t, foo.Attrs, _foo.Attrs)
+	assert.Equal(t, foo.state, _foo.state)
+	assert.NotNil(t, _foo.ctx)
+	assert.Equal(t, _foo.Context().Err(), nil, "context is still valid")
 	assert.True(t, ok)
 	_, ok = p.svr.getRequest("zed", "")
 	assert.False(t, ok)
 	p.svr.closeRequest(fh)
+	assert.Equal(t, _foo.Context().Err(), context.Canceled, "context is now canceled")
 	p.svr.closeRequest(bh)
 	assert.Len(t, p.svr.openRequests, 0)
 }
