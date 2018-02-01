@@ -40,9 +40,11 @@ type state struct {
 }
 
 // New Request initialized based on packet data
-func requestFromPacket(pkt hasPath) *Request {
+func requestFromPacket(ctx context.Context, pkt hasPath) *Request {
 	method := requestMethod(pkt)
 	request := NewRequest(method, pkt.getPath())
+	request.ctx, request.cancelCtx = context.WithCancel(ctx)
+
 	switch p := pkt.(type) {
 	case *sshFxpOpenPacket:
 		request.Flags = p.Pflags
@@ -59,9 +61,7 @@ func requestFromPacket(pkt hasPath) *Request {
 
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &Request{Method: method, Filepath: cleanPath(path),
-		ctx: ctx, cancelCtx: cancel}
+	return &Request{Method: method, Filepath: cleanPath(path)}
 }
 
 // Context returns the request's context. To change the context,

@@ -79,6 +79,7 @@ func TestRequestCache(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	foo := NewRequest("", "foo")
+	foo.ctx, foo.cancelCtx = context.WithCancel(context.Background())
 	bar := NewRequest("", "bar")
 	fh := p.svr.nextRequest(foo)
 	bh := p.svr.nextRequest(bar)
