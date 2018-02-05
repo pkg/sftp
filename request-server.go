@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"context"
 	"encoding"
 	"io"
 	"path"
@@ -24,12 +25,17 @@ type Handlers struct {
 	FileList FileLister
 }
 
+type openRequest struct {
+	r      *Request
+	cancel context.CancelFunc
+}
+
 // RequestServer abstracts the sftp protocol with an http request-like protocol
 type RequestServer struct {
 	*serverConn
 	Handlers        Handlers
 	pktMgr          *packetManager
-	openRequests    map[string]*Request
+	openRequests    map[string]*openRequest
 	openRequestLock sync.RWMutex
 	handleCount     int
 }
@@ -47,7 +53,7 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
 		serverConn:   svrConn,
 		Handlers:     h,
 		pktMgr:       newPktMgr(svrConn),
-		openRequests: make(map[string]*Request),
+		openRequests: make(map[string]*openRequest),
 	}
 }
 
@@ -57,7 +63,13 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 	defer rs.openRequestLock.Unlock()
 	rs.handleCount++
 	handle := strconv.Itoa(rs.handleCount)
-	rs.openRequests[handle] = r
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r = r.WithContext(ctx)
+	rs.openRequests[handle] = &openRequest{
+		r:      r,
+		cancel: cancel,
+	}
 	return handle
 }
 
@@ -70,29 +82,39 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 // it changes to set the request.Method attribute in a thread safe way.
 func (rs *RequestServer) getRequest(handle, method string) (*Request, bool) {
 	rs.openRequestLock.RLock()
-	r, ok := rs.openRequests[handle]
+	or, ok := rs.openRequests[handle]
 	rs.openRequestLock.RUnlock()
-	if !ok || r.Method == method {
-		return r, ok
+	if !ok {
+		return nil, ok
+	}
+	if or.r.Method == method {
+		return or.r, ok
 	}
 	// if we make it here we need to replace the request
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
-	r, ok = rs.openRequests[handle]
-	if !ok || r.Method == method { // re-check needed b/c lock race
-		return r, ok
+	or, ok = rs.openRequests[handle]
+	if !ok {
+		return nil, ok
 	}
-	r = &Request{Method: method, Filepath: r.Filepath, state: r.state}
-	rs.openRequests[handle] = r
-	return r, ok
+	if or.r.Method == method { // re-check needed b/c lock race
+		return or.r, ok
+	}
+	or = &openRequest{
+		r:      &Request{Method: method, Filepath: or.r.Filepath, state: or.r.state, ctx: or.r.ctx},
+		cancel: or.cancel,
+	}
+	rs.openRequests[handle] = or
+	return or.r, ok
 }
 
 func (rs *RequestServer) closeRequest(handle string) error {
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
-	if r, ok := rs.openRequests[handle]; ok {
+	if or, ok := rs.openRequests[handle]; ok {
+		or.cancel()
 		delete(rs.openRequests, handle)
-		return r.close()
+		return or.r.close()
 	}
 	return syscall.EBADF
 }
