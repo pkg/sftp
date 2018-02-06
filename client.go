@@ -112,9 +112,10 @@ type Client struct {
 	nextid    uint32
 }
 
-// Create creates the named file mode 0666 (before umask), truncating it if
-// it already exists. If successful, methods on the returned File can be
-// used for I/O; the associated file descriptor has mode O_RDWR.
+// Create creates the named file mode 0666 (before umask), truncating it if it
+// already exists. If successful, methods on the returned File can be used for
+// I/O; the associated file descriptor has mode O_RDWR. If you need more
+// control over the flags/mode used to open the file see client.OpenFile.
 func (c *Client) Create(path string) (*File, error) {
 	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
 }
