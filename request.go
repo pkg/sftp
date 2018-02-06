@@ -25,14 +25,14 @@ type Request struct {
 	Attrs    []byte // convert to sub-struct
 	Target   string // for renames and sym-links
 	// reader/writer/readdir from handlers
-	stateLock sync.RWMutex
-	state     state
+	state state
 	// context lasts duration of request
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 }
 
 type state struct {
+	*sync.RWMutex
 	writerAt io.WriterAt
 	readerAt io.ReaderAt
 	listerAt ListerAt
@@ -61,7 +61,8 @@ func requestFromPacket(ctx context.Context, pkt hasPath) *Request {
 
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
-	return &Request{Method: method, Filepath: cleanPath(path)}
+	return &Request{Method: method, Filepath: cleanPath(path),
+		state: state{RWMutex: new(sync.RWMutex)}}
 }
 
 // Context returns the request's context. To change the context,
@@ -85,8 +86,8 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
 	}
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
+	r.state.Lock()
+	defer r.state.Unlock()
 	r2 := &Request{
 		Method:   r.Method,
 		Filepath: r.Filepath,
@@ -101,50 +102,50 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 
 // Returns current offset for file list
 func (r *Request) lsNext() int64 {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
+	r.state.RLock()
+	defer r.state.RUnlock()
 	return r.state.lsoffset
 }
 
 // Increases next offset
 func (r *Request) lsInc(offset int64) {
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
+	r.state.Lock()
+	defer r.state.Unlock()
 	r.state.lsoffset = r.state.lsoffset + offset
 }
 
 // manage file read/write state
 func (r *Request) setWriterState(wa io.WriterAt) {
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
+	r.state.Lock()
+	defer r.state.Unlock()
 	r.state.writerAt = wa
 }
 func (r *Request) setReaderState(ra io.ReaderAt) {
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
+	r.state.Lock()
+	defer r.state.Unlock()
 	r.state.readerAt = ra
 }
 func (r *Request) setListerState(la ListerAt) {
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
+	r.state.Lock()
+	defer r.state.Unlock()
 	r.state.listerAt = la
 }
 
 func (r *Request) getWriter() io.WriterAt {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
+	r.state.RLock()
+	defer r.state.RUnlock()
 	return r.state.writerAt
 }
 
 func (r *Request) getReader() io.ReaderAt {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
+	r.state.RLock()
+	defer r.state.RUnlock()
 	return r.state.readerAt
 }
 
 func (r *Request) getLister() ListerAt {
-	r.stateLock.RLock()
-	defer r.stateLock.RUnlock()
+	r.state.RLock()
+	defer r.state.RUnlock()
 	return r.state.listerAt
 }
 

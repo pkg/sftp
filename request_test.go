@@ -1,6 +1,8 @@
 package sftp
 
 import (
+	"sync"
+
 	"github.com/stretchr/testify/assert"
 
 	"bytes"
@@ -60,6 +62,7 @@ func testRequest(method string) *Request {
 		Method:   method,
 		Attrs:    []byte("foo"),
 		Target:   "foo",
+		state:    state{RWMutex: new(sync.RWMutex)},
 	}
 	return request
 }
