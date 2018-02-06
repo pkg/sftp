@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"context"
 	"encoding"
 	"io"
 	"path"
@@ -102,12 +103,14 @@ func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
 // Serve requests for user session
 func (rs *RequestServer) Serve() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var wg sync.WaitGroup
 	runWorker := func(ch requestChan) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := rs.packetWorker(ch); err != nil {
+			if err := rs.packetWorker(ctx, ch); err != nil {
 				rs.conn.Close() // shuts down recvPacket
 			}
 		}()
@@ -137,10 +140,19 @@ func (rs *RequestServer) Serve() error {
 	close(pktChan) // shuts down sftpServerWorkers
 	wg.Wait()      // wait for all workers to exit
 
+	// make sure all open requests are properly closed
+	// (eg. possible on dropped connections, client crashes, etc.)
+	for handle, req := range rs.openRequests {
+		delete(rs.openRequests, handle)
+		req.close()
+	}
+
 	return err
 }
 
-func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
+func (rs *RequestServer) packetWorker(
+	ctx context.Context, pktChan chan requestPacket,
+) error {
 	for pkt := range pktChan {
 		var rpkt responsePacket
 		switch pkt := pkt.(type) {
@@ -152,11 +164,11 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 		case *sshFxpRealpathPacket:
 			rpkt = cleanPacketPath(pkt)
 		case *sshFxpOpendirPacket:
-			request := requestFromPacket(pkt)
+			request := requestFromPacket(ctx, pkt)
 			handle := rs.nextRequest(request)
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case *sshFxpOpenPacket:
-			request := requestFromPacket(pkt)
+			request := requestFromPacket(ctx, pkt)
 			handle := rs.nextRequest(request)
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 			if pkt.hasPflags(ssh_FXF_CREAT) {
@@ -173,8 +185,9 @@ func (rs *RequestServer) packetWorker(pktChan chan requestPacket) error {
 				rpkt = request.call(rs.Handlers, pkt)
 			}
 		case hasPath:
-			request := requestFromPacket(pkt)
+			request := requestFromPacket(ctx, pkt)
 			rpkt = request.call(rs.Handlers, pkt)
+			request.close()
 		default:
 			return errors.Errorf("unexpected packet type %T", pkt)
 		}
