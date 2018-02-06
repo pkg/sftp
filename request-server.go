@@ -83,7 +83,8 @@ func (rs *RequestServer) getRequest(handle, method string) (*Request, bool) {
 	if !ok || r.Method == method { // re-check needed b/c lock race
 		return r, ok
 	}
-	r = &Request{Method: method, Filepath: r.Filepath, state: r.state}
+	r = r.copy()
+	r.Method = method
 	rs.openRequests[handle] = r
 	return r, ok
 }

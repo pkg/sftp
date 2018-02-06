@@ -65,6 +65,15 @@ func NewRequest(method, path string) *Request {
 		state: state{RWMutex: new(sync.RWMutex)}}
 }
 
+// shallow copy of existing request
+func (r *Request) copy() *Request {
+	r.state.Lock()
+	defer r.state.Unlock()
+	r2 := new(Request)
+	*r2 = *r
+	return r2
+}
+
 // Context returns the request's context. To change the context,
 // use WithContext.
 //
@@ -86,17 +95,9 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
 	}
-	r.state.Lock()
-	defer r.state.Unlock()
-	r2 := &Request{
-		Method:   r.Method,
-		Filepath: r.Filepath,
-		Target:   r.Target,
-		Flags:    r.Flags,
-		Attrs:    r.Attrs,
-		state:    r.state,
-		ctx:      ctx,
-	}
+	r2 := r.copy()
+	r2.ctx = ctx
+	r2.cancelCtx = nil
 	return r2
 }
 
