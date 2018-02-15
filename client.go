@@ -1062,11 +1062,11 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 // the file is undefined. Seeking relative to the end calls Stat.
 func (f *File) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
-	case os.SEEK_SET:
+	case io.SeekStart:
 		f.offset = uint64(offset)
-	case os.SEEK_CUR:
+	case io.SeekCurrent:
 		f.offset = uint64(int64(f.offset) + offset)
-	case os.SEEK_END:
+	case io.SeekEnd:
 		fi, err := f.Stat()
 		if err != nil {
 			return int64(f.offset), err

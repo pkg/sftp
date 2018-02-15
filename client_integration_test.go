@@ -313,7 +313,7 @@ func (s seek) Generate(r *rand.Rand, _ int) reflect.Value {
 }
 
 func (s seek) set(t *testing.T, r io.ReadSeeker) {
-	if _, err := r.Seek(s.offset, os.SEEK_SET); err != nil {
+	if _, err := r.Seek(s.offset, io.SeekStart); err != nil {
 		t.Fatalf("error while seeking with %+v: %v", s, err)
 	}
 }
@@ -326,16 +326,16 @@ func (s seek) current(t *testing.T, r io.ReadSeeker) {
 		skip = -skip
 	}
 
-	if _, err := r.Seek(mid, os.SEEK_SET); err != nil {
+	if _, err := r.Seek(mid, io.SeekStart); err != nil {
 		t.Fatalf("error seeking to midpoint with %+v: %v", s, err)
 	}
-	if _, err := r.Seek(skip, os.SEEK_CUR); err != nil {
+	if _, err := r.Seek(skip, io.SeekCurrent); err != nil {
 		t.Fatalf("error seeking from %d with %+v: %v", mid, s, err)
 	}
 }
 
 func (s seek) end(t *testing.T, r io.ReadSeeker) {
-	if _, err := r.Seek(-s.offset, os.SEEK_END); err != nil {
+	if _, err := r.Seek(-s.offset, io.SeekEnd); err != nil {
 		t.Fatalf("error seeking from end with %+v: %v", s, err)
 	}
 }
