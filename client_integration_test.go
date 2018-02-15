@@ -62,7 +62,7 @@ func newDelayedWriter(w io.WriteCloser, delay time.Duration) io.WriteCloser {
 	closed := make(chan struct{})
 	go func() {
 		for writeMsg := range ch {
-			time.Sleep(writeMsg.t.Add(delay).Sub(time.Now()))
+			time.Sleep(time.Until(writeMsg.t.Add(delay)))
 			n, err := w.Write(writeMsg.b)
 			if err != nil {
 				panic("write error")

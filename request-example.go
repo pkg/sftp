@@ -139,7 +139,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 				ordered_names = append(ordered_names, fn)
 			}
 		}
-		sort.Sort(sort.StringSlice(ordered_names))
+		sort.Strings(ordered_names)
 		list := make([]os.FileInfo, len(ordered_names))
 		for i, fn := range ordered_names {
 			list[i] = fs.files[fn]

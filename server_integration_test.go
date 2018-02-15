@@ -426,7 +426,7 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 		return "", err
 	}
 	err = cmd.Wait()
-	return string(stdout.Bytes()), err
+	return stdout.String(), err
 }
 
 func TestServerCompareSubsystems(t *testing.T) {
