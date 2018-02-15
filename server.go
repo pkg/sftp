@@ -462,7 +462,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		var uid uint32
 		var gid uint32
 		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
+		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			err = os.Chown(p.Path, int(uid), int(gid))
 		}
@@ -509,7 +509,7 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 		var uid uint32
 		var gid uint32
 		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
+		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			err = f.Chown(int(uid), int(gid))
 		}
