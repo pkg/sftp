@@ -154,6 +154,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	n, err = putTestFile(p.cli, "/bar", "")
 	assert.Error(t, err)
 	r.returnErr(nil)
+	assert.Equal(t, 0, n)
 }
 
 func TestRequestFilename(t *testing.T) {
@@ -165,7 +166,7 @@ func TestRequestFilename(t *testing.T) {
 	f, err := r.fetch("/foo")
 	assert.NoError(t, err)
 	assert.Equal(t, f.Name(), "foo")
-	f, err = r.fetch("/bar")
+	_, err = r.fetch("/bar")
 	assert.Error(t, err)
 }
 
@@ -268,6 +269,7 @@ func TestRequestStat(t *testing.T) {
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
+	assert.NoError(t, err)
 }
 
 // NOTE: Setstat is a noop in the request server tests, but we want to test
