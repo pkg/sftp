@@ -15,8 +15,6 @@ import (
 
 var maxTxPacket uint32 = 1 << 15
 
-type handleHandler func(string) string
-
 // Handlers contains the 4 SFTP server request handlers.
 type Handlers struct {
 	FileGet  FileReader
@@ -237,8 +235,4 @@ func (rs *RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
 		return errors.Errorf("unexpected packet type %T", m)
 	}
 	return nil
-}
-
-func (rs *RequestServer) sendError(p ider, err error) error {
-	return rs.sendPacket(statusFromError(p, err))
 }
