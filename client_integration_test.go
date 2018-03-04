@@ -157,7 +157,7 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 // the *exec.Cmd returned must be defer Wait'd.
 func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exec.Cmd) {
 	if !*testIntegration {
-		t.Skip("skipping intergration test")
+		t.Skip("skipping integration test")
 	}
 
 	if *testServerImpl {

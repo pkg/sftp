@@ -17,7 +17,7 @@ var MaxFilelist int64 = 100
 
 // Request contains the data and state for the incoming service request.
 type Request struct {
-	// Get, Put, Setstat, Stat, Rename, Remove
+	// Get, Put, Setstat, Stat, Rename, Remove, Realpath
 	// Rmdir, Mkdir, List, Readlink, Symlink
 	Method   string
 	Filepath string
@@ -175,7 +175,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 		return fileput(handlers.FilePut, r, pkt)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		return filecmd(handlers.FileCmd, r, pkt)
-	case "List", "Stat", "Readlink":
+	case "List", "Stat", "Realpath", "Readlink":
 		return filelist(handlers.FileList, r, pkt)
 	default:
 		return statusFromError(pkt,
@@ -284,6 +284,19 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			})
 		}
 		return ret
+	case "Realpath":
+		if err != nil && err != io.EOF {
+			return statusFromError(pkt, err)
+		}
+		if n == 0 {
+			return statusFromError(pkt, io.EOF)
+		}
+		return &sshFxpNamePacket{
+			ID: pkt.id(),
+			NameAttrs: []sshFxpNameAttr{{Name: finfo[0].Name(),
+				LongName: finfo[0].Name(),
+				Attrs:    emptyFileStat}},
+		}
 	case "Stat":
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt, err)
@@ -328,6 +341,8 @@ func requestMethod(p requestPacket) (method string) {
 		method = "Get"
 	case *sshFxpWritePacket:
 		method = "Put"
+	case *sshFxpRealpathPacket:
+		method = "Realpath"
 	case *sshFxpReaddirPacket:
 		method = "List"
 	case *sshFxpOpenPacket, *sshFxpOpendirPacket:

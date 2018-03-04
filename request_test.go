@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -40,7 +41,13 @@ func (t *testHandler) Filelist(r *Request) (ListerAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	f, err := os.Open(r.Filepath)
+	fp := r.Filepath
+	if r.Method == "Realpath" {
+		if !filepath.IsAbs(fp){
+			fp = cleanPath("/" + fp)
+		}
+	}
+	f, err := os.Open(fp)
 	if err != nil {
 		return nil, err
 	}
@@ -193,4 +200,16 @@ func testInfoMethod(t *testing.T, method string) {
 	assert.True(t, ok)
 	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
 	assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
+}
+
+func TestRequestRealpath(t *testing.T) {
+	handlers := newTestHandlers()
+	request := testRequest("Realpath")
+	request.Filepath = "."
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt)
+	npkt, ok := rpkt.(*sshFxpNamePacket)
+	assert.True(t, ok)
+	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
+	assert.Equal(t, "/", npkt.NameAttrs[0].Name)
 }

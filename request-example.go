@@ -151,6 +151,16 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 			return nil, err
 		}
 		return listerat([]os.FileInfo{file}), nil
+	case "Realpath":
+		fp := r.Filepath
+		if !filepath.IsAbs(fp){
+			fp = "/" + fp
+		}
+		file, err := fs.fetch(fp)
+		if err != nil {
+			return nil, err
+		}
+		return listerat([]os.FileInfo{file}), nil
 	case "Readlink":
 		file, err := fs.fetch(r.Filepath)
 		if err != nil {

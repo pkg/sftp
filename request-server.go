@@ -161,7 +161,9 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			rpkt = statusFromError(pkt, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
-			rpkt = cleanPacketPath(pkt)
+			request := requestFromPacket(ctx, pkt)
+			handle := rs.nextRequest(request)
+			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 		case *sshFxpOpendirPacket:
 			request := requestFromPacket(ctx, pkt)
 			handle := rs.nextRequest(request)
@@ -205,25 +207,9 @@ func isOk(rpkt responsePacket) bool {
 	return ok && p.StatusError.Code == ssh_FX_OK
 }
 
-// clean and return name packet for file
-func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
-	path := cleanPath(pkt.getPath())
-	return &sshFxpNamePacket{
-		ID: pkt.id(),
-		NameAttrs: []sshFxpNameAttr{{
-			Name:     path,
-			LongName: path,
-			Attrs:    emptyFileStat,
-		}},
-	}
-}
-
-// Makes sure we have a clean POSIX (/) absolute path to work with
+// Makes sure we have a clean POSIX path to work with
 func cleanPath(p string) string {
 	p = filepath.ToSlash(p)
-	if !filepath.IsAbs(p) {
-		p = "/" + p
-	}
 	return path.Clean(p)
 }
 
