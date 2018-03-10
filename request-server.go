@@ -171,7 +171,7 @@ func (rs *RequestServer) packetWorker(
 			handle := rs.nextRequest(request)
 			rpkt = sshFxpHandlePacket{pkt.id(), handle}
 			if pkt.hasPflags(ssh_FXF_CREAT) {
-				if p := request.call(rs.Handlers, pkt); !isOk(p) {
+				if p := request.call(rs.Handlers, pkt); !statusOk(p) {
 					rpkt = p // if error in write, return it
 				}
 			}
@@ -200,7 +200,7 @@ func (rs *RequestServer) packetWorker(
 }
 
 // True is responsePacket is an OK status packet
-func isOk(rpkt responsePacket) bool {
+func statusOk(rpkt responsePacket) bool {
 	p, ok := rpkt.(sshFxpStatusPacket)
 	return ok && p.StatusError.Code == ssh_FX_OK
 }

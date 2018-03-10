@@ -104,7 +104,11 @@ func (h *Handlers) returnError(err error) {
 	handler.err = err
 }
 
-func statusOk(t *testing.T, p interface{}) {
+func getStatusMsg(p interface{}) string {
+	pkt := p.(sshFxpStatusPacket)
+	return pkt.StatusError.msg
+}
+func checkOkStatus(t *testing.T, p interface{}) {
 	pkt := p.(sshFxpStatusPacket)
 	assert.Equal(t, pkt.StatusError.Code, uint32(ssh_FX_OK),
 		"sshFxpStatusPacket not OK\n", pkt.StatusError.msg)
@@ -153,10 +157,10 @@ func TestRequestPut(t *testing.T) {
 	request := testRequest("Put")
 	pkt := &sshFxpWritePacket{0, "a", 0, 5, []byte("file-")}
 	rpkt := request.call(handlers, pkt)
-	statusOk(t, rpkt)
+	checkOkStatus(t, rpkt)
 	pkt = &sshFxpWritePacket{1, "a", 5, 5, []byte("data.")}
 	rpkt = request.call(handlers, pkt)
-	statusOk(t, rpkt)
+	checkOkStatus(t, rpkt)
 	assert.Equal(t, "file-data.", handlers.getOutString())
 }
 
@@ -165,7 +169,7 @@ func TestRequestCmdr(t *testing.T) {
 	request := testRequest("Mkdir")
 	pkt := fakePacket{myid: 1}
 	rpkt := request.call(handlers, pkt)
-	statusOk(t, rpkt)
+	checkOkStatus(t, rpkt)
 
 	handlers.returnError(errTest)
 	rpkt = request.call(handlers, pkt)
