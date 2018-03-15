@@ -1761,6 +1761,68 @@ func TestServerRoughDisconnect2(t *testing.T) {
 	}
 }
 
+// sftp/issue/234 - abrupt shutdown during ReadFrom hangs client
+func TestServerRoughDisconnect3(t *testing.T) {
+	if *testServerImpl {
+		t.Skipf("skipping with -testserver")
+	}
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	rf, err := sftp.OpenFile("/dev/null", os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rf.Close()
+	lf, err := os.Open("/dev/zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cmd.Process.Kill()
+	}()
+
+	io.Copy(rf, lf)
+}
+
+// sftp/issue/234 - also affected Write
+func TestServerRoughDisconnect4(t *testing.T) {
+	if *testServerImpl {
+		t.Skipf("skipping with -testserver")
+	}
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	rf, err := sftp.OpenFile("/dev/null", os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rf.Close()
+	lf, err := os.Open("/dev/zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cmd.Process.Kill()
+	}()
+	b := make([]byte, 32768*200)
+	lf.Read(b)
+	for {
+		_, err = rf.Write(b)
+		if err != nil {
+			break
+		}
+	}
+
+	io.Copy(rf, lf)
+}
+
 // sftp/issue/26 writing to a read only file caused client to loop.
 func TestClientWriteToROFile(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)

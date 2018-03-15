@@ -726,7 +726,7 @@ func (f *File) Read(b []byte) (int, error) {
 	offset := f.offset
 	// maxConcurrentRequests buffer to deal with broadcastErr() floods
 	// also must have a buffer of max value of (desiredInFlight - inFlight)
-	ch := make(chan result, maxConcurrentRequests)
+	ch := make(chan result, maxConcurrentRequests+1)
 	type inflightRead struct {
 		b      []byte
 		offset uint64
@@ -822,7 +822,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 	writeOffset := offset
 	fileSize := uint64(fi.Size())
 	// see comment on same line in Read() above
-	ch := make(chan result, maxConcurrentRequests)
+	ch := make(chan result, maxConcurrentRequests+1)
 	type inflightRead struct {
 		b      []byte
 		offset uint64
@@ -965,7 +965,7 @@ func (f *File) Write(b []byte) (int, error) {
 	desiredInFlight := 1
 	offset := f.offset
 	// see comment on same line in Read() above
-	ch := make(chan result, maxConcurrentRequests)
+	ch := make(chan result, maxConcurrentRequests+1)
 	var firstErr error
 	written := len(b)
 	for len(b) > 0 || inFlight > 0 {
@@ -1026,7 +1026,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	desiredInFlight := 1
 	offset := f.offset
 	// see comment on same line in Read() above
-	ch := make(chan result, maxConcurrentRequests)
+	ch := make(chan result, maxConcurrentRequests+1)
 	var firstErr error
 	read := int64(0)
 	b := make([]byte, f.c.maxPacket)
