@@ -119,6 +119,7 @@ func ReadOnly() ServerOption {
 	}
 }
 
+// RootDirectory configures the root directory of a Server. Files will not be served outside this directory.
 func RootDirectory(root string) ServerOption {
 	return func(s *Server) error {
 		s.systemRoot = root
@@ -135,27 +136,35 @@ type rxPacket struct {
 func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 	for pkt := range pktChan {
 
-		// readonly and permission checks
-		readonly := true
+		// permission checks
 		permiss := true
-		switch pkt := pkt.(type) {
-			case *sshFxpRenamePacket:
-				rel, e := filepath.Rel(svr.systemRoot, pkt.Oldpath)
-				rel2, e2 := filepath.Rel(svr.systemRoot, pkt.Newpath)
-				permiss = e == nil && e2 == nil && !strings.Contains(rel, "..") && !strings.Contains(rel2, "..")
-			case *sshFxpSymlinkPacket:
-				rel, e := filepath.Rel(svr.systemRoot, pkt.Targetpath)
-				rel2, e2 := filepath.Rel(svr.systemRoot, pkt.Linkpath)
-				permiss = e == nil && e2 == nil && !strings.Contains(rel, "..") && !strings.Contains(rel2, "..")
-			case hasPath:
-				rel, e := filepath.Rel(svr.systemRoot, pkt.getPath())
-				permiss = e == nil && !strings.Contains(rel, "..")
-			case notReadOnly:
-				readonly = false
-			case *sshFxpOpenPacket:
-				readonly = pkt.readonly()
-			case *sshFxpExtendedPacket:
-				readonly = pkt.readonly()
+		if svr.systemRoot != "" {
+			switch pkt := pkt.(type) {
+				case *sshFxpRenamePacket:
+					rel, e := filepath.Rel(svr.systemRoot, pkt.Oldpath)
+					rel2, e2 := filepath.Rel(svr.systemRoot, pkt.Newpath)
+					permiss = e == nil && e2 == nil && !strings.Contains(rel, "..") && !strings.Contains(rel2, "..")
+				case *sshFxpSymlinkPacket:
+					rel, e := filepath.Rel(svr.systemRoot, pkt.Targetpath)
+					rel2, e2 := filepath.Rel(svr.systemRoot, pkt.Linkpath)
+					permiss = e == nil && e2 == nil && !strings.Contains(rel, "..") && !strings.Contains(rel2, "..")
+				case hasPath:
+					rel, e := filepath.Rel(svr.systemRoot, pkt.getPath())
+					permiss = e == nil && !strings.Contains(rel, "..")
+			}
+		}
+
+		// readonly checks
+		readonly := true
+		if permiss {
+			switch pkt := pkt.(type) {
+				case notReadOnly:
+					readonly = false
+				case *sshFxpOpenPacket:
+					readonly = pkt.readonly()
+				case *sshFxpExtendedPacket:
+					readonly = pkt.readonly()
+			}	
 		}
 
 		// If server is operating read-only and a write operation is requested, or a restricted file is requested,
