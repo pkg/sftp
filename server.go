@@ -138,7 +138,7 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 
 		// permission checks
 		permiss := true
-		if svr.systemRoot != "" {
+		if stat, err := os.Stat(svr.systemRoot); err == nil && stat.IsDir() {
 			switch pkt := pkt.(type) {
 				case *sshFxpRenamePacket:
 					rel, e := filepath.Rel(svr.systemRoot, pkt.Oldpath)
