@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/user"
 	"path"
-	"strconv"
 	"syscall"
 	"time"
 )
@@ -21,23 +20,14 @@ func runLsStatt(dirent os.FileInfo, statt *syscall.Stat_t) string {
 
 	typeword := runLsTypeWord(dirent)
 	numLinks := statt.Nlink
-	uid := statt.Uid
-	usr, err := user.LookupId(strconv.Itoa(int(uid)))
-	var username string
-	if err == nil {
+	username := fmt.Sprintf("%d", statt.Uid)
+	if usr, err := user.LookupId(username); err == nil {
 		username = usr.Username
-	} else {
-		username = fmt.Sprintf("%d", uid)
 	}
-	gid := statt.Gid
-	grp, err := user.LookupGroupId(strconv.Itoa(int(gid)))
-	var groupname string
-	if err == nil {
+	groupname := fmt.Sprintf("%d", statt.Gid)
+	if grp, err := user.LookupGroupId(groupname); err == nil {
 		groupname = grp.Name
-	} else {
-		groupname = fmt.Sprintf("%d", gid)
 	}
-
 	mtime := dirent.ModTime()
 	monthStr := mtime.Month().String()[0:3]
 	day := mtime.Day()
@@ -50,7 +40,9 @@ func runLsStatt(dirent os.FileInfo, statt *syscall.Stat_t) string {
 		yearOrTime = fmt.Sprintf("%d", year)
 	}
 
-	return fmt.Sprintf("%s %4d %-8s %-8s %8d %s %2d %5s %s", typeword, numLinks, username, groupname, dirent.Size(), monthStr, day, yearOrTime, dirent.Name())
+	return fmt.Sprintf("%s %4d %-8s %-8s %8d %s %2d %5s %s", typeword,
+		numLinks, username, groupname, dirent.Size(), monthStr, day,
+		yearOrTime, dirent.Name())
 }
 
 // ls -l style output for a file, which is in the 'long output' section of a readdir response packet
