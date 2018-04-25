@@ -3,9 +3,11 @@ package sftp
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 	"path"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -678,6 +680,32 @@ func (c *Client) Mkdir(path string) error {
 	default:
 		return unimplementedPacketErr(typ)
 	}
+}
+
+// MkdirAll creates a directory named path, along with any necessary parents,
+// and returns nil, or else returns an error.
+// If path is already a directory, MkdirAll does nothing and returns nil.
+// If path contains a regular file, an error is returned
+func (c *Client) MkdirAll(path string) error {
+	parts := ""
+	for _, p := range strings.Split(path, "/") {
+		if p == "" {
+			continue
+		}
+		parts += "/" + p
+		dir, err := c.Stat(parts)
+		if err == nil {
+			if !dir.IsDir() {
+				return fmt.Errorf("Found a non-directory file on path: %s", parts)
+			}
+			continue
+		}
+		err = c.Mkdir(parts)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // applyOptions applies options functions to the Client.
