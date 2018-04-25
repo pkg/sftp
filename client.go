@@ -3,12 +3,11 @@ package sftp
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"os"
 	"path"
-	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/kr/fs"
@@ -687,23 +686,45 @@ func (c *Client) Mkdir(path string) error {
 // If path is already a directory, MkdirAll does nothing and returns nil.
 // If path contains a regular file, an error is returned
 func (c *Client) MkdirAll(path string) error {
-	parts := ""
-	for _, p := range strings.Split(path, "/") {
-		if p == "" {
-			continue
+	// Most of this code mimics https://golang.org/src/os/path.go?s=514:561#L13
+	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
+	dir, err := c.Stat(path)
+	if err == nil {
+		if dir.IsDir() {
+			return nil
 		}
-		parts += "/" + p
-		dir, err := c.Stat(parts)
-		if err == nil {
-			if !dir.IsDir() {
-				return fmt.Errorf("Found a non-directory file on path: %s", parts)
-			}
-			continue
-		}
-		err = c.Mkdir(parts)
+		return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR}
+	}
+
+	// Slow path: make sure parent exists and then call Mkdir for path.
+	i := len(path)
+	for i > 0 && os.IsPathSeparator(path[i-1]) { // Skip trailing path separator.
+		i--
+	}
+
+	j := i
+	for j > 0 && !os.IsPathSeparator(path[j-1]) { // Scan backward over element.
+		j--
+	}
+
+	if j > 1 {
+		// Create parent
+		err = c.MkdirAll(path[0 : j-1])
 		if err != nil {
 			return err
 		}
+	}
+
+	// Parent now exists; invoke Mkdir and use its result.
+	err = c.Mkdir(path)
+	if err != nil {
+		// Handle arguments like "foo/." by
+		// double-checking that directory doesn't exist.
+		dir, err1 := c.Lstat(path)
+		if err1 == nil && dir.IsDir() {
+			return nil
+		}
+		return err
 	}
 	return nil
 }

@@ -273,8 +273,12 @@ func TestClientMkdirAll(t *testing.T) {
 	if err := sftp.MkdirAll(sub); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Lstat(sub); err != nil {
+	info, err := os.Lstat(sub)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("Expected mkdirall to create dir at: %s", sub)
 	}
 }
 
