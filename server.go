@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	sftpServerWorkerCount = 8
+	sftpServerWorkerCount = 1
 )
 
 type openDirInfo struct {
