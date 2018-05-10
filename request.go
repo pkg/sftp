@@ -270,7 +270,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt, err)
 		}
-		if n == 0 {
+		if err == io.EOF && n == 0 {
 			return statusFromError(pkt, io.EOF)
 		}
 		dirname := filepath.ToSlash(path.Base(r.Filepath))
