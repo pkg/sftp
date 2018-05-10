@@ -242,6 +242,12 @@ func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
 
 // wrap FileCmder handler
 func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
+
+	switch p := pkt.(type) {
+	case *sshFxpFsetstatPacket:
+		r.Flags = p.Flags
+		r.Attrs = p.Attrs.([]byte)
+	}
 	err := h.Filecmd(r)
 	return statusFromError(pkt, err)
 }
