@@ -765,6 +765,11 @@ const maxConcurrentRequests = 64
 // read and an error, if any. Read follows io.Reader semantics, so when Read
 // encounters an error or EOF condition after successfully reading n > 0 bytes,
 // it returns the number of bytes read.
+//
+// To maximise throughput for transferring the entire file (especially
+// over high latency links) it is recommended to use WriteTo rather
+// than calling Read multiple times. io.Copy will do this
+// automatically.
 func (f *File) Read(b []byte) (int, error) {
 	// Split the read into multiple maxPacket sized concurrent reads
 	// bounded by maxConcurrentRequests. This allows reads with a suitably
@@ -860,6 +865,10 @@ func (f *File) Read(b []byte) (int, error) {
 
 // WriteTo writes the file to w. The return value is the number of bytes
 // written. Any error encountered during the write is also returned.
+//
+// This method is preferred over calling Read multiple times to
+// maximise throughput for transferring the entire file (especially
+// over high latency links).
 func (f *File) WriteTo(w io.Writer) (int64, error) {
 	fi, err := f.Stat()
 	if err != nil {
@@ -1005,6 +1014,11 @@ func (f *File) Stat() (os.FileInfo, error) {
 // Write writes len(b) bytes to the File. It returns the number of bytes
 // written and an error, if any. Write returns a non-nil error when n !=
 // len(b).
+//
+// To maximise throughput for transferring the entire file (especially
+// over high latency links) it is recommended to use ReadFrom rather
+// than calling Write multiple times. io.Copy will do this
+// automatically.
 func (f *File) Write(b []byte) (int, error) {
 	// Split the write into multiple maxPacket sized concurrent writes
 	// bounded by maxConcurrentRequests. This allows writes with a suitably
@@ -1070,6 +1084,10 @@ func (f *File) Write(b []byte) (int, error) {
 // ReadFrom reads data from r until EOF and writes it to the file. The return
 // value is the number of bytes read. Any error except io.EOF encountered
 // during the read is also returned.
+//
+// This method is preferred over calling Write multiple times to
+// maximise throughput for transferring the entire file (especially
+// over high latency links).
 func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	inFlight := 0
 	desiredInFlight := 1
