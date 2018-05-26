@@ -152,6 +152,11 @@ func (r *Request) getLister() ListerAt {
 
 // Close reader/writer if possible
 func (r *Request) close() error {
+	defer func() {
+		if r.cancelCtx != nil {
+			r.cancelCtx()
+		}
+	}()
 	rd := r.getReader()
 	if c, ok := rd.(io.Closer); ok {
 		return c.Close()
@@ -159,9 +164,6 @@ func (r *Request) close() error {
 	wt := r.getWriter()
 	if c, ok := wt.(io.Closer); ok {
 		return c.Close()
-	}
-	if r.cancelCtx != nil {
-		r.cancelCtx()
 	}
 	return nil
 }
