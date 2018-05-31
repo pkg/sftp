@@ -338,8 +338,10 @@ func requestMethod(p requestPacket) (method string) {
 		method = "Put"
 	case *sshFxpReaddirPacket:
 		method = "List"
-	case *sshFxpOpenPacket, *sshFxpOpendirPacket:
+	case *sshFxpOpenPacket:
 		method = "Open"
+	case *sshFxpOpendirPacket:
+		method = "Stat"
 	case *sshFxpSetstatPacket, *sshFxpFsetstatPacket:
 		method = "Setstat"
 	case *sshFxpRenamePacket:
