@@ -176,8 +176,6 @@ func TestRequestCmdr(t *testing.T) {
 	assert.Equal(t, rpkt, statusFromError(rpkt, errTest))
 }
 
-func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }
-func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
 func TestRequestInfoStat(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
@@ -188,6 +186,8 @@ func TestRequestInfoStat(t *testing.T) {
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
 }
 
+func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }
+func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
 func testInfoMethod(t *testing.T, method string) {
 	handlers := newTestHandlers()
 	request := testRequest(method)
