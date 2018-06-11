@@ -198,3 +198,16 @@ func testInfoMethod(t *testing.T, method string) {
 	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
 	assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
 }
+
+func TestOpendirHandleReuse(t *testing.T) {
+	handlers := newTestHandlers()
+	request := testRequest("Stat")
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt)
+	assert.IsType(t, &sshFxpStatResponse{}, rpkt)
+
+	request.Method = "List"
+	pkt = fakePacket{myid: 2}
+	rpkt = request.call(handlers, pkt)
+	assert.IsType(t, &sshFxpNamePacket{}, rpkt)
+}

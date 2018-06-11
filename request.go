@@ -177,8 +177,10 @@ func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 		return fileput(handlers.FilePut, r, pkt)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Symlink", "Remove":
 		return filecmd(handlers.FileCmd, r, pkt)
-	case "List", "Stat", "Readlink":
+	case "List":
 		return filelist(handlers.FileList, r, pkt)
+	case "Stat", "Readlink":
+		return filestat(handlers.FileList, r, pkt)
 	default:
 		return statusFromError(pkt,
 			errors.Errorf("unexpected method: %s", r.Method))
@@ -292,6 +294,22 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			})
 		}
 		return ret
+	default:
+		err = errors.Errorf("unexpected method: %s", r.Method)
+		return statusFromError(pkt, err)
+	}
+}
+
+func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
+	lister, err := h.Filelist(r)
+	if err != nil {
+		return statusFromError(pkt, err)
+	}
+	finfo := make([]os.FileInfo, 1)
+	n, err := lister.ListAt(finfo, 0)
+	finfo = finfo[:n] // avoid need for nil tests below
+
+	switch r.Method {
 	case "Stat":
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt, err)
