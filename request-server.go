@@ -175,10 +175,8 @@ func (rs *RequestServer) packetWorker(
 		case *sshFxpOpendirPacket:
 			request := requestFromPacket(ctx, pkt)
 			rpkt = request.call(rs.Handlers, pkt)
-			request.close()
 			if stat, ok := rpkt.(*sshFxpStatResponse); ok {
 				if stat.info.IsDir() {
-					request := requestFromPacket(ctx, pkt)
 					handle := rs.nextRequest(request)
 					rpkt = sshFxpHandlePacket{pkt.id(), handle}
 				} else {
