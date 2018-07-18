@@ -15,22 +15,22 @@ type packetSender interface {
 }
 
 type packetManager struct {
-	requests  chan requestPacket
-	responses chan responsePacket
+	requests  chan RequestPacket
+	responses chan ResponsePacket
 	fini      chan struct{}
-	incoming  requestPacketIDs
-	outgoing  responsePackets
+	incoming  RequestPacketIDs
+	outgoing  ResponsePackets
 	sender    packetSender // connection object
 	working   *sync.WaitGroup
 }
 
 func newPktMgr(sender packetSender) *packetManager {
 	s := &packetManager{
-		requests:  make(chan requestPacket, SftpServerWorkerCount),
-		responses: make(chan responsePacket, SftpServerWorkerCount),
+		requests:  make(chan RequestPacket, SftpServerWorkerCount),
+		responses: make(chan ResponsePacket, SftpServerWorkerCount),
 		fini:      make(chan struct{}),
 		incoming:  make([]uint32, 0, SftpServerWorkerCount),
-		outgoing:  make([]responsePacket, 0, SftpServerWorkerCount),
+		outgoing:  make([]ResponsePacket, 0, SftpServerWorkerCount),
 		sender:    sender,
 		working:   &sync.WaitGroup{},
 	}
@@ -38,17 +38,17 @@ func newPktMgr(sender packetSender) *packetManager {
 	return s
 }
 
-type responsePackets []responsePacket
+type ResponsePackets []ResponsePacket
 
-func (r responsePackets) Sort() {
+func (r ResponsePackets) Sort() {
 	sort.Slice(r, func(i, j int) bool {
-		return r[i].id() < r[j].id()
+		return r[i].Id() < r[j].Id()
 	})
 }
 
-type requestPacketIDs []uint32
+type RequestPacketIDs []uint32
 
-func (r requestPacketIDs) Sort() {
+func (r RequestPacketIDs) Sort() {
 	sort.Slice(r, func(i, j int) bool {
 		return r[i] < r[j]
 	})
@@ -56,13 +56,13 @@ func (r requestPacketIDs) Sort() {
 
 // register incoming packets to be handled
 // send id of 0 for packets without id
-func (s *packetManager) incomingPacket(pkt requestPacket) {
+func (s *packetManager) incomingPacket(pkt RequestPacket) {
 	s.working.Add(1)
 	s.requests <- pkt // buffer == SftpServerWorkerCount
 }
 
 // register outgoing packets as being ready
-func (s *packetManager) readyPacket(pkt responsePacket) {
+func (s *packetManager) readyPacket(pkt ResponsePacket) {
 	s.responses <- pkt
 	s.working.Done()
 }
@@ -80,26 +80,26 @@ func (s *packetManager) close() {
 // transfers.
 func (s *packetManager) workerChan(runWorker func(requestChan)) requestChan {
 
-	rwChan := make(chan requestPacket, SftpServerWorkerCount)
+	rwChan := make(chan RequestPacket, SftpServerWorkerCount)
 	for i := 0; i < SftpServerWorkerCount; i++ {
 		runWorker(rwChan)
 	}
 
-	cmdChan := make(chan requestPacket)
+	cmdChan := make(chan RequestPacket)
 	runWorker(cmdChan)
 
-	pktChan := make(chan requestPacket, SftpServerWorkerCount)
+	pktChan := make(chan RequestPacket, SftpServerWorkerCount)
 	go func() {
 		// start with cmdChan
 		curChan := cmdChan
 		for pkt := range pktChan {
 			// on file open packet, switch to rwChan
 			switch pkt.(type) {
-			case *sshFxpOpenPacket:
+			case *SSHFxpOpenPacket:
 				curChan = rwChan
 			// on file close packet, switch back to cmdChan
 			// after waiting for any reads/writes to finish
-			case *sshFxpClosePacket:
+			case *SSHFxpClosePacket:
 				// wait for rwChan to finish
 				s.working.Wait()
 				// stop using rwChan
@@ -121,13 +121,13 @@ func (s *packetManager) controller() {
 	for {
 		select {
 		case pkt := <-s.requests:
-			debug("incoming id: %v", pkt.id())
-			s.incoming = append(s.incoming, pkt.id())
+			debug("incoming id: %v", pkt.Id())
+			s.incoming = append(s.incoming, pkt.Id())
 			if len(s.incoming) > 1 {
 				s.incoming.Sort()
 			}
 		case pkt := <-s.responses:
-			debug("outgoing pkt: %v", pkt.id())
+			debug("outgoing pkt: %v", pkt.Id())
 			s.outgoing = append(s.outgoing, pkt)
 			if len(s.outgoing) > 1 {
 				s.outgoing.Sort()
@@ -151,7 +151,7 @@ func (s *packetManager) maybeSendPackets() {
 		in := s.incoming[0]
 		// 		debug("incoming: %v", s.incoming)
 		// 		debug("outgoing: %v", outfilter(s.outgoing))
-		if in == out.id() {
+		if in == out.Id() {
 			s.sender.sendPacket(out)
 			// pop off heads
 			copy(s.incoming, s.incoming[1:])            // shift left
@@ -164,10 +164,10 @@ func (s *packetManager) maybeSendPackets() {
 	}
 }
 
-//func outfilter(o []responsePacket) []uint32 {
+//func outfilter(o []ResponsePacket) []uint32 {
 //	res := make([]uint32, 0, len(o))
 //	for _, v := range o {
-//		res = append(res, v.id())
+//		res = append(res, v.Id())
 //	}
 //	return res
 //}

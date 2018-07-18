@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-func runLsStatt(dirent os.FileInfo, statt *syscall.Stat_t) string {
+func RunLsStatt(dirent os.FileInfo, statt *syscall.Stat_t) string {
 	// example from openssh sftp server:
 	// crw-rw-rw-    1 root     wheel           0 Jul 31 20:52 ttyvd
 	// format:
 	// {directory / char device / etc}{rwxrwxrwx}  {number of links} owner group size month day [time (this year) | year (otherwise)] name
 
-	typeword := runLsTypeWord(dirent)
+	typeword := RunLsTypeWord(dirent)
 	numLinks := statt.Nlink
 	uid := statt.Uid
 	gid := statt.Gid
@@ -42,12 +42,12 @@ func runLsStatt(dirent os.FileInfo, statt *syscall.Stat_t) string {
 
 // ls -l style output for a file, which is in the 'long output' section of a readdir response packet
 // this is a very simple (lazy) implementation, just enough to look almost like openssh in a few basic cases
-func runLs(dirname string, dirent os.FileInfo) string {
+func RunLs(dirname string, dirent os.FileInfo) string {
 	dsys := dirent.Sys()
 	if dsys == nil {
 	} else if statt, ok := dsys.(*syscall.Stat_t); !ok {
 	} else {
-		return runLsStatt(dirent, statt)
+		return RunLsStatt(dirent, statt)
 	}
 
 	return path.Join(dirname, dirent.Name())

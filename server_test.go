@@ -21,15 +21,15 @@ const (
 func TestRunLsWithExamplesDirectory(t *testing.T) {
 	path := "examples"
 	item, _ := os.Stat(path)
-	result := runLs(path, item)
-	runLsTestHelper(t, result, typeDirectory, path)
+	result := RunLs(path, item)
+	RunLsTestHelper(t, result, typeDirectory, path)
 }
 
 func TestRunLsWithLicensesFile(t *testing.T) {
 	path := "LICENSE"
 	item, _ := os.Stat(path)
-	result := runLs(path, item)
-	runLsTestHelper(t, result, typeFile, path)
+	result := RunLs(path, item)
+	RunLsTestHelper(t, result, typeFile, path)
 }
 
 /*
@@ -66,7 +66,7 @@ func TestRunLsWithLicensesFile(t *testing.T) {
    where `id' is the request identifier, and `attrs' is the returned
    file attributes as described in Section ``File Attributes''.
 */
-func runLsTestHelper(t *testing.T, result, expectedType, path string) {
+func RunLsTestHelper(t *testing.T, result, expectedType, path string) {
 	// using regular expressions to make tests work on all systems
 	// a virtual file system (like afero) would be needed to mock valid filesystem checks
 	// expected layout is:
@@ -75,61 +75,61 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 	// permissions (len 10, "drwxr-xr-x")
 	got := result[0:10]
 	if ok, err := regexp.MatchString("^"+expectedType+"[rwx-]{9}$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): permission field mismatch, expected dir, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): permission field mismatch, expected dir, got: %#v, err: %#v", path, got, err)
 	}
 
 	// space
 	got = result[10:11]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 1 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): spacer 1 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
 	}
 
 	// link count (len 3, number)
 	got = result[12:15]
 	if ok, err := regexp.MatchString("^\\s*[0-9]+$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): link count field mismatch, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): link count field mismatch, got: %#v, err: %#v", path, got, err)
 	}
 
 	// spacer
 	got = result[15:16]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 2 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): spacer 2 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
 	}
 
 	// username / uid (len 8, number or string)
 	got = result[16:24]
 	if ok, err := regexp.MatchString("^[^\\s]{1,8}\\s*$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): username / uid mismatch, expected user, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): username / uid mismatch, expected user, got: %#v, err: %#v", path, got, err)
 	}
 
 	// spacer
 	got = result[24:25]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 3 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): spacer 3 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
 	}
 
 	// groupname / gid (len 8, number or string)
 	got = result[25:33]
 	if ok, err := regexp.MatchString("^[^\\s]{1,8}\\s*$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): groupname / gid mismatch, expected group, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): groupname / gid mismatch, expected group, got: %#v, err: %#v", path, got, err)
 	}
 
 	// spacer
 	got = result[33:34]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 4 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): spacer 4 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
 	}
 
 	// filesize (len 8)
 	got = result[34:42]
 	if ok, err := regexp.MatchString("^\\s*[0-9]+$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): filesize field mismatch, expected size in bytes, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): filesize field mismatch, expected size in bytes, got: %#v, err: %#v", path, got, err)
 	}
 
 	// spacer
 	got = result[42:43]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 5 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): spacer 5 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
 	}
 
 	// mod time (len 12, e.g. Aug  9 19:46)
@@ -142,19 +142,19 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 		_, err = time.Parse(layout, got)
 	}
 	if err != nil {
-		t.Errorf("runLs(%#v, *FileInfo): mod time field mismatch, expected date layout %s, got: %#v, err: %#v", path, layout, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): mod time field mismatch, expected date layout %s, got: %#v, err: %#v", path, layout, got, err)
 	}
 
 	// spacer
 	got = result[55:56]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 6 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): spacer 6 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
 	}
 
 	// filename
 	got = result[56:]
 	if ok, err := regexp.MatchString("^"+path+"$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): name field mismatch, expected examples, got: %#v, err: %#v", path, got, err)
+		t.Errorf("RunLs(%#v, *FileInfo): name field mismatch, expected examples, got: %#v, err: %#v", path, got, err)
 	}
 }
 
@@ -176,15 +176,15 @@ func clientServerPair(t *testing.T) (*Client, *Server) {
 	return client, server
 }
 
-type sshFxpTestBadExtendedPacket struct {
+type SSHFxpTestBadExtendedPacket struct {
 	ID        uint32
 	Extension string
 	Data      string
 }
 
-func (p sshFxpTestBadExtendedPacket) id() uint32 { return p.ID }
+func (p SSHFxpTestBadExtendedPacket) Id() uint32 { return p.ID }
 
-func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
+func (p SSHFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
 	l := 1 + 4 + 4 + // type(byte) + uint32 + uint32
 		len(p.Extension) +
 		len(p.Data)
@@ -204,7 +204,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	defer client.Close()
 	defer server.Close()
 
-	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
+	badPacket := SSHFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
 	typ, data, err := client.clientConn.sendPacket(badPacket)
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
@@ -213,7 +213,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 		t.Fatalf("received non-FPX_STATUS packet: %v", typ)
 	}
 
-	err = unmarshalStatus(badPacket.id(), data)
+	err = unmarshalStatus(badPacket.Id(), data)
 	statusErr, ok := err.(*StatusError)
 	if !ok {
 		t.Fatal("failed to convert error from unmarshalStatus to *StatusError")
@@ -255,10 +255,10 @@ func TestConcurrentRequests(t *testing.T) {
 func TestStatusFromError(t *testing.T) {
 	type test struct {
 		err error
-		pkt sshFxpStatusPacket
+		pkt SSHFxpStatusPacket
 	}
-	tpkt := func(id, code uint32) sshFxpStatusPacket {
-		return sshFxpStatusPacket{
+	tpkt := func(id, code uint32) SSHFxpStatusPacket {
+		return SSHFxpStatusPacket{
 			ID:          id,
 			StatusError: StatusError{Code: code},
 		}
@@ -275,6 +275,6 @@ func TestStatusFromError(t *testing.T) {
 	}
 	for _, tc := range test_cases {
 		tc.pkt.StatusError.msg = tc.err.Error()
-		assert.Equal(t, tc.pkt, statusFromError(tc.pkt, tc.err))
+		assert.Equal(t, tc.pkt, StatusFromError(tc.pkt, tc.err))
 	}
 }

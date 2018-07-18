@@ -31,7 +31,7 @@ func (fakepacket) UnmarshalBinary([]byte) error {
 	return nil
 }
 
-func (f fakepacket) id() uint32 {
+func (f fakepacket) Id() uint32 {
 	return uint32(f)
 }
 
@@ -81,22 +81,22 @@ func TestPacketManager(t *testing.T) {
 		}
 		for i := 0; i < len(table); i++ {
 			pkt := <-sender.sent
-			id := pkt.(fakepacket).id()
+			id := pkt.(fakepacket).Id()
 			assert.Equal(t, id, uint32(i))
 		}
 	}
 	s.close()
 }
 
-func (p sshFxpRemovePacket) String() string {
+func (p SSHFxpRemovePacket) String() string {
 	return fmt.Sprintf("RmPct:%d", p.ID)
 }
-func (p sshFxpOpenPacket) String() string {
+func (p SSHFxpOpenPacket) String() string {
 	return fmt.Sprintf("OpPct:%d", p.ID)
 }
-func (p sshFxpWritePacket) String() string {
+func (p SSHFxpWritePacket) String() string {
 	return fmt.Sprintf("WrPct:%d", p.ID)
 }
-func (p sshFxpClosePacket) String() string {
+func (p SSHFxpClosePacket) String() string {
 	return fmt.Sprintf("ClPct:%d", p.ID)
 }
