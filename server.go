@@ -19,6 +19,7 @@ const (
 // PacketHandler handles incoming packets
 type PacketHandler interface {
 	Handle(s *Server, p RequestPacket) error
+	Close()
 }
 
 // Server is an SSH File Transfer Protocol (sftp) server.
@@ -167,6 +168,8 @@ func (svr *Server) Serve() error {
 
 	close(pktChan) // shuts down sftpServerWorkers
 	wg.Wait()      // wait for all workers to exit
+
+	svr.pktHdlr.Close()
 
 	return err // error from recvPacket
 }
