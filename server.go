@@ -191,18 +191,6 @@ type ider interface {
 	Id() uint32
 }
 
-type SSHFxpStatResponse struct {
-	ID   uint32
-	Info os.FileInfo
-}
-
-func (p SSHFxpStatResponse) MarshalBinary() ([]byte, error) {
-	b := []byte{ssh_FXP_ATTRS}
-	b = marshalUint32(b, p.ID)
-	b = marshalFileInfo(b, p.Info)
-	return b, nil
-}
-
 var emptyFileStat = []interface{}{uint32(0)}
 
 // translateErrno translates a syscall error number to a SFTP error code.
