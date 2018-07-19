@@ -118,7 +118,7 @@ func (rs *RequestServer) Serve() error {
 	pktChan := rs.pktMgr.workerChan(runWorker)
 
 	var err error
-	var pkt requestPacket
+	var pkt RequestPacket
 	var pktType uint8
 	var pktBytes []byte
 	for {
@@ -160,48 +160,48 @@ func (rs *RequestServer) Serve() error {
 }
 
 func (rs *RequestServer) packetWorker(
-	ctx context.Context, pktChan chan requestPacket,
+	ctx context.Context, pktChan chan RequestPacket,
 ) error {
 	for pkt := range pktChan {
-		var rpkt responsePacket
+		var rpkt ResponsePacket
 		switch pkt := pkt.(type) {
-		case *sshFxInitPacket:
-			rpkt = sshFxVersionPacket{sftpProtocolVersion, nil}
-		case *sshFxpClosePacket:
-			handle := pkt.getHandle()
-			rpkt = statusFromError(pkt, rs.closeRequest(handle))
-		case *sshFxpRealpathPacket:
+		case *SSHFxInitPacket:
+			rpkt = SSHFxVersionPacket{sftpProtocolVersion, nil}
+		case *SSHFxpClosePacket:
+			handle := pkt.GetHandle()
+			rpkt = StatusFromError(pkt, rs.closeRequest(handle))
+		case *SSHFxpRealpathPacket:
 			rpkt = cleanPacketPath(pkt)
-		case *sshFxpOpendirPacket:
+		case *SSHFxpOpendirPacket:
 			request := requestFromPacket(ctx, pkt)
 			rpkt = request.call(rs.Handlers, pkt)
-			if stat, ok := rpkt.(*sshFxpStatResponse); ok {
-				if stat.info.IsDir() {
+			if stat, ok := rpkt.(*SSHFxpStatResponse); ok {
+				if stat.Info.IsDir() {
 					handle := rs.nextRequest(request)
-					rpkt = sshFxpHandlePacket{pkt.id(), handle}
+					rpkt = SSHFxpHandlePacket{pkt.Id(), handle}
 				} else {
-					rpkt = statusFromError(pkt, &os.PathError{
+					rpkt = StatusFromError(pkt, &os.PathError{
 						Path: request.Filepath, Err: syscall.ENOTDIR})
 				}
 			}
-		case *sshFxpOpenPacket:
+		case *SSHFxpOpenPacket:
 			request := requestFromPacket(ctx, pkt)
 			handle := rs.nextRequest(request)
-			rpkt = sshFxpHandlePacket{pkt.id(), handle}
-			if pkt.hasPflags(ssh_FXF_CREAT) {
+			rpkt = SSHFxpHandlePacket{pkt.Id(), handle}
+			if pkt.HasPflags(ssh_FXF_CREAT) {
 				if p := request.call(rs.Handlers, pkt); !statusOk(p) {
 					rpkt = p // if error in write, return it
 				}
 			}
-		case hasHandle:
-			handle := pkt.getHandle()
+		case HasHandle:
+			handle := pkt.GetHandle()
 			request, ok := rs.getRequest(handle, requestMethod(pkt))
 			if !ok {
-				rpkt = statusFromError(pkt, syscall.EBADF)
+				rpkt = StatusFromError(pkt, syscall.EBADF)
 			} else {
 				rpkt = request.call(rs.Handlers, pkt)
 			}
-		case hasPath:
+		case HasPath:
 			request := requestFromPacket(ctx, pkt)
 			rpkt = request.call(rs.Handlers, pkt)
 			request.close()
@@ -217,18 +217,18 @@ func (rs *RequestServer) packetWorker(
 	return nil
 }
 
-// True is responsePacket is an OK status packet
-func statusOk(rpkt responsePacket) bool {
-	p, ok := rpkt.(sshFxpStatusPacket)
+// True is ResponsePacket is an OK status packet
+func statusOk(rpkt ResponsePacket) bool {
+	p, ok := rpkt.(SSHFxpStatusPacket)
 	return ok && p.StatusError.Code == ssh_FX_OK
 }
 
 // clean and return name packet for file
-func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
-	path := cleanPath(pkt.getPath())
-	return &sshFxpNamePacket{
-		ID: pkt.id(),
-		NameAttrs: []sshFxpNameAttr{{
+func cleanPacketPath(pkt *SSHFxpRealpathPacket) ResponsePacket {
+	path := cleanPath(pkt.GetPath())
+	return &SSHFxpNamePacket{
+		ID: pkt.Id(),
+		NameAttrs: []SSHFxpNameAttr{{
 			Name:     path,
 			LongName: path,
 			Attrs:    emptyFileStat,
@@ -247,7 +247,7 @@ func cleanPath(p string) string {
 
 // Wrap underlying connection methods to use packetManager
 func (rs *RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
-	if pkt, ok := m.(responsePacket); ok {
+	if pkt, ok := m.(ResponsePacket); ok {
 		rs.pktMgr.readyPacket(pkt)
 	} else {
 		return errors.Errorf("unexpected packet type %T", m)

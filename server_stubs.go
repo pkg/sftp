@@ -3,12 +3,12 @@
 package sftp
 
 import (
+	"fmt"
 	"os"
 	"time"
-	"fmt"
 )
 
-func runLs(dirname string, dirent os.FileInfo) string {
+func RunLs(dirname string, dirent os.FileInfo) string {
 	typeword := runLsTypeWord(dirent)
 	numLinks := 1
 	if dirent.IsDir() {

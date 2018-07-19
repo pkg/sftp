@@ -167,7 +167,7 @@ func (c *Client) Create(path string) (*File, error) {
 const sftpProtocolVersion = 3 // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 
 func (c *Client) sendInit() error {
-	return c.clientConn.conn.sendPacket(sshFxInitPacket{
+	return c.clientConn.conn.sendPacket(SSHFxInitPacket{
 		Version: sftpProtocolVersion, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 	})
 }
@@ -211,7 +211,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	var done = false
 	for !done {
 		id := c.nextID()
-		typ, data, err1 := c.sendPacket(sshFxpReaddirPacket{
+		typ, data, err1 := c.sendPacket(SSHFxpReaddirPacket{
 			ID:     id,
 			Handle: handle,
 		})
@@ -254,7 +254,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 
 func (c *Client) opendir(path string) (string, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpOpendirPacket{
+	typ, data, err := c.sendPacket(SSHFxpOpendirPacket{
 		ID:   id,
 		Path: path,
 	})
@@ -280,7 +280,7 @@ func (c *Client) opendir(path string) (string, error) {
 // If 'p' is a symbolic link, the returned FileInfo structure describes the referent file.
 func (c *Client) Stat(p string) (os.FileInfo, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpStatPacket{
+	typ, data, err := c.sendPacket(SSHFxpStatPacket{
 		ID:   id,
 		Path: p,
 	})
@@ -306,7 +306,7 @@ func (c *Client) Stat(p string) (os.FileInfo, error) {
 // If 'p' is a symbolic link, the returned FileInfo structure describes the symbolic link.
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpLstatPacket{
+	typ, data, err := c.sendPacket(SSHFxpLstatPacket{
 		ID:   id,
 		Path: p,
 	})
@@ -331,7 +331,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 // ReadLink reads the target of a symbolic link.
 func (c *Client) ReadLink(p string) (string, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpReadlinkPacket{
+	typ, data, err := c.sendPacket(SSHFxpReadlinkPacket{
 		ID:   id,
 		Path: p,
 	})
@@ -360,7 +360,7 @@ func (c *Client) ReadLink(p string) (string, error) {
 // Symlink creates a symbolic link at 'newname', pointing at target 'oldname'
 func (c *Client) Symlink(oldname, newname string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpSymlinkPacket{
+	typ, data, err := c.sendPacket(SSHFxpSymlinkPacket{
 		ID:         id,
 		Linkpath:   newname,
 		Targetpath: oldname,
@@ -379,7 +379,7 @@ func (c *Client) Symlink(oldname, newname string) error {
 // setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
 func (c *Client) setstat(path string, flags uint32, attrs interface{}) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpSetstatPacket{
+	typ, data, err := c.sendPacket(SSHFxpSetstatPacket{
 		ID:    id,
 		Path:  path,
 		Flags: flags,
@@ -445,7 +445,7 @@ func (c *Client) OpenFile(path string, f int) (*File, error) {
 
 func (c *Client) open(path string, pflags uint32) (*File, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpOpenPacket{
+	typ, data, err := c.sendPacket(SSHFxpOpenPacket{
 		ID:     id,
 		Path:   path,
 		Pflags: pflags,
@@ -473,7 +473,7 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 // immediately after this request has been sent.
 func (c *Client) close(handle string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpClosePacket{
+	typ, data, err := c.sendPacket(SSHFxpClosePacket{
 		ID:     id,
 		Handle: handle,
 	})
@@ -490,7 +490,7 @@ func (c *Client) close(handle string) error {
 
 func (c *Client) fstat(handle string) (*FileStat, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpFstatPacket{
+	typ, data, err := c.sendPacket(SSHFxpFstatPacket{
 		ID:     id,
 		Handle: handle,
 	})
@@ -519,7 +519,7 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 func (c *Client) StatVFS(path string) (*StatVFS, error) {
 	// send the StatVFS packet to the server
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpStatvfsPacket{
+	typ, data, err := c.sendPacket(SSHFxpStatvfsPacket{
 		ID:   id,
 		Path: path,
 	})
@@ -570,7 +570,7 @@ func (c *Client) Remove(path string) error {
 
 func (c *Client) removeFile(path string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpRemovePacket{
+	typ, data, err := c.sendPacket(SSHFxpRemovePacket{
 		ID:       id,
 		Filename: path,
 	})
@@ -588,7 +588,7 @@ func (c *Client) removeFile(path string) error {
 // RemoveDirectory removes a directory path.
 func (c *Client) RemoveDirectory(path string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpRmdirPacket{
+	typ, data, err := c.sendPacket(SSHFxpRmdirPacket{
 		ID:   id,
 		Path: path,
 	})
@@ -606,7 +606,7 @@ func (c *Client) RemoveDirectory(path string) error {
 // Rename renames a file.
 func (c *Client) Rename(oldname, newname string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpRenamePacket{
+	typ, data, err := c.sendPacket(SSHFxpRenamePacket{
 		ID:      id,
 		Oldpath: oldname,
 		Newpath: newname,
@@ -626,7 +626,7 @@ func (c *Client) Rename(oldname, newname string) error {
 // which will replace newname if it already exists.
 func (c *Client) PosixRename(oldname, newname string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpPosixRenamePacket{
+	typ, data, err := c.sendPacket(SSHFxpPosixRenamePacket{
 		ID:      id,
 		Oldpath: oldname,
 		Newpath: newname,
@@ -644,7 +644,7 @@ func (c *Client) PosixRename(oldname, newname string) error {
 
 func (c *Client) realpath(path string) (string, error) {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpRealpathPacket{
+	typ, data, err := c.sendPacket(SSHFxpRealpathPacket{
 		ID:   id,
 		Path: path,
 	})
@@ -681,7 +681,7 @@ func (c *Client) Getwd() (string, error) {
 // parent folder does not exist (the method cannot create complete paths).
 func (c *Client) Mkdir(path string) error {
 	id := c.nextID()
-	typ, data, err := c.sendPacket(sshFxpMkdirPacket{
+	typ, data, err := c.sendPacket(SSHFxpMkdirPacket{
 		ID:   id,
 		Path: path,
 	})
@@ -807,7 +807,7 @@ func (f *File) Read(b []byte) (int, error) {
 
 	sendReq := func(b []byte, offset uint64) {
 		reqID := f.c.nextID()
-		f.c.dispatchRequest(ch, sshFxpReadPacket{
+		f.c.dispatchRequest(ch, SSHFxpReadPacket{
 			ID:     reqID,
 			Handle: f.handle,
 			Offset: offset,
@@ -908,7 +908,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 
 	sendReq := func(b []byte, offset uint64) {
 		reqID := f.c.nextID()
-		f.c.dispatchRequest(ch, sshFxpReadPacket{
+		f.c.dispatchRequest(ch, SSHFxpReadPacket{
 			ID:     reqID,
 			Handle: f.handle,
 			Offset: offset,
@@ -1048,7 +1048,7 @@ func (f *File) Write(b []byte) (int, error) {
 		for inFlight < desiredInFlight && len(b) > 0 && firstErr == nil {
 			l := min(len(b), f.c.maxPacket)
 			rb := b[:l]
-			f.c.dispatchRequest(ch, sshFxpWritePacket{
+			f.c.dispatchRequest(ch, SSHFxpWritePacket{
 				ID:     f.c.nextID(),
 				Handle: f.handle,
 				Offset: offset,
@@ -1116,7 +1116,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 			if err != nil {
 				firstErr = err
 			}
-			f.c.dispatchRequest(ch, sshFxpWritePacket{
+			f.c.dispatchRequest(ch, SSHFxpWritePacket{
 				ID:     f.c.nextID(),
 				Handle: f.handle,
 				Offset: offset,

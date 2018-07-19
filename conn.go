@@ -88,7 +88,7 @@ type result struct {
 }
 
 type idmarshaler interface {
-	id() uint32
+	Id() uint32
 	encoding.BinaryMarshaler
 }
 
@@ -101,11 +101,11 @@ func (c *clientConn) sendPacket(p idmarshaler) (byte, []byte, error) {
 
 func (c *clientConn) dispatchRequest(ch chan<- result, p idmarshaler) {
 	c.Lock()
-	c.inflight[p.id()] = ch
+	c.inflight[p.Id()] = ch
 	c.Unlock()
 	if err := c.conn.sendPacket(p); err != nil {
 		c.Lock()
-		delete(c.inflight, p.id())
+		delete(c.inflight, p.Id())
 		c.Unlock()
 		ch <- result{err: err}
 	}
@@ -129,5 +129,5 @@ type serverConn struct {
 }
 
 func (s *serverConn) sendError(p ider, err error) error {
-	return s.sendPacket(statusFromError(p, err))
+	return s.sendPacket(StatusFromError(p, err))
 }

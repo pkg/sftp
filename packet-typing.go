@@ -7,129 +7,108 @@ import (
 )
 
 // all incoming packets
-type requestPacket interface {
+type RequestPacket interface {
 	encoding.BinaryUnmarshaler
-	id() uint32
+	Id() uint32
+	Accept(RequestPacketVisitor) error
 }
 
-type requestChan chan requestPacket
+type requestChan chan RequestPacket
 
-type responsePacket interface {
+type ResponsePacket interface {
 	encoding.BinaryMarshaler
-	id() uint32
+	Id() uint32
 }
 
 // interfaces to group types
-type hasPath interface {
-	requestPacket
-	getPath() string
+type HasPath interface {
+	RequestPacket
+	GetPath() string
 }
 
-type hasHandle interface {
-	requestPacket
-	getHandle() string
+type HasHandle interface {
+	RequestPacket
+	GetHandle() string
 }
 
-type notReadOnly interface {
-	notReadOnly()
+type NotReadOnly interface {
+	NotReadOnly()
 }
-
-//// define types by adding methods
-// hasPath
-func (p sshFxpLstatPacket) getPath() string    { return p.Path }
-func (p sshFxpStatPacket) getPath() string     { return p.Path }
-func (p sshFxpRmdirPacket) getPath() string    { return p.Path }
-func (p sshFxpReadlinkPacket) getPath() string { return p.Path }
-func (p sshFxpRealpathPacket) getPath() string { return p.Path }
-func (p sshFxpMkdirPacket) getPath() string    { return p.Path }
-func (p sshFxpSetstatPacket) getPath() string  { return p.Path }
-func (p sshFxpStatvfsPacket) getPath() string  { return p.Path }
-func (p sshFxpRemovePacket) getPath() string   { return p.Filename }
-func (p sshFxpRenamePacket) getPath() string   { return p.Oldpath }
-func (p sshFxpSymlinkPacket) getPath() string  { return p.Targetpath }
-func (p sshFxpOpendirPacket) getPath() string  { return p.Path }
-func (p sshFxpOpenPacket) getPath() string     { return p.Path }
-
-func (p sshFxpExtendedPacketPosixRename) getPath() string { return p.Oldpath }
-
-// hasHandle
-func (p sshFxpFstatPacket) getHandle() string    { return p.Handle }
-func (p sshFxpFsetstatPacket) getHandle() string { return p.Handle }
-func (p sshFxpReadPacket) getHandle() string     { return p.Handle }
-func (p sshFxpWritePacket) getHandle() string    { return p.Handle }
-func (p sshFxpReaddirPacket) getHandle() string  { return p.Handle }
-func (p sshFxpClosePacket) getHandle() string    { return p.Handle }
-
-// notReadOnly
-func (p sshFxpWritePacket) notReadOnly()               {}
-func (p sshFxpSetstatPacket) notReadOnly()             {}
-func (p sshFxpFsetstatPacket) notReadOnly()            {}
-func (p sshFxpRemovePacket) notReadOnly()              {}
-func (p sshFxpMkdirPacket) notReadOnly()               {}
-func (p sshFxpRmdirPacket) notReadOnly()               {}
-func (p sshFxpRenamePacket) notReadOnly()              {}
-func (p sshFxpSymlinkPacket) notReadOnly()             {}
-func (p sshFxpExtendedPacketPosixRename) notReadOnly() {}
-
-// some packets with ID are missing id()
-func (p sshFxpDataPacket) id() uint32   { return p.ID }
-func (p sshFxpStatusPacket) id() uint32 { return p.ID }
-func (p sshFxpStatResponse) id() uint32 { return p.ID }
-func (p sshFxpNamePacket) id() uint32   { return p.ID }
-func (p sshFxpHandlePacket) id() uint32 { return p.ID }
-func (p sshFxVersionPacket) id() uint32 { return 0 }
 
 // take raw incoming packet data and build packet objects
-func makePacket(p rxPacket) (requestPacket, error) {
-	var pkt requestPacket
+func makePacket(p rxPacket) (pkt RequestPacket, err error) {
 	switch p.pktType {
 	case ssh_FXP_INIT:
-		pkt = &sshFxInitPacket{}
+		pkt = &SSHFxInitPacket{}
 	case ssh_FXP_LSTAT:
-		pkt = &sshFxpLstatPacket{}
+		pkt = &SSHFxpLstatPacket{}
 	case ssh_FXP_OPEN:
-		pkt = &sshFxpOpenPacket{}
+		pkt = &SSHFxpOpenPacket{}
 	case ssh_FXP_CLOSE:
-		pkt = &sshFxpClosePacket{}
+		pkt = &SSHFxpClosePacket{}
 	case ssh_FXP_READ:
-		pkt = &sshFxpReadPacket{}
+		pkt = &SSHFxpReadPacket{}
 	case ssh_FXP_WRITE:
-		pkt = &sshFxpWritePacket{}
+		pkt = &SSHFxpWritePacket{}
 	case ssh_FXP_FSTAT:
-		pkt = &sshFxpFstatPacket{}
+		pkt = &SSHFxpFstatPacket{}
 	case ssh_FXP_SETSTAT:
-		pkt = &sshFxpSetstatPacket{}
+		pkt = &SSHFxpSetstatPacket{}
 	case ssh_FXP_FSETSTAT:
-		pkt = &sshFxpFsetstatPacket{}
+		pkt = &SSHFxpFsetstatPacket{}
 	case ssh_FXP_OPENDIR:
-		pkt = &sshFxpOpendirPacket{}
+		pkt = &SSHFxpOpendirPacket{}
 	case ssh_FXP_READDIR:
-		pkt = &sshFxpReaddirPacket{}
+		pkt = &SSHFxpReaddirPacket{}
 	case ssh_FXP_REMOVE:
-		pkt = &sshFxpRemovePacket{}
+		pkt = &SSHFxpRemovePacket{}
 	case ssh_FXP_MKDIR:
-		pkt = &sshFxpMkdirPacket{}
+		pkt = &SSHFxpMkdirPacket{}
 	case ssh_FXP_RMDIR:
-		pkt = &sshFxpRmdirPacket{}
+		pkt = &SSHFxpRmdirPacket{}
 	case ssh_FXP_REALPATH:
-		pkt = &sshFxpRealpathPacket{}
+		pkt = &SSHFxpRealpathPacket{}
 	case ssh_FXP_STAT:
-		pkt = &sshFxpStatPacket{}
+		pkt = &SSHFxpStatPacket{}
 	case ssh_FXP_RENAME:
-		pkt = &sshFxpRenamePacket{}
+		pkt = &SSHFxpRenamePacket{}
 	case ssh_FXP_READLINK:
-		pkt = &sshFxpReadlinkPacket{}
+		pkt = &SSHFxpReadlinkPacket{}
 	case ssh_FXP_SYMLINK:
-		pkt = &sshFxpSymlinkPacket{}
+		pkt = &SSHFxpSymlinkPacket{}
 	case ssh_FXP_EXTENDED:
-		pkt = &sshFxpExtendedPacket{}
+		pkt = &SSHFxpExtendedPacket{}
 	default:
-		return nil, errors.Errorf("unhandled packet type: %s", p.pktType)
+		err = errors.Errorf("unhandled packet type: %s", p.pktType)
+		return
 	}
-	if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
-		// Return partially unpacked packet to allow callers to return
-		// error messages appropriately with necessary id() method.
-		return pkt, err
-	}
-	return pkt, nil
+	// Return partially unpacked packet to allow callers to return
+	// error messages appropriately with necessary id() method.
+	err = pkt.UnmarshalBinary(p.pktBytes)
+	return
+}
+
+type RequestPacketVisitor interface {
+	VisitInitPacket(*SSHFxInitPacket) error
+	VisitClosePacket(*SSHFxpClosePacket) error
+	VisitExtendedPacket(*SSHFxpExtendedPacket) error
+	VisitFsetstatPacket(*SSHFxpFsetstatPacket) error
+	VisitMkdirPacket(*SSHFxpMkdirPacket) error
+	VisitOpenPacket(*SSHFxpOpenPacket) error
+	VisitOpendirPacket(*SSHFxpOpendirPacket) error
+	VisitPosixRenamePacket(*SSHFxpPosixRenamePacket) error
+	VisitReadPacket(*SSHFxpReadPacket) error
+	VisitReaddirPacket(*SSHFxpReaddirPacket) error
+	VisitReadlinkPacket(*SSHFxpReadlinkPacket) error
+	VisitRealpathPacket(*SSHFxpRealpathPacket) error
+	VisitRemovePacket(*SSHFxpRemovePacket) error
+	VisitRenamePacket(*SSHFxpRenamePacket) error
+	VisitRmdirPacket(*SSHFxpRmdirPacket) error
+	VisitSetstatPacket(*SSHFxpSetstatPacket) error
+	VisitStatPacket(*SSHFxpStatPacket) error
+	VisitFstatPacket(*SSHFxpFstatPacket) error
+	VisitLstatPacket(*SSHFxpLstatPacket) error
+	VisitStatvfsPacket(*SSHFxpStatvfsPacket) error
+	VisitSymlinkPacket(*SSHFxpSymlinkPacket) error
+	VisitWritePacket(*SSHFxpWritePacket) error
 }
