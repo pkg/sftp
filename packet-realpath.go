@@ -16,3 +16,7 @@ func (p SSHFxpRealpathPacket) MarshalBinary() ([]byte, error) {
 func (p *SSHFxpRealpathPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
+
+func (p *SSHFxpRealpathPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitRealpathPacket(p)
+}

@@ -44,3 +44,7 @@ func (p *SSHFxpExtendedPacket) UnmarshalBinary(b []byte) error {
 
 	return p.SpecificPacket.UnmarshalBinary(bOrig)
 }
+
+func (p *SSHFxpExtendedPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitExtendedPacket(p)
+}

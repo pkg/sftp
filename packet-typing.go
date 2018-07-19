@@ -10,6 +10,7 @@ import (
 type RequestPacket interface {
 	encoding.BinaryUnmarshaler
 	Id() uint32
+	Accept(RequestPacketVisitor) error
 }
 
 type requestChan chan RequestPacket
@@ -85,4 +86,29 @@ func makePacket(p rxPacket) (pkt RequestPacket, err error) {
 	// error messages appropriately with necessary id() method.
 	err = pkt.UnmarshalBinary(p.pktBytes)
 	return
+}
+
+type RequestPacketVisitor interface {
+	VisitInitPacket(*SSHFxInitPacket) error
+	VisitClosePacket(*SSHFxpClosePacket) error
+	VisitExtendedPacket(*SSHFxpExtendedPacket) error
+	VisitFsetstatPacket(*SSHFxpFsetstatPacket) error
+	VisitMkdirPacket(*SSHFxpMkdirPacket) error
+	VisitOpenPacket(*SSHFxpOpenPacket) error
+	VisitOpendirPacket(*SSHFxpOpendirPacket) error
+	VisitPosixRenamePacket(*SSHFxpPosixRenamePacket) error
+	VisitReadPacket(*SSHFxpReadPacket) error
+	VisitReaddirPacket(*SSHFxpReaddirPacket) error
+	VisitReadlinkPacket(*SSHFxpReadlinkPacket) error
+	VisitRealpathPacket(*SSHFxpRealpathPacket) error
+	VisitRemovePacket(*SSHFxpRemovePacket) error
+	VisitRenamePacket(*SSHFxpRenamePacket) error
+	VisitRmdirPacket(*SSHFxpRmdirPacket) error
+	VisitSetstatPacket(*SSHFxpSetstatPacket) error
+	VisitStatPacket(*SSHFxpStatPacket) error
+	VisitFstatPacket(*SSHFxpFstatPacket) error
+	VisitLstatPacket(*SSHFxpLstatPacket) error
+	VisitStatvfsPacket(*SSHFxpStatvfsPacket) error
+	VisitSymlinkPacket(*SSHFxpSymlinkPacket) error
+	VisitWritePacket(*SSHFxpWritePacket) error
 }

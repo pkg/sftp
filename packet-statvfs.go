@@ -27,6 +27,10 @@ func (p SSHFxpStatvfsPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+func (p *SSHFxpStatvfsPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitStatvfsPacket(p)
+}
+
 // A StatVFS contains statistics about a filesystem.
 type StatVFS struct {
 	ID      uint32

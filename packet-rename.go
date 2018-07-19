@@ -36,3 +36,7 @@ func (p *SSHFxpRenamePacket) UnmarshalBinary(b []byte) error {
 	}
 	return nil
 }
+
+func (p *SSHFxpRenamePacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitRenamePacket(p)
+}

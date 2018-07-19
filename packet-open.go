@@ -51,3 +51,7 @@ func (p SSHFxpOpenPacket) HasPflags(flags ...uint32) bool {
 	}
 	return true
 }
+
+func (p *SSHFxpOpenPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitOpenPacket(p)
+}

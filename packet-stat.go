@@ -21,6 +21,10 @@ func (p *SSHFxpStatPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
 }
 
+func (p *SSHFxpStatPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitStatPacket(p)
+}
+
 type SSHFxpFstatPacket struct {
 	ID     uint32
 	Handle string
@@ -38,6 +42,10 @@ func (p *SSHFxpFstatPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Handle)
 }
 
+func (p *SSHFxpFstatPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitFstatPacket(p)
+}
+
 type SSHFxpLstatPacket struct {
 	ID   uint32
 	Path string
@@ -53,6 +61,10 @@ func (p SSHFxpLstatPacket) MarshalBinary() ([]byte, error) {
 
 func (p *SSHFxpLstatPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Path)
+}
+
+func (p *SSHFxpLstatPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitLstatPacket(p)
 }
 
 type SSHFxpStatResponse struct {

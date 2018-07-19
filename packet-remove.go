@@ -18,3 +18,7 @@ func (p SSHFxpRemovePacket) MarshalBinary() ([]byte, error) {
 func (p *SSHFxpRemovePacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Filename)
 }
+
+func (p *SSHFxpRemovePacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitRemovePacket(p)
+}

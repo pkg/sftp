@@ -35,6 +35,10 @@ func (f fakepacket) Id() uint32 {
 	return uint32(f)
 }
 
+func (f fakepacket) Accept(v RequestPacketVisitor) error {
+	return nil
+}
+
 type pair struct {
 	in  fakepacket
 	out fakepacket

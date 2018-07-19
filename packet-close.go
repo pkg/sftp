@@ -16,3 +16,7 @@ func (p SSHFxpClosePacket) MarshalBinary() ([]byte, error) {
 func (p *SSHFxpClosePacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Handle)
 }
+
+func (p *SSHFxpClosePacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitClosePacket(p)
+}

@@ -36,3 +36,7 @@ func (p *SSHFxpSymlinkPacket) UnmarshalBinary(b []byte) error {
 	}
 	return nil
 }
+
+func (p *SSHFxpSymlinkPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitSymlinkPacket(p)
+}

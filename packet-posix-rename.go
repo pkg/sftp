@@ -29,3 +29,7 @@ func (p SSHFxpPosixRenamePacket) MarshalBinary() ([]byte, error) {
 	b = marshalString(b, p.Newpath)
 	return b, nil
 }
+
+func (p *SSHFxpPosixRenamePacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitPosixRenamePacket(p)
+}

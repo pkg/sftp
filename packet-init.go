@@ -39,3 +39,7 @@ func (p *SSHFxInitPacket) UnmarshalBinary(b []byte) error {
 	}
 	return nil
 }
+
+func (p *SSHFxInitPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitInitPacket(p)
+}

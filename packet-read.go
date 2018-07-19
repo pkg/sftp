@@ -38,3 +38,7 @@ func (p *SSHFxpReadPacket) UnmarshalBinary(b []byte) error {
 	}
 	return nil
 }
+
+func (p *SSHFxpReadPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitReadPacket(p)
+}

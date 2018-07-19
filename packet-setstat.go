@@ -39,3 +39,7 @@ func (p *SSHFxpSetstatPacket) UnmarshalBinary(b []byte) error {
 	p.Attrs = b
 	return nil
 }
+
+func (p *SSHFxpSetstatPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitSetstatPacket(p)
+}

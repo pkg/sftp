@@ -16,3 +16,7 @@ func (p SSHFxpReaddirPacket) MarshalBinary() ([]byte, error) {
 func (p *SSHFxpReaddirPacket) UnmarshalBinary(b []byte) error {
 	return unmarshalIDString(b, &p.ID, &p.Handle)
 }
+
+func (p *SSHFxpReaddirPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitReaddirPacket(p)
+}

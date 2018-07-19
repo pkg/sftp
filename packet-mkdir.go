@@ -36,3 +36,7 @@ func (p *SSHFxpMkdirPacket) UnmarshalBinary(b []byte) error {
 	}
 	return nil
 }
+
+func (p *SSHFxpMkdirPacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitMkdirPacket(p)
+}

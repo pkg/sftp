@@ -127,7 +127,10 @@ func (f fakePacket) Id() uint32 {
 func (f fakePacket) getHandle() string {
 	return f.handle
 }
+
 func (fakePacket) UnmarshalBinary(d []byte) error { return nil }
+
+func (fakePacket) Accept(RequestPacketVisitor) error { return nil }
 
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()

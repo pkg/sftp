@@ -47,3 +47,7 @@ func (p *SSHFxpWritePacket) UnmarshalBinary(b []byte) error {
 	p.Data = append([]byte{}, b[:p.Length]...)
 	return nil
 }
+
+func (p *SSHFxpWritePacket) Accept(v RequestPacketVisitor) error {
+	return v.VisitWritePacket(p)
+}
