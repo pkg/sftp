@@ -342,7 +342,7 @@ func (svr *Server) sendPacket(pkt responsePacket) error {
 	return nil
 }
 
-func (svr *Server) sendError(p ider, err error) error {
+func (svr *Server) sendError(p requestPacket, err error) error {
 	return svr.sendPacket(statusFromError(p, err))
 }
 
@@ -390,7 +390,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		osFlags |= os.O_RDONLY
 	} else {
 		// how are they opening?
-		return svr.sendError(p, syscall.EINVAL)
+		return svr.sendError(&p, syscall.EINVAL)
 	}
 
 	if p.hasPflags(ssh_FXF_APPEND) {
@@ -408,7 +408,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 
 	f, err := os.OpenFile(p.Path, osFlags, 0644)
 	if err != nil {
-		return svr.sendError(p, err)
+		return svr.sendError(&p, err)
 	}
 
 	handle := svr.nextHandle(f)
@@ -418,13 +418,13 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 func (p sshFxpReaddirPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendError(p, syscall.EBADF)
+		return svr.sendError(&p, syscall.EBADF)
 	}
 
 	dirname := f.Name()
 	dirents, err := f.Readdir(128)
 	if err != nil {
-		return svr.sendError(p, err)
+		return svr.sendError(&p, err)
 	}
 
 	ret := sshFxpNamePacket{ID: p.ID}
@@ -477,13 +477,13 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		}
 	}
 
-	return svr.sendError(p, err)
+	return svr.sendError(&p, err)
 }
 
 func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return svr.sendError(p, syscall.EBADF)
+		return svr.sendError(&p, syscall.EBADF)
 	}
 
 	// additional unmarshalling is required for each possibility here
@@ -524,7 +524,7 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 		}
 	}
 
-	return svr.sendError(p, err)
+	return svr.sendError(&p, err)
 }
 
 // translateErrno translates a syscall error number to a SFTP error code.

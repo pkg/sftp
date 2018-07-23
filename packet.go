@@ -956,5 +956,5 @@ func (p *sshFxpExtendedPacketPosixRename) UnmarshalBinary(b []byte) error {
 
 func (p sshFxpExtendedPacketPosixRename) respond(s *Server) error {
 	err := os.Rename(p.Oldpath, p.Newpath)
-	return s.sendError(p, err)
+	return s.sendError(&p, err)
 }
