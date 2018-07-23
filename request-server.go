@@ -2,7 +2,6 @@ package sftp
 
 import (
 	"context"
-	"encoding"
 	"io"
 	"os"
 	"path"
@@ -209,10 +208,7 @@ func (rs *RequestServer) packetWorker(
 			return errors.Errorf("unexpected packet type %T", pkt)
 		}
 
-		err := rs.sendPacket(rpkt)
-		if err != nil {
-			return err
-		}
+		rs.sendPacket(rpkt)
 	}
 	return nil
 }
@@ -246,11 +242,6 @@ func cleanPath(p string) string {
 }
 
 // Wrap underlying connection methods to use packetManager
-func (rs *RequestServer) sendPacket(m encoding.BinaryMarshaler) error {
-	if pkt, ok := m.(responsePacket); ok {
-		rs.pktMgr.readyPacket(pkt)
-	} else {
-		return errors.Errorf("unexpected packet type %T", m)
-	}
-	return nil
+func (rs *RequestServer) sendPacket(pkt responsePacket) {
+	rs.pktMgr.readyPacket(pkt)
 }

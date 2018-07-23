@@ -140,9 +140,7 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 		// If server is operating read-only and a write operation is requested,
 		// return permission denied
 		if !readonly && svr.readOnly {
-			if err := svr.sendError(pkt, syscall.EPERM); err != nil {
-				return errors.Wrap(err, "failed to send read only packet response")
-			}
+			svr.sendError(pkt, syscall.EPERM)
 			continue
 		}
 
@@ -339,12 +337,8 @@ func (svr *Server) Serve() error {
 }
 
 // Wrap underlying connection methods to use packetManager
-func (svr *Server) sendPacket(m encoding.BinaryMarshaler) error {
-	if pkt, ok := m.(responsePacket); ok {
-		svr.pktMgr.readyPacket(pkt)
-	} else {
-		return errors.Errorf("unexpected packet type %T", m)
-	}
+func (svr *Server) sendPacket(pkt responsePacket) error {
+	svr.pktMgr.readyPacket(pkt)
 	return nil
 }
 
