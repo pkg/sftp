@@ -151,7 +151,7 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 	return nil
 }
 
-func handlePacket(s *Server, p interface{}) error {
+func handlePacket(s *Server, p requestPacket) error {
 	switch p := p.(type) {
 	case *sshFxInitPacket:
 		return s.sendPacket(sshFxVersionPacket{Version: sftpProtocolVersion})
