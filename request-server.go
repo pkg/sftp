@@ -166,7 +166,7 @@ func (rs *RequestServer) packetWorker(
 		var rpkt responsePacket
 		switch pkt := pkt.(type) {
 		case *sshFxInitPacket:
-			rpkt = sshFxVersionPacket{sftpProtocolVersion, nil}
+			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion}
 		case *sshFxpClosePacket:
 			handle := pkt.getHandle()
 			rpkt = statusFromError(pkt, rs.closeRequest(handle))
@@ -178,7 +178,7 @@ func (rs *RequestServer) packetWorker(
 			if stat, ok := rpkt.(*sshFxpStatResponse); ok {
 				if stat.info.IsDir() {
 					handle := rs.nextRequest(request)
-					rpkt = sshFxpHandlePacket{pkt.id(), handle}
+					rpkt = sshFxpHandlePacket{ID: pkt.id(), Handle: handle}
 				} else {
 					rpkt = statusFromError(pkt, &os.PathError{
 						Path: request.Filepath, Err: syscall.ENOTDIR})
@@ -187,7 +187,7 @@ func (rs *RequestServer) packetWorker(
 		case *sshFxpOpenPacket:
 			request := requestFromPacket(ctx, pkt)
 			handle := rs.nextRequest(request)
-			rpkt = sshFxpHandlePacket{pkt.id(), handle}
+			rpkt = sshFxpHandlePacket{ID: pkt.id(), Handle: handle}
 			if pkt.hasPflags(ssh_FXF_CREAT) {
 				if p := request.call(rs.Handlers, pkt); !statusOk(p) {
 					rpkt = p // if error in write, return it

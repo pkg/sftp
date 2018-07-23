@@ -156,7 +156,7 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 func handlePacket(s *Server, p interface{}) error {
 	switch p := p.(type) {
 	case *sshFxInitPacket:
-		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
+		return s.sendPacket(sshFxVersionPacket{Version: sftpProtocolVersion})
 	case *sshFxpStatPacket:
 		// stat the requested file
 		info, err := os.Stat(p.Path)
@@ -418,7 +418,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 	}
 
 	handle := svr.nextHandle(f)
-	return svr.sendPacket(sshFxpHandlePacket{p.ID, handle})
+	return svr.sendPacket(sshFxpHandlePacket{ID: p.id(), Handle: handle})
 }
 
 func (p sshFxpReaddirPacket) respond(svr *Server) error {

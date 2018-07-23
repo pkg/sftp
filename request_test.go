@@ -134,7 +134,8 @@ func TestRequestGet(t *testing.T) {
 	request := testRequest("Get")
 	// req.length is 5, so we test reads in 5 byte chunks
 	for i, txt := range []string{"file-", "data."} {
-		pkt := &sshFxpReadPacket{uint32(i), "a", uint64(i * 5), 5}
+		pkt := &sshFxpReadPacket{ID: uint32(i), Handle: "a",
+			Offset: uint64(i * 5), Len: 5}
 		rpkt := request.call(handlers, pkt)
 		dpkt := rpkt.(*sshFxpDataPacket)
 		assert.Equal(t, dpkt.id(), uint32(i))
@@ -155,10 +156,12 @@ func TestRequestCustomError(t *testing.T) {
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
-	pkt := &sshFxpWritePacket{0, "a", 0, 5, []byte("file-")}
+	pkt := &sshFxpWritePacket{ID: 0, Handle: "a", Offset: 0, Length: 5,
+		Data: []byte("file-")}
 	rpkt := request.call(handlers, pkt)
 	checkOkStatus(t, rpkt)
-	pkt = &sshFxpWritePacket{1, "a", 5, 5, []byte("data.")}
+	pkt = &sshFxpWritePacket{ID: 1, Handle: "a", Offset: 5, Length: 5,
+		Data: []byte("data.")}
 	rpkt = request.call(handlers, pkt)
 	checkOkStatus(t, rpkt)
 	assert.Equal(t, "file-data.", handlers.getOutString())
