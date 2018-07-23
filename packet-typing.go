@@ -12,8 +12,6 @@ type requestPacket interface {
 	id() uint32
 }
 
-type requestChan chan requestPacket
-
 type responsePacket interface {
 	encoding.BinaryMarshaler
 	id() uint32

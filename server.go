@@ -287,7 +287,7 @@ func handlePacket(s *Server, p interface{}) error {
 // is stopped.
 func (svr *Server) Serve() error {
 	var wg sync.WaitGroup
-	runWorker := func(ch requestChan) {
+	runWorker := func(ch chan requestPacket) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
