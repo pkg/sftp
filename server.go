@@ -123,12 +123,11 @@ type rxPacket struct {
 }
 
 // Up to N parallel servers
-func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
+func (svr *Server) sftpServerWorker(pktChan chan orderedRequest) error {
 	for pkt := range pktChan {
-
 		// readonly checks
 		readonly := true
-		switch pkt := pkt.(type) {
+		switch pkt := pkt.requestPacket.(type) {
 		case notReadOnly:
 			readonly = false
 		case *sshFxpOpenPacket:
@@ -140,7 +139,9 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 		// If server is operating read-only and a write operation is requested,
 		// return permission denied
 		if !readonly && svr.readOnly {
-			svr.sendPacket(statusFromError(pkt, syscall.EPERM))
+			svr.sendPacket(orderedResponse{
+				responsePacket: statusFromError(pkt, syscall.EPERM),
+				orderid:        pkt.orderId()})
 			continue
 		}
 
@@ -151,9 +152,9 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 	return nil
 }
 
-func handlePacket(s *Server, p requestPacket) error {
+func handlePacket(s *Server, p orderedRequest) error {
 	var rpkt responsePacket
-	switch p := p.(type) {
+	switch p := p.requestPacket.(type) {
 	case *sshFxInitPacket:
 		rpkt = sshFxVersionPacket{Version: sftpProtocolVersion}
 	case *sshFxpStatPacket:
@@ -177,7 +178,6 @@ func handlePacket(s *Server, p requestPacket) error {
 			rpkt = statusFromError(p, err)
 		}
 	case *sshFxpFstatPacket:
-		fmt.Println("fstat")
 		f, ok := s.getHandle(p.Handle)
 		var err error = syscall.EBADF
 		var info os.FileInfo
@@ -282,7 +282,7 @@ func handlePacket(s *Server, p requestPacket) error {
 		return errors.Errorf("unexpected packet type %T", p)
 	}
 
-	s.sendPacket(rpkt)
+	s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, p.orderId()))
 	return nil
 }
 
@@ -290,7 +290,7 @@ func handlePacket(s *Server, p requestPacket) error {
 // is stopped.
 func (svr *Server) Serve() error {
 	var wg sync.WaitGroup
-	runWorker := func(ch chan requestPacket) {
+	runWorker := func(ch chan orderedRequest) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -327,7 +327,7 @@ func (svr *Server) Serve() error {
 			}
 		}
 
-		pktChan <- pkt
+		pktChan <- svr.pktMgr.newOrderedRequest(pkt)
 	}
 
 	close(pktChan) // shuts down sftpServerWorkers
@@ -339,12 +339,6 @@ func (svr *Server) Serve() error {
 		file.Close()
 	}
 	return err // error from recvPacket
-}
-
-// Wrap underlying connection methods to use packetManager
-func (svr *Server) sendPacket(pkt responsePacket) error {
-	svr.pktMgr.readyPacket(pkt)
-	return nil
 }
 
 type ider interface {
