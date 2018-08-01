@@ -105,7 +105,7 @@ func (rs *RequestServer) Serve() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var wg sync.WaitGroup
-	runWorker := func(ch chan requestPacket) {
+	runWorker := func(ch chan orderedRequest) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -142,7 +142,7 @@ func (rs *RequestServer) Serve() error {
 			}
 		}
 
-		pktChan <- pkt
+		pktChan <- rs.pktMgr.newOrderedRequest(pkt)
 	}
 
 	close(pktChan) // shuts down sftpServerWorkers
@@ -159,11 +159,11 @@ func (rs *RequestServer) Serve() error {
 }
 
 func (rs *RequestServer) packetWorker(
-	ctx context.Context, pktChan chan requestPacket,
+	ctx context.Context, pktChan chan orderedRequest,
 ) error {
 	for pkt := range pktChan {
 		var rpkt responsePacket
-		switch pkt := pkt.(type) {
+		switch pkt := pkt.requestPacket.(type) {
 		case *sshFxInitPacket:
 			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion}
 		case *sshFxpClosePacket:
@@ -208,7 +208,8 @@ func (rs *RequestServer) packetWorker(
 			return errors.Errorf("unexpected packet type %T", pkt)
 		}
 
-		rs.sendPacket(rpkt)
+		rs.pktMgr.readyPacket(
+			rs.pktMgr.newOrderedResponse(rpkt, pkt.orderId()))
 	}
 	return nil
 }
@@ -239,9 +240,4 @@ func cleanPath(p string) string {
 		p = "/" + p
 	}
 	return path.Clean(p)
-}
-
-// Wrap underlying connection methods to use packetManager
-func (rs *RequestServer) sendPacket(pkt responsePacket) {
-	rs.pktMgr.readyPacket(pkt)
 }
