@@ -115,9 +115,16 @@ func (d S3Driver) DeleteDir(path string) error {
 	if err != nil {
 		return err
 	}
+
+	// s3 DeleteObject needs a trailing slash for directories
+	directoryPath := translatedPath
+	if !strings.HasSuffix(translatedPath, "/") {
+		directoryPath = translatedPath + "/"
+	}
+
 	_, err = d.s3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(d.bucket),
-		Key:    aws.String(translatedPath),
+		Key:    aws.String(directoryPath),
 	})
 	return err
 }

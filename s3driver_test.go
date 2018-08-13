@@ -145,7 +145,27 @@ func TestDeleteDir(t *testing.T) {
 		bucket:   "bucket",
 		homePath: "home",
 	}
-	err := driver.DeleteDir("../../dir/")
+	err := driver.DeleteFile("../../dir/")
+
+	assert.NoError(t, err)
+}
+
+func TestDeleteDirImplicitSlash(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mockS3API := NewMockS3API(mockCtrl)
+
+	mockS3API.EXPECT().DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String("bucket"),
+		Key:    aws.String("home/dir/"),
+	}).Return(nil, nil)
+
+	driver := &S3Driver{
+		s3:       mockS3API,
+		bucket:   "bucket",
+		homePath: "home",
+	}
+	err := driver.DeleteDir("../../dir")
 
 	assert.NoError(t, err)
 }
@@ -165,7 +185,7 @@ func TestDeleteFile(t *testing.T) {
 		bucket:   "bucket",
 		homePath: "home",
 	}
-	err := driver.DeleteDir("../../dir/file")
+	err := driver.DeleteFile("../../dir/file")
 
 	assert.NoError(t, err)
 }
