@@ -242,10 +242,11 @@ func TestRequestRename(t *testing.T) {
 	assert.Nil(t, err)
 	err = p.cli.Rename("/foo", "/bar")
 	assert.Nil(t, err)
-	_, err = r.fetch("/bar")
+	f, err := r.fetch("/bar")
+	assert.Equal(t, "bar", f.Name())
 	assert.Nil(t, err)
 	_, err = r.fetch("/foo")
-	assert.Equal(t, err, os.ErrNotExist)
+	assert.Equal(t, os.ErrNotExist, err)
 }
 
 func TestRequestRenameFail(t *testing.T) {
