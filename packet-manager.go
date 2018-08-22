@@ -105,33 +105,32 @@ func (s *packetManager) close() {
 func (s *packetManager) workerChan(runWorker func(chan orderedRequest),
 ) chan orderedRequest {
 
+	// multiple workers for faster read/writes
 	rwChan := make(chan orderedRequest, SftpServerWorkerCount)
 	for i := 0; i < SftpServerWorkerCount; i++ {
 		runWorker(rwChan)
 	}
 
+	// single worker to enforce sequential processing of everything else
 	cmdChan := make(chan orderedRequest)
 	runWorker(cmdChan)
 
 	pktChan := make(chan orderedRequest, SftpServerWorkerCount)
 	go func() {
-		// start with cmdChan
-		curChan := cmdChan
 		for pkt := range pktChan {
-			// on file open packet, switch to rwChan
 			switch pkt.requestPacket.(type) {
-			case *sshFxpOpenPacket:
-				curChan = rwChan
-			// on file close packet, switch back to cmdChan
-			// after waiting for any reads/writes to finish
+			case *sshFxpReadPacket, *sshFxpWritePacket:
+				s.incomingPacket(pkt)
+				rwChan <- pkt
+				continue
 			case *sshFxpClosePacket:
-				// wait for rwChan to finish
+				// wait for reads/writes to finish when file is closed
+				// incomingPacket() call must occur after this
 				s.working.Wait()
-				// stop using rwChan
-				curChan = cmdChan
 			}
 			s.incomingPacket(pkt)
-			curChan <- pkt
+			// all non-RW use sequential cmdChan
+			cmdChan <- pkt
 		}
 		close(rwChan)
 		close(cmdChan)
