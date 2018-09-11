@@ -204,13 +204,17 @@ func packetData(p requestPacket) (data []byte, offset int64, length uint32) {
 // wrap FileReader handler
 func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 	var err error
-	reader := r.getReader()
+	r.state.Lock()
+	reader := r.state.readerAt
 	if reader == nil {
 		reader, err = h.Fileread(r)
-		if err != nil {
-			return statusFromError(pkt, err)
+		if err == nil {
+			r.state.readerAt = reader
 		}
-		r.setReaderState(reader)
+	}
+	r.state.Unlock()
+	if err != nil {
+		return statusFromError(pkt, err)
 	}
 
 	_, offset, length := packetData(pkt)
