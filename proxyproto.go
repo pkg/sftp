@@ -1,3 +1,5 @@
+// From https://github.com/armon/go-proxyproto
+
 package sftp
 
 import (
