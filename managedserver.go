@@ -79,16 +79,18 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
+	proxyList := Listener{Listener: listener}
+
 	if err != nil {
 		m.errorAndAlert("listen-fail", meta{
 			"msg":   "failed to open socket",
 			"error": err.Error(),
 			"port":  port})
 	}
-	m.lg.InfoD("listening", meta{"address": listener.Addr().String()})
+	m.lg.InfoD("listening", meta{"address": proxyList.Addr().String()})
 
 	for {
-		newConn, err := listener.Accept()
+		newConn, err := proxyList.Accept()
 		if err != nil {
 			m.errorAndAlert("listener-accept-fail", meta{"error": err.Error()})
 			os.Exit(1)
