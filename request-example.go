@@ -213,6 +213,7 @@ func newMemFile(name string, isdir bool) *memFile {
 		name:    name,
 		modtime: time.Now(),
 		isdir:   isdir,
+		content: []byte(""),
 	}
 }
 

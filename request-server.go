@@ -56,6 +56,7 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 	defer rs.openRequestLock.Unlock()
 	rs.handleCount++
 	handle := strconv.Itoa(rs.handleCount)
+	r.handle = handle
 	rs.openRequests[handle] = r
 	return handle
 }
@@ -167,6 +168,7 @@ func (rs *RequestServer) packetWorker(
 		case *sshFxInitPacket:
 			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion}
 		case *sshFxpClosePacket:
+			//fmt.Println("close")
 			handle := pkt.getHandle()
 			rpkt = statusFromError(pkt, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
@@ -184,14 +186,15 @@ func (rs *RequestServer) packetWorker(
 				}
 			}
 		case *sshFxpOpenPacket:
+			//fmt.Println("openpkt")
+			// request w/ reader/writer set
+			// method should be set to read/write
+			// return handle packet (or err)
+			// save handle for future calls
+
 			request := requestFromPacket(ctx, pkt)
-			handle := rs.nextRequest(request)
-			rpkt = sshFxpHandlePacket{ID: pkt.id(), Handle: handle}
-			if pkt.hasPflags(ssh_FXF_CREAT) {
-				if p := request.call(rs.Handlers, pkt); !statusOk(p) {
-					rpkt = p // if error in write, return it
-				}
-			}
+			rs.nextRequest(request)
+			rpkt = request.call(rs.Handlers, pkt)
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle, requestMethod(pkt))

@@ -60,6 +60,7 @@ type fakefile [10]byte
 
 var filecontents = []byte("file-data.")
 
+// XXX need new for creating test requests that supports Open-ing
 func testRequest(method string) *Request {
 	request := &Request{
 		Filepath: "./request_test.go",
@@ -133,9 +134,11 @@ func (f fakePacket) getHandle() string {
 }
 func (fakePacket) UnmarshalBinary(d []byte) error { return nil }
 
+// XXX can't just set method to Get, need to use Open to setup Get/Put
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
+	request.state.readerAt, _ = handlers.FileGet.Fileread(request)
 	// req.length is 5, so we test reads in 5 byte chunks
 	for i, txt := range []string{"file-", "data."} {
 		pkt := &sshFxpReadPacket{ID: uint32(i), Handle: "a",
@@ -157,9 +160,11 @@ func TestRequestCustomError(t *testing.T) {
 	assert.Equal(t, rpkt, statusFromError(rpkt, cmdErr))
 }
 
+// XXX can't just set method to Get, need to use Open to setup Get/Put
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
+	request.state.writerAt, _ = handlers.FilePut.Filewrite(request)
 	pkt := &sshFxpWritePacket{ID: 0, Handle: "a", Offset: 0, Length: 5,
 		Data: []byte("file-")}
 	rpkt := request.call(handlers, pkt)
