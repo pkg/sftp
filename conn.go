@@ -36,6 +36,13 @@ type clientConn struct {
 	wg         sync.WaitGroup
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
+	errCh      chan error
+}
+
+// Wait blocks until the conn has shut down, and return the error
+// causing the shutdown.
+func (c *clientConn) Wait() error {
+	return <-c.errCh
 }
 
 // Close closes the SFTP session.
@@ -49,6 +56,7 @@ func (c *clientConn) loop() {
 	err := c.recv()
 	if err != nil {
 		c.broadcastErr(err)
+		c.errCh <- err
 	}
 }
 
