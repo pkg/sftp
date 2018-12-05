@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -123,7 +122,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 				WriteCloser: wr,
 			},
 			inflight: make(map[uint32]chan<- result),
-			errCond:  sync.NewCond(new(sync.Mutex)),
+			closed:   make(chan struct{}),
 		},
 		maxPacket:             1 << 15,
 		maxConcurrentRequests: 64,

@@ -37,19 +37,15 @@ type clientConn struct {
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
 
-	errCond *sync.Cond
-	err     error
+	closed chan struct{}
+	err    error
 }
 
 // Wait blocks until the conn has shut down, and return the error
 // causing the shutdown. It can be called concurrently from multiple
 // goroutines.
 func (c *clientConn) Wait() error {
-	c.errCond.L.Lock()
-	defer c.errCond.L.Unlock()
-	for c.err == nil {
-		c.errCond.Wait()
-	}
+	<-c.closed
 	return c.err
 }
 
@@ -64,10 +60,6 @@ func (c *clientConn) loop() {
 	err := c.recv()
 	if err != nil {
 		c.broadcastErr(err)
-		c.errCond.L.Lock()
-		c.err = err
-		c.errCond.Broadcast()
-		c.errCond.L.Unlock()
 	}
 }
 
@@ -141,6 +133,8 @@ func (c *clientConn) broadcastErr(err error) {
 	for _, ch := range listeners {
 		ch <- result{err: err}
 	}
+	c.err = err
+	close(c.closed)
 }
 
 type serverConn struct {
