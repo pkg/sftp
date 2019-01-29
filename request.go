@@ -206,7 +206,6 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 // wrap FileReader handler
 func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 	//fmt.Println("fileget", r)
-	var err error
 	r.state.RLock()
 	reader := r.state.readerAt
 	r.state.RUnlock()
@@ -231,7 +230,6 @@ func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 // wrap FileWriter handler
 func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
 	//fmt.Println("fileput", r)
-	var err error
 	r.state.RLock()
 	writer := r.state.writerAt
 	r.state.RUnlock()
@@ -240,7 +238,7 @@ func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
 	}
 
 	data, offset, _ := packetData(pkt)
-	_, err = writer.WriteAt(data, offset)
+	_, err := writer.WriteAt(data, offset)
 	return statusFromError(pkt, err)
 }
 
