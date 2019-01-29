@@ -62,10 +62,18 @@ var filecontents = []byte("file-data.")
 
 // XXX need new for creating test requests that supports Open-ing
 func testRequest(method string) *Request {
+	var flags uint32
+	switch method {
+	case "Get":
+		flags = flags | ssh_FXF_READ
+	case "Put":
+		flags = flags | ssh_FXF_WRITE
+	}
 	request := &Request{
 		Filepath: "./request_test.go",
 		Method:   method,
 		Attrs:    []byte("foo"),
+		Flags:    flags,
 		Target:   "foo",
 		state:    state{RWMutex: new(sync.RWMutex)},
 	}
@@ -138,7 +146,8 @@ func (fakePacket) UnmarshalBinary(d []byte) error { return nil }
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
-	request.state.readerAt, _ = handlers.FileGet.Fileread(request)
+	pkt := fakePacket{myid: 1}
+	request.open(handlers, pkt)
 	// req.length is 5, so we test reads in 5 byte chunks
 	for i, txt := range []string{"file-", "data."} {
 		pkt := &sshFxpReadPacket{ID: uint32(i), Handle: "a",
@@ -198,28 +207,46 @@ func TestRequestInfoStat(t *testing.T) {
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
 }
 
-func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }
-func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
-func testInfoMethod(t *testing.T, method string) {
+func TestRequestInfoList(t *testing.T) {
 	handlers := newTestHandlers()
-	request := testRequest(method)
+	request := testRequest("List")
+	request.handle = "1"
+	pkt := fakePacket{myid: 1}
+	rpkt := request.opendir(handlers, pkt)
+	hpkt, ok := rpkt.(*sshFxpHandlePacket)
+	if assert.True(t, ok) {
+		assert.Equal(t, hpkt.Handle, "1")
+	}
+	pkt = fakePacket{myid: 2}
+	request.call(handlers, pkt)
+}
+func TestRequestInfoReadlink(t *testing.T) {
+	handlers := newTestHandlers()
+	request := testRequest("Readlink")
 	pkt := fakePacket{myid: 1}
 	rpkt := request.call(handlers, pkt)
 	npkt, ok := rpkt.(*sshFxpNamePacket)
-	assert.True(t, ok)
-	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
-	assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
+	if assert.True(t, ok) {
+		assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
+		assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
+	}
 }
 
 func TestOpendirHandleReuse(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
+	request.handle = "1"
 	pkt := fakePacket{myid: 1}
 	rpkt := request.call(handlers, pkt)
 	assert.IsType(t, &sshFxpStatResponse{}, rpkt)
 
 	request.Method = "List"
 	pkt = fakePacket{myid: 2}
+	rpkt = request.opendir(handlers, pkt)
+	if assert.IsType(t, &sshFxpHandlePacket{}, rpkt) {
+		hpkt := rpkt.(*sshFxpHandlePacket)
+		assert.Equal(t, hpkt.Handle, "1")
+	}
 	rpkt = request.call(handlers, pkt)
 	assert.IsType(t, &sshFxpNamePacket{}, rpkt)
 }

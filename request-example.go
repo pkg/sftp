@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -136,8 +137,16 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 
+	file, err := fs.fetch(r.Filepath)
+	if err != nil {
+		return nil, err
+	}
+
 	switch r.Method {
 	case "List":
+		if !file.IsDir() {
+			return nil, syscall.ENOTDIR
+		}
 		ordered_names := []string{}
 		for fn, _ := range fs.files {
 			if filepath.Dir(fn) == r.Filepath {
@@ -151,16 +160,8 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		}
 		return listerat(list), nil
 	case "Stat":
-		file, err := fs.fetch(r.Filepath)
-		if err != nil {
-			return nil, err
-		}
 		return listerat([]os.FileInfo{file}), nil
 	case "Readlink":
-		file, err := fs.fetch(r.Filepath)
-		if err != nil {
-			return nil, err
-		}
 		if file.symlink != "" {
 			file, err = fs.fetch(file.symlink)
 			if err != nil {

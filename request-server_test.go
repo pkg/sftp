@@ -351,7 +351,9 @@ func TestRequestReaddir(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		fname := fmt.Sprintf("/foo_%02d", i)
 		_, err := putTestFile(p.cli, fname, fname)
-		assert.Nil(t, err)
+		if !assert.NoError(t, err) {
+			t.Fatal(err)
+		}
 	}
 	_, err := p.cli.ReadDir("/foo_01")
 	assert.Equal(t, &StatusError{Code: ssh_FX_FAILURE,

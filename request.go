@@ -154,8 +154,6 @@ func (r *Request) close() error {
 // called from worker to handle packet/request
 func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 	switch r.Method {
-	case "Open":
-		return fileopen(handlers, r, pkt)
 	case "Get":
 		return fileget(handlers.FileGet, r, pkt)
 	case "Put":
@@ -172,26 +170,37 @@ func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 	}
 }
 
-func fileopen(h Handlers, r *Request, pkt requestPacket) responsePacket {
-	//fmt.Println("fileopen", r)
+// Additional initialization for Open packets
+func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	flags := r.Pflags()
 	var err error
 	switch {
 	case flags.Write, flags.Append, flags.Creat, flags.Trunc:
-		r.state.Lock()
-		defer r.state.Unlock()
+		r.Method = "Put"
 		r.state.writerAt, err = h.FilePut.Filewrite(r)
 	case flags.Read:
-		r.state.Lock()
-		defer r.state.Unlock()
+		r.Method = "Get"
 		r.state.readerAt, err = h.FileGet.Fileread(r)
+	default:
+		return statusFromError(pkt, errors.New("bad file flags"))
 	}
-	// XXX needs to return error OR sshFxpHandlePacket
 	if err != nil {
 		return statusFromError(pkt, err)
 	}
-
-	return sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
+	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
+}
+func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
+	var err error
+	r.Method = "List"
+	r.state.listerAt, err = h.FileList.Filelist(r)
+	if err != nil {
+		switch err.(type) {
+		case syscall.Errno:
+			err = &os.PathError{Path: r.Filepath, Err: err}
+		}
+		return statusFromError(pkt, err)
+	}
+	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
 }
 
 // wrap FileReader handler
@@ -266,11 +275,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	var err error
 	lister := r.getLister()
 	if lister == nil {
-		lister, err = h.Filelist(r)
-		if err != nil {
-			return statusFromError(pkt, err)
-		}
-		r.setListerState(lister)
+		return statusFromError(pkt, errors.New("unexpected dir packet"))
 	}
 
 	offset := r.lsNext()
@@ -355,16 +360,10 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 // init attributes of request object from packet data
 func requestMethod(p requestPacket) (method string) {
 	switch p.(type) {
-	case *sshFxpReadPacket:
-		method = "Get"
-	case *sshFxpWritePacket:
-		method = "Put"
-	case *sshFxpReaddirPacket:
-		method = "List"
-	case *sshFxpOpenPacket:
-		method = "Open"
-	case *sshFxpOpendirPacket:
-		method = "Stat"
+	case *sshFxpReadPacket, *sshFxpWritePacket, *sshFxpOpenPacket:
+		// set in open() above
+	case *sshFxpOpendirPacket, *sshFxpReaddirPacket:
+		// set in opendir() above
 	case *sshFxpSetstatPacket, *sshFxpFsetstatPacket:
 		method = "Setstat"
 	case *sshFxpRenamePacket:

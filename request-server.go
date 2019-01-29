@@ -3,7 +3,6 @@ package sftp
 import (
 	"context"
 	"io"
-	"os"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -168,33 +167,18 @@ func (rs *RequestServer) packetWorker(
 		case *sshFxInitPacket:
 			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion}
 		case *sshFxpClosePacket:
-			//fmt.Println("close")
 			handle := pkt.getHandle()
 			rpkt = statusFromError(pkt, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
 			rpkt = cleanPacketPath(pkt)
 		case *sshFxpOpendirPacket:
 			request := requestFromPacket(ctx, pkt)
-			rpkt = request.call(rs.Handlers, pkt)
-			if stat, ok := rpkt.(*sshFxpStatResponse); ok {
-				if stat.info.IsDir() {
-					handle := rs.nextRequest(request)
-					rpkt = sshFxpHandlePacket{ID: pkt.id(), Handle: handle}
-				} else {
-					rpkt = statusFromError(pkt, &os.PathError{
-						Path: request.Filepath, Err: syscall.ENOTDIR})
-				}
-			}
+			rs.nextRequest(request)
+			rpkt = request.opendir(rs.Handlers, pkt)
 		case *sshFxpOpenPacket:
-			//fmt.Println("openpkt")
-			// request w/ reader/writer set
-			// method should be set to read/write
-			// return handle packet (or err)
-			// save handle for future calls
-
 			request := requestFromPacket(ctx, pkt)
 			rs.nextRequest(request)
-			rpkt = request.call(rs.Handlers, pkt)
+			rpkt = request.open(rs.Handlers, pkt)
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle, requestMethod(pkt))
