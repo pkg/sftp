@@ -147,7 +147,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	f, err := r.fetch("/foo")
 	if assert.Nil(t, err) {
 		assert.False(t, f.isdir)
-		assert.Equal(t, []byte(""), f.content)
+		assert.Len(t, f.content, 0)
 	}
 	// lets test with an error
 	r.returnErr(os.ErrInvalid)
@@ -351,8 +351,8 @@ func TestRequestReaddir(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		fname := fmt.Sprintf("/foo_%02d", i)
 		_, err := putTestFile(p.cli, fname, fname)
-		if !assert.NoError(t, err) {
-			t.Fatal(err)
+		if err != nil {
+			t.Fatal("expected no error, got:", err)
 		}
 	}
 	_, err := p.cli.ReadDir("/foo_01")
