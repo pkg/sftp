@@ -27,10 +27,10 @@ func InMemHandler() Handlers {
 
 // Example Handlers
 func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
-	_ = r.WithContext(r.Context())
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
@@ -47,10 +47,10 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
-	_ = r.WithContext(r.Context())
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
@@ -69,10 +69,10 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 }
 
 func (fs *root) Filecmd(r *Request) error {
-	_ = r.WithContext(r.Context())
 	if fs.mockErr != nil {
 		return fs.mockErr
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 	switch r.Method {
@@ -130,10 +130,10 @@ func (f listerat) ListAt(ls []os.FileInfo, offset int64) (int, error) {
 }
 
 func (fs *root) Filelist(r *Request) (ListerAt, error) {
-	_ = r.WithContext(r.Context())
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 

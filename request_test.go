@@ -22,7 +22,7 @@ func (t *testHandler) Fileread(r *Request) (io.ReaderAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	_ = r.WithContext(r.Context())
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	return bytes.NewReader(t.filecontents), nil
 }
 
@@ -30,12 +30,12 @@ func (t *testHandler) Filewrite(r *Request) (io.WriterAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	_ = r.WithContext(r.Context())
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	return io.WriterAt(t.output), nil
 }
 
 func (t *testHandler) Filecmd(r *Request) error {
-	_ = r.WithContext(r.Context())
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	return t.err
 }
 
@@ -43,7 +43,7 @@ func (t *testHandler) Filelist(r *Request) (ListerAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	_ = r.WithContext(r.Context())
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	f, err := os.Open(r.Filepath)
 	if err != nil {
 		return nil, err
