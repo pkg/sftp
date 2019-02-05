@@ -84,7 +84,7 @@ func TestRequestCache(t *testing.T) {
 	fh := p.svr.nextRequest(foo)
 	bh := p.svr.nextRequest(bar)
 	assert.Len(t, p.svr.openRequests, 2)
-	_foo, ok := p.svr.getRequest(fh, "")
+	_foo, ok := p.svr.getRequest(fh)
 	assert.Equal(t, foo.Method, _foo.Method)
 	assert.Equal(t, foo.Filepath, _foo.Filepath)
 	assert.Equal(t, foo.Target, _foo.Target)
@@ -94,7 +94,7 @@ func TestRequestCache(t *testing.T) {
 	assert.NotNil(t, _foo.ctx)
 	assert.Equal(t, _foo.Context().Err(), nil, "context is still valid")
 	assert.True(t, ok)
-	_, ok = p.svr.getRequest("zed", "")
+	_, ok = p.svr.getRequest("zed")
 	assert.False(t, ok)
 	p.svr.closeRequest(fh)
 	assert.Equal(t, _foo.Context().Err(), context.Canceled, "context is now canceled")
@@ -147,7 +147,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	f, err := r.fetch("/foo")
 	if assert.Nil(t, err) {
 		assert.False(t, f.isdir)
-		assert.Equal(t, f.content, []byte(""))
+		assert.Len(t, f.content, 0)
 	}
 	// lets test with an error
 	r.returnErr(os.ErrInvalid)
@@ -170,7 +170,7 @@ func TestRequestFilename(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestRequestRead(t *testing.T) {
+func TestRequestJustRead(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
@@ -187,21 +187,18 @@ func TestRequestRead(t *testing.T) {
 	assert.Equal(t, "hello", string(contents[0:5]))
 }
 
-func TestRequestReadFail(t *testing.T) {
+func TestRequestOpenFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	rf, err := p.cli.Open("/foo")
-	assert.Nil(t, err)
-	contents := make([]byte, 5)
-	n, err := rf.Read(contents)
-	assert.Equal(t, n, 0)
 	assert.Exactly(t, os.ErrNotExist, err)
+	assert.Nil(t, rf)
 }
 
-func TestRequestOpen(t *testing.T) {
+func TestRequestCreate(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
-	fh, err := p.cli.Open("foo")
+	fh, err := p.cli.Create("foo")
 	assert.Nil(t, err)
 	err = fh.Close()
 	assert.Nil(t, err)
@@ -354,7 +351,9 @@ func TestRequestReaddir(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		fname := fmt.Sprintf("/foo_%02d", i)
 		_, err := putTestFile(p.cli, fname, fname)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatal("expected no error, got:", err)
+		}
 	}
 	_, err := p.cli.ReadDir("/foo_01")
 	assert.Equal(t, &StatusError{Code: ssh_FX_FAILURE,
