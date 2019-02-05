@@ -226,6 +226,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 
 // test that server handles concurrent requests correctly
 func TestConcurrentRequests(t *testing.T) {
+	skipIfWindows(t)
 	client, server := clientServerPair(t)
 	defer client.Close()
 	defer server.Close()

@@ -32,6 +32,7 @@ func (cs csPair) testHandler() *root {
 const sock = "/tmp/rstest.sock"
 
 func clientRequestServerPair(t *testing.T) *csPair {
+	skipIfWindows(t)
 	ready := make(chan bool)
 	os.Remove(sock) // either this or signal handling
 	var server *RequestServer
