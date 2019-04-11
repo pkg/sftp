@@ -786,7 +786,7 @@ func (f *File) Name() string {
 // automatically.
 func (f *File) Read(b []byte) (int, error) {
 	r, err := f.ReadAt(b, int64( f.offset ))
-	f.offset = uint64(r)
+	f.offset += uint64(r)
 	return r, err
 }
 
