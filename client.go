@@ -790,8 +790,6 @@ func (f *File) Read(b []byte) (int, error) {
 	return r, err
 }
 
-
-
 // ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns 
 // the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics, 
 // so the file offset is not altered during the read.
@@ -886,9 +884,6 @@ func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
 	}
 	return read, firstErr.err
 }
-
-
-
 
 // WriteTo writes the file to w. The return value is the number of bytes
 // written. Any error encountered during the write is also returned.
