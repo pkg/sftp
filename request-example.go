@@ -102,6 +102,15 @@ func (fs *root) Filecmd(r *Request) error {
 			return err
 		}
 		fs.files[r.Filepath] = newMemFile(r.Filepath, true)
+	case "Link":
+		file, err := fs.fetch(r.Filepath)
+		if err != nil {
+			return err
+		}
+		if file.IsDir() {
+			return fmt.Errorf("hard link not allowed for directory")
+		}
+		fs.files[r.Target] = file
 	case "Symlink":
 		_, err := fs.fetch(r.Filepath)
 		if err != nil {

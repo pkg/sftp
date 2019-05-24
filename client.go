@@ -358,6 +358,25 @@ func (c *Client) ReadLink(p string) (string, error) {
 	}
 }
 
+// Link creates a hard link at 'newname', pointing at the same inode as 'oldname'
+func (c *Client) Link(oldname, newname string) error {
+	id := c.nextID()
+	typ, data, err := c.sendPacket(sshFxpHardlinkPacket{
+		ID:      id,
+		Oldpath: oldname,
+		Newpath: newname,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case ssh_FXP_STATUS:
+		return normaliseError(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
 // Symlink creates a symbolic link at 'newname', pointing at target 'oldname'
 func (c *Client) Symlink(oldname, newname string) error {
 	id := c.nextID()
