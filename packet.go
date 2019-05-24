@@ -216,9 +216,11 @@ func (p *sshFxInitPacket) UnmarshalBinary(b []byte) error {
 
 type sshFxVersionPacket struct {
 	Version    uint32
-	Extensions []struct {
-		Name, Data string
-	}
+	Extensions []sshExtensionPair
+}
+
+type sshExtensionPair struct {
+	Name, Data string
 }
 
 func (p sshFxVersionPacket) MarshalBinary() ([]byte, error) {
@@ -409,6 +411,30 @@ func (p *sshFxpSymlinkPacket) UnmarshalBinary(b []byte) error {
 		return err
 	}
 	return nil
+}
+
+type sshFxpHardlinkPacket struct {
+	ID      uint32
+	Oldpath string
+	Newpath string
+}
+
+func (p sshFxpHardlinkPacket) id() uint32 { return p.ID }
+
+func (p sshFxpHardlinkPacket) MarshalBinary() ([]byte, error) {
+	const ext = "hardlink@openssh.com"
+	l := 1 + 4 + // type(byte) + uint32
+		4 + len(ext) +
+		4 + len(p.Oldpath) +
+		4 + len(p.Newpath)
+
+	b := make([]byte, 0, l)
+	b = append(b, ssh_FXP_EXTENDED)
+	b = marshalUint32(b, p.ID)
+	b = marshalString(b, ext)
+	b = marshalString(b, p.Oldpath)
+	b = marshalString(b, p.Newpath)
+	return b, nil
 }
 
 type sshFxpReadlinkPacket struct {
@@ -903,6 +929,8 @@ func (p *sshFxpExtendedPacket) UnmarshalBinary(b []byte) error {
 		p.SpecificPacket = &sshFxpExtendedPacketStatVFS{}
 	case "posix-rename@openssh.com":
 		p.SpecificPacket = &sshFxpExtendedPacketPosixRename{}
+	case "hardlink@openssh.com":
+		p.SpecificPacket = &sshFxpExtendedPacketHardlink{}
 	default:
 		return errors.Wrapf(errUnknownExtendedPacket, "packet type %v", p.SpecificPacket)
 	}
@@ -955,5 +983,34 @@ func (p *sshFxpExtendedPacketPosixRename) UnmarshalBinary(b []byte) error {
 
 func (p sshFxpExtendedPacketPosixRename) respond(s *Server) responsePacket {
 	err := os.Rename(p.Oldpath, p.Newpath)
+	return statusFromError(p, err)
+}
+
+type sshFxpExtendedPacketHardlink struct {
+	ID              uint32
+	ExtendedRequest string
+	Oldpath         string
+	Newpath         string
+}
+
+// https://github.com/openssh/openssh-portable/blob/master/PROTOCOL
+func (p sshFxpExtendedPacketHardlink) id() uint32     { return p.ID }
+func (p sshFxpExtendedPacketHardlink) readonly() bool { return true }
+func (p *sshFxpExtendedPacketHardlink) UnmarshalBinary(b []byte) error {
+	var err error
+	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
+		return err
+	} else if p.ExtendedRequest, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Oldpath, b, err = unmarshalStringSafe(b); err != nil {
+		return err
+	} else if p.Newpath, _, err = unmarshalStringSafe(b); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p sshFxpExtendedPacketHardlink) respond(s *Server) responsePacket {
+	err := os.Link(p.Oldpath, p.Newpath)
 	return statusFromError(p, err)
 }

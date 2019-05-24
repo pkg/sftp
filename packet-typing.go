@@ -49,8 +49,9 @@ func (p sshFxpOpendirPacket) getPath() string  { return p.Path }
 func (p sshFxpOpenPacket) getPath() string     { return p.Path }
 
 func (p sshFxpExtendedPacketPosixRename) getPath() string { return p.Oldpath }
+func (p sshFxpExtendedPacketHardlink) getPath() string    { return p.Oldpath }
 
-// hasHandle
+// getHandle
 func (p sshFxpFstatPacket) getHandle() string    { return p.Handle }
 func (p sshFxpFsetstatPacket) getHandle() string { return p.Handle }
 func (p sshFxpReadPacket) getHandle() string     { return p.Handle }
@@ -68,6 +69,7 @@ func (p sshFxpRmdirPacket) notReadOnly()               {}
 func (p sshFxpRenamePacket) notReadOnly()              {}
 func (p sshFxpSymlinkPacket) notReadOnly()             {}
 func (p sshFxpExtendedPacketPosixRename) notReadOnly() {}
+func (p sshFxpExtendedPacketHardlink) notReadOnly()    {}
 
 // some packets with ID are missing id()
 func (p sshFxpDataPacket) id() uint32   { return p.ID }

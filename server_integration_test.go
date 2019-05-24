@@ -569,6 +569,35 @@ func TestServerMkdirRmdir(t *testing.T) {
 	}
 }
 
+func TestServerLink(t *testing.T) {
+	skipIfWindows(t) // No hard links on windows.
+	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpFileLocalData := randData(999)
+
+	linkdest := "/tmp/" + randName()
+	defer os.RemoveAll(linkdest)
+	if err := ioutil.WriteFile(linkdest, tmpFileLocalData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	link := "/tmp/" + randName()
+	defer os.RemoveAll(link)
+
+	// now create a hard link within the new directory
+	if output, err := runSftpClient(t, fmt.Sprintf("ln %s %s", linkdest, link), "/", hostGo, portGo); err != nil {
+		t.Fatalf("failed: %v %v", err, string(output))
+	}
+
+	// file should now exist and be the same size as linkdest
+	if stat, err := os.Lstat(link); err != nil {
+		t.Fatal(err)
+	} else if int(stat.Size()) != len(tmpFileLocalData) {
+		t.Fatalf("wrong size: %v", len(tmpFileLocalData))
+	}
+}
+
 func TestServerSymlink(t *testing.T) {
 	skipIfWindows(t) // No symlinks on windows.
 	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
