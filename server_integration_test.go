@@ -35,7 +35,6 @@ import (
 func TestMain(m *testing.M) {
 	sftpClientLocation, _ := exec.LookPath("sftp")
 	testSftpClientBin = flag.String("sftp_client", sftpClientLocation, "location of the sftp client binary")
-	flag.Parse()
 
 	lookSFTPServer := []string{
 		"/usr/libexec/sftp-server",
@@ -51,6 +50,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 	testSftp = flag.String("sftp", sftpServer, "location of the sftp server binary")
+	flag.Parse()
 
 	os.Exit(m.Run())
 }
