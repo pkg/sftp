@@ -276,6 +276,12 @@ func handlePacket(s *Server, p orderedRequest) error {
 			_, err = f.WriteAt(p.Data, int64(p.Offset))
 		}
 		rpkt = statusFromError(p, err)
+	case *sshFxpExtendedPacket:
+		if p.SpecificPacket == nil {
+			rpkt = statusFromError(p, ErrSshFxOpUnsupported)
+		} else {
+			rpkt = p.respond(s)
+		}
 	case serverRespondablePacket:
 		rpkt = p.respond(s)
 	default:

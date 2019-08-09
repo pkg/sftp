@@ -114,18 +114,9 @@ func (rs *RequestServer) Serve() error {
 
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
-			switch errors.Cause(err) {
-			case errUnknownExtendedPacket:
-				if err := rs.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
-					debug("failed to send err packet: %v", err)
-					rs.conn.Close() // shuts down recvPacket
-					break
-				}
-			default:
-				debug("makePacket err: %v", err)
-				rs.conn.Close() // shuts down recvPacket
-				break
-			}
+			debug("makePacket err: %v", err)
+			rs.conn.Close() // shuts down recvPacket
+			break
 		}
 
 		pktChan <- rs.pktMgr.newOrderedRequest(pkt)
@@ -187,7 +178,11 @@ func (rs *RequestServer) packetWorker(
 			rpkt = request.call(rs.Handlers, pkt)
 			request.close()
 		default:
-			return errors.Errorf("unexpected packet type %T", pkt)
+			if pkt, ok := pkt.(*sshFxpExtendedPacket); ok && pkt.SpecificPacket == nil {
+				rpkt = statusFromError(pkt, ErrSshFxOpUnsupported)
+			} else {
+				return errors.Errorf("unexpected packet type %T", pkt)
+			}
 		}
 
 		rs.pktMgr.readyPacket(
