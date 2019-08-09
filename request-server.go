@@ -114,9 +114,14 @@ func (rs *RequestServer) Serve() error {
 
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
-			debug("makePacket err: %v", err)
-			rs.conn.Close() // shuts down recvPacket
-			break
+			switch errors.Cause(err) {
+			case errUnknownExtendedPacket:
+				// do nothing
+			default:
+				debug("makePacket err: %v", err)
+				rs.conn.Close() // shuts down recvPacket
+				break
+			}
 		}
 
 		pktChan <- rs.pktMgr.newOrderedRequest(pkt)
