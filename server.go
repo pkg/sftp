@@ -276,6 +276,12 @@ func handlePacket(s *Server, p orderedRequest) error {
 			_, err = f.WriteAt(p.Data, int64(p.Offset))
 		}
 		rpkt = statusFromError(p, err)
+	case *sshFxpExtendedPacket:
+		if p.SpecificPacket == nil {
+			rpkt = statusFromError(p, ErrSshFxOpUnsupported)
+		} else {
+			rpkt = p.respond(s)
+		}
 	case serverRespondablePacket:
 		rpkt = p.respond(s)
 	default:
@@ -315,11 +321,11 @@ func (svr *Server) Serve() error {
 		if err != nil {
 			switch errors.Cause(err) {
 			case errUnknownExtendedPacket:
-				if err := svr.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
-					debug("failed to send err packet: %v", err)
-					svr.conn.Close() // shuts down recvPacket
-					break
-				}
+				//if err := svr.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
+				//	debug("failed to send err packet: %v", err)
+				//	svr.conn.Close() // shuts down recvPacket
+				//	break
+				//}
 			default:
 				debug("makePacket err: %v", err)
 				svr.conn.Close() // shuts down recvPacket
