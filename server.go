@@ -321,11 +321,11 @@ func (svr *Server) Serve() error {
 		if err != nil {
 			switch errors.Cause(err) {
 			case errUnknownExtendedPacket:
-				if err := svr.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
-					debug("failed to send err packet: %v", err)
-					svr.conn.Close() // shuts down recvPacket
-					break
-				}
+				//if err := svr.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
+				//	debug("failed to send err packet: %v", err)
+				//	svr.conn.Close() // shuts down recvPacket
+				//	break
+				//}
 			default:
 				debug("makePacket err: %v", err)
 				svr.conn.Close() // shuts down recvPacket
