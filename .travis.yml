@@ -12,16 +12,16 @@ os:
   - linux
   - osx
 
-env:
-  global:
-    - GO111MODULE=on
-
 matrix:
   exclude:
     - os: osx
-      go: 1.10.x
+      go: 1.11.x
     - os: osx
       go: tip
+
+env:
+  global:
+    - GO111MODULE=on
 
 addons:
   ssh_known_hosts:
