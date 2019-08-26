@@ -116,11 +116,7 @@ func (rs *RequestServer) Serve() error {
 		if err != nil {
 			switch errors.Cause(err) {
 			case errUnknownExtendedPacket:
-				if err := rs.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
-					debug("failed to send err packet: %v", err)
-					rs.conn.Close() // shuts down recvPacket
-					break
-				}
+				// do nothing
 			default:
 				debug("makePacket err: %v", err)
 				rs.conn.Close() // shuts down recvPacket
