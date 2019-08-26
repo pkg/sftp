@@ -32,7 +32,7 @@ type FileWriter interface {
 
 // FileCmder should return an error
 // Note in cases of an error, the error text will be sent to the client.
-// Called for Methods: Setstat, Rename, Rmdir, Mkdir, Symlink, Remove
+// Called for Methods: Setstat, Rename, Rmdir, Mkdir, Link, Symlink, Remove
 type FileCmder interface {
 	Filecmd(*Request) error
 }

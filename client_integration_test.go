@@ -715,6 +715,32 @@ func TestClientReadLink(t *testing.T) {
 	}
 }
 
+func TestClientLink(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("linktest")
+	_, err = f.Write(data)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2 := f.Name() + ".link"
+	if err := sftp.Link(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if st2, err := sftp.Stat(f2); err != nil {
+		t.Fatal(err)
+	} else if int(st2.Size()) != len(data) {
+		t.Fatalf("unexpected link size: %v, not %v", st2.Size(), len(data))
+	}
+}
+
 func TestClientSymlink(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
 	defer cmd.Wait()

@@ -148,6 +148,10 @@ func (rs *RequestServer) packetWorker(
 	ctx context.Context, pktChan chan orderedRequest,
 ) error {
 	for pkt := range pktChan {
+		if epkt, ok := pkt.requestPacket.(*sshFxpExtendedPacket); ok {
+			pkt.requestPacket = epkt.SpecificPacket
+		}
+
 		var rpkt responsePacket
 		switch pkt := pkt.requestPacket.(type) {
 		case *sshFxInitPacket:

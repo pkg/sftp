@@ -313,6 +313,27 @@ func TestRequestStatFail(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestRequestLink(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	err = p.cli.Link("/foo", "/bar")
+	assert.Nil(t, err)
+	r := p.testHandler()
+	fi, err := r.fetch("/bar")
+	assert.Nil(t, err)
+	assert.True(t, int(fi.Size()) == len("hello"))
+}
+
+func TestRequestLinkFail(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	err := p.cli.Link("/foo", "/bar")
+	t.Log(err)
+	assert.True(t, os.IsNotExist(err))
+}
+
 func TestRequestSymlink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
