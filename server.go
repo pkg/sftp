@@ -157,11 +157,8 @@ func handlePacket(s *Server, p orderedRequest) error {
 	switch p := p.requestPacket.(type) {
 	case *sshFxInitPacket:
 		rpkt = sshFxVersionPacket{
-			Version: sftpProtocolVersion,
-			Extensions: []sshExtensionPair{
-				{"hardlink@openssh.com", "1"},
-				{"posix-rename@openssh.com", "1"},
-			},
+			Version:    sftpProtocolVersion,
+			Extensions: sftpExtensions,
 		}
 	case *sshFxpStatPacket:
 		// stat the requested file
