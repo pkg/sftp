@@ -160,6 +160,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 			Version: sftpProtocolVersion,
 			Extensions: []sshExtensionPair{
 				{"hardlink@openssh.com", "1"},
+				{"posix-rename@openssh.com", "1"},
 			},
 		}
 	case *sshFxpStatPacket:
