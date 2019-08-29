@@ -151,7 +151,7 @@ func (rs *RequestServer) packetWorker(
 		var rpkt responsePacket
 		switch pkt := pkt.requestPacket.(type) {
 		case *sshFxInitPacket:
-			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion}
+			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion, Extensions: sftpExtensions}
 		case *sshFxpClosePacket:
 			handle := pkt.getHandle()
 			rpkt = statusFromError(pkt, rs.closeRequest(handle))

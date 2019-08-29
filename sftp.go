@@ -85,6 +85,11 @@ const (
 	ssh_FXF_EXCL   = 0x00000020
 )
 
+var sftpExtensions = []sshExtensionPair{
+	{"hardlink@openssh.com", "1"},
+	{"posix-rename@openssh.com", "1"},
+}
+
 type fxp uint8
 
 func (f fxp) String() string {
