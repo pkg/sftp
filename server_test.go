@@ -191,7 +191,7 @@ func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
 		len(p.Data)
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_EXTENDED)
+	b = append(b, sshFxpExtended)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Extension)
 	b = marshalString(b, p.Data)
@@ -210,7 +210,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
 	}
-	if typ != ssh_FXP_STATUS {
+	if typ != sshFxpStatus {
 		t.Fatalf("received non-FPX_STATUS packet: %v", typ)
 	}
 
@@ -219,8 +219,8 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if !ok {
 		t.Fatal("failed to convert error from unmarshalStatus to *StatusError")
 	}
-	if statusErr.Code != ssh_FX_OP_UNSUPPORTED {
-		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, ssh_FX_OP_UNSUPPORTED)
+	if statusErr.Code != sshFxOPUnsupported {
+		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, sshFxOPUnsupported)
 	}
 }
 
@@ -265,17 +265,17 @@ func TestStatusFromError(t *testing.T) {
 			StatusError: StatusError{Code: code},
 		}
 	}
-	test_cases := []test{
-		test{syscall.ENOENT, tpkt(1, ssh_FX_NO_SUCH_FILE)},
+	testCases := []test{
+		test{syscall.ENOENT, tpkt(1, sshFxNoSuchFile)},
 		test{&os.PathError{Err: syscall.ENOENT},
-			tpkt(2, ssh_FX_NO_SUCH_FILE)},
-		test{&os.PathError{Err: errors.New("foo")}, tpkt(3, ssh_FX_FAILURE)},
-		test{ErrSshFxEof, tpkt(4, ssh_FX_EOF)},
-		test{ErrSshFxOpUnsupported, tpkt(5, ssh_FX_OP_UNSUPPORTED)},
-		test{io.EOF, tpkt(6, ssh_FX_EOF)},
-		test{os.ErrNotExist, tpkt(7, ssh_FX_NO_SUCH_FILE)},
+			tpkt(2, sshFxNoSuchFile)},
+		test{&os.PathError{Err: errors.New("foo")}, tpkt(3, sshFxFailure)},
+		test{ErrSSHFxEOF, tpkt(4, sshFxEOF)},
+		test{ErrSSHFxOpUnsupported, tpkt(5, sshFxOPUnsupported)},
+		test{io.EOF, tpkt(6, sshFxEOF)},
+		test{os.ErrNotExist, tpkt(7, sshFxNoSuchFile)},
 	}
-	for _, tc := range test_cases {
+	for _, tc := range testCases {
 		tc.pkt.StatusError.msg = tc.err.Error()
 		assert.Equal(t, tc.pkt, statusFromError(tc.pkt, tc.err))
 	}
@@ -316,8 +316,8 @@ func TestOpenStatRace(t *testing.T) {
 	testreply := func(id uint32, ch chan result) {
 		r := <-ch
 		switch r.typ {
-		case ssh_FXP_ATTRS, ssh_FXP_HANDLE: // ignore
-		case ssh_FXP_STATUS:
+		case sshFxpAttrs, sshFxpHandle: // ignore
+		case sshFxpStatus:
 			err := normaliseError(unmarshalStatus(id, r.data))
 			assert.NoError(t, err, "race hit, stat before open")
 		default:

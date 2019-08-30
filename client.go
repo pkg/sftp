@@ -15,12 +15,18 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// InternalInconsistency indicates the packets sent and the data queued to be
-// written to the file don't match up. It is an unusual error and usually is
-// caused by bad behavior server side or connection issues. The error is
-// limited in scope to the call where it happened, the client object is still
-// OK to use as long as the connection is still open.
-var InternalInconsistency = errors.New("internal inconsistency")
+var (
+	// ErrInternalInconsistency indicates the packets sent and the data queued to be
+	// written to the file don't match up. It is an unusual error and usually is
+	// caused by bad behavior server side or connection issues. The error is
+	// limited in scope to the call where it happened, the client object is still
+	// OK to use as long as the connection is still open.
+	ErrInternalInconsistency = errors.New("internal inconsistency")
+	// InternalInconsistency alias for ErrInternalInconsistency.
+	//
+	// Deprecated: please use ErrInternalInconsistency
+	InternalInconsistency = ErrInternalInconsistency
+)
 
 // A ClientOption is a function which applies configuration to a Client.
 type ClientOption func(*Client) error
@@ -183,8 +189,8 @@ func (c *Client) recvVersion() error {
 	if err != nil {
 		return err
 	}
-	if typ != ssh_FXP_VERSION {
-		return &unexpectedPacketErr{ssh_FXP_VERSION, typ}
+	if typ != sshFxpVersion {
+		return &unexpectedPacketErr{sshFxpVersion, typ}
 	}
 
 	version, _ := unmarshalUint32(data)
@@ -222,7 +228,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 			break
 		}
 		switch typ {
-		case ssh_FXP_NAME:
+		case sshFxpName:
 			sid, data := unmarshalUint32(data)
 			if sid != id {
 				return nil, &unexpectedIDErr{id, sid}
@@ -239,7 +245,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 				}
 				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)))
 			}
-		case ssh_FXP_STATUS:
+		case sshFxpStatus:
 			// TODO(dfc) scope warning!
 			err = normaliseError(unmarshalStatus(id, data))
 			done = true
@@ -263,14 +269,14 @@ func (c *Client) opendir(path string) (string, error) {
 		return "", err
 	}
 	switch typ {
-	case ssh_FXP_HANDLE:
+	case sshFxpHandle:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return "", &unexpectedIDErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
 		return handle, nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return "", normaliseError(unmarshalStatus(id, data))
 	default:
 		return "", unimplementedPacketErr(typ)
@@ -289,14 +295,14 @@ func (c *Client) Stat(p string) (os.FileInfo, error) {
 		return nil, err
 	}
 	switch typ {
-	case ssh_FXP_ATTRS:
+	case sshFxpAttrs:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
 		return fileInfoFromStat(attr, path.Base(p)), nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -315,14 +321,14 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 		return nil, err
 	}
 	switch typ {
-	case ssh_FXP_ATTRS:
+	case sshFxpAttrs:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
 		return fileInfoFromStat(attr, path.Base(p)), nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -340,7 +346,7 @@ func (c *Client) ReadLink(p string) (string, error) {
 		return "", err
 	}
 	switch typ {
-	case ssh_FXP_NAME:
+	case sshFxpName:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return "", &unexpectedIDErr{id, sid}
@@ -351,7 +357,7 @@ func (c *Client) ReadLink(p string) (string, error) {
 		}
 		filename, _ := unmarshalString(data) // ignore dummy attributes
 		return filename, nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return "", normaliseError(unmarshalStatus(id, data))
 	default:
 		return "", unimplementedPacketErr(typ)
@@ -370,7 +376,7 @@ func (c *Client) Link(oldname, newname string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -389,7 +395,7 @@ func (c *Client) Symlink(oldname, newname string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -409,7 +415,7 @@ func (c *Client) setstat(path string, flags uint32, attrs interface{}) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -423,7 +429,7 @@ func (c *Client) Chtimes(path string, atime time.Time, mtime time.Time) error {
 		Mtime uint32
 	}
 	attrs := times{uint32(atime.Unix()), uint32(mtime.Unix())}
-	return c.setstat(path, ssh_FILEXFER_ATTR_ACMODTIME, attrs)
+	return c.setstat(path, sshFileXferAttrACmodTime, attrs)
 }
 
 // Chown changes the user and group owners of the named file.
@@ -433,12 +439,12 @@ func (c *Client) Chown(path string, uid, gid int) error {
 		GID uint32
 	}
 	attrs := owner{uint32(uid), uint32(gid)}
-	return c.setstat(path, ssh_FILEXFER_ATTR_UIDGID, attrs)
+	return c.setstat(path, sshFileXferAttrUIDGID, attrs)
 }
 
 // Chmod changes the permissions of the named file.
 func (c *Client) Chmod(path string, mode os.FileMode) error {
-	return c.setstat(path, ssh_FILEXFER_ATTR_PERMISSIONS, uint32(mode))
+	return c.setstat(path, sshFileXferAttrPermissions, uint32(mode))
 }
 
 // Truncate sets the size of the named file. Although it may be safely assumed
@@ -446,7 +452,7 @@ func (c *Client) Chmod(path string, mode os.FileMode) error {
 // the SFTP protocol does not specify what behavior the server should do when setting
 // size greater than the current size.
 func (c *Client) Truncate(path string, size int64) error {
-	return c.setstat(path, ssh_FILEXFER_ATTR_SIZE, uint64(size))
+	return c.setstat(path, sshFileXferAttrSize, uint64(size))
 }
 
 // Open opens the named file for reading. If successful, methods on the
@@ -474,14 +480,14 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 		return nil, err
 	}
 	switch typ {
-	case ssh_FXP_HANDLE:
+	case sshFxpHandle:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		handle, _ := unmarshalString(data)
 		return &File{c: c, path: path, handle: handle}, nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -501,7 +507,7 @@ func (c *Client) close(handle string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -518,14 +524,14 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 		return nil, err
 	}
 	switch typ {
-	case ssh_FXP_ATTRS:
+	case sshFxpAttrs:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		attr, _ := unmarshalAttrs(data)
 		return attr, nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -549,7 +555,7 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 
 	switch typ {
 	// server responded with valid data
-	case ssh_FXP_EXTENDED_REPLY:
+	case sshFxpExtendedReply:
 		var response StatVFS
 		err = binary.Read(bytes.NewReader(data), binary.BigEndian, &response)
 		if err != nil {
@@ -559,8 +565,8 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 		return &response, nil
 
 	// the resquest failed
-	case ssh_FXP_STATUS:
-		return nil, errors.New(fxp(ssh_FXP_STATUS).String())
+	case sshFxpStatus:
+		return nil, errors.New(fxp(sshFxpStatus).String())
 
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -581,7 +587,7 @@ func (c *Client) Remove(path string) error {
 		switch err.Code {
 		// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
 		// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
-		case ssh_FX_PERMISSION_DENIED, ssh_FX_FAILURE, ssh_FX_FILE_IS_A_DIRECTORY:
+		case sshFxPermissionDenied, sshFxFailure, sshFxFileIsADirectory:
 			return c.RemoveDirectory(path)
 		}
 	}
@@ -598,7 +604,7 @@ func (c *Client) removeFile(path string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -616,7 +622,7 @@ func (c *Client) RemoveDirectory(path string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -635,7 +641,7 @@ func (c *Client) Rename(oldname, newname string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -655,7 +661,7 @@ func (c *Client) PosixRename(oldname, newname string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -672,7 +678,7 @@ func (c *Client) realpath(path string) (string, error) {
 		return "", err
 	}
 	switch typ {
-	case ssh_FXP_NAME:
+	case sshFxpName:
 		sid, data := unmarshalUint32(data)
 		if sid != id {
 			return "", &unexpectedIDErr{id, sid}
@@ -683,7 +689,7 @@ func (c *Client) realpath(path string) (string, error) {
 		}
 		filename, _ := unmarshalString(data) // ignore attributes
 		return filename, nil
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return "", normaliseError(unmarshalStatus(id, data))
 	default:
 		return "", unimplementedPacketErr(typ)
@@ -709,7 +715,7 @@ func (c *Client) Mkdir(path string) error {
 		return err
 	}
 	switch typ {
-	case ssh_FXP_STATUS:
+	case sshFxpStatus:
 		return normaliseError(unmarshalStatus(id, data))
 	default:
 		return unimplementedPacketErr(typ)
@@ -864,14 +870,14 @@ func (f *File) Read(b []byte) (int, error) {
 		}
 		delete(reqs, reqID)
 		switch res.typ {
-		case ssh_FXP_STATUS:
+		case sshFxpStatus:
 			if firstErr.err == nil || req.offset < firstErr.offset {
 				firstErr = offsetErr{
 					offset: req.offset,
 					err:    normaliseError(unmarshalStatus(reqID, res.data)),
 				}
 			}
-		case ssh_FXP_DATA:
+		case sshFxpData:
 			l, data := unmarshalUint32(data)
 			n := copy(req.b, data[:l])
 			read += n
@@ -953,7 +959,7 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 
 		if inFlight == 0 {
 			if firstErr.err == nil && len(pendingWrites) > 0 {
-				return copied, InternalInconsistency
+				return copied, ErrInternalInconsistency
 			}
 			break
 		}
@@ -971,11 +977,11 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 		}
 		delete(reqs, reqID)
 		switch res.typ {
-		case ssh_FXP_STATUS:
+		case sshFxpStatus:
 			if firstErr.err == nil || req.offset < firstErr.offset {
 				firstErr = offsetErr{offset: req.offset, err: normaliseError(unmarshalStatus(reqID, res.data))}
 			}
-		case ssh_FXP_DATA:
+		case sshFxpData:
 			l, data := unmarshalUint32(data)
 			if req.offset == writeOffset {
 				nbytes, err := w.Write(data)
@@ -1090,7 +1096,7 @@ func (f *File) Write(b []byte) (int, error) {
 			continue
 		}
 		switch res.typ {
-		case ssh_FXP_STATUS:
+		case sshFxpStatus:
 			id, _ := unmarshalUint32(res.data)
 			err := normaliseError(unmarshalStatus(id, res.data))
 			if err != nil && firstErr == nil {
@@ -1158,7 +1164,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 			continue
 		}
 		switch res.typ {
-		case ssh_FXP_STATUS:
+		case sshFxpStatus:
 			id, _ := unmarshalUint32(res.data)
 			err := normaliseError(unmarshalStatus(id, res.data))
 			if err != nil && firstErr == nil {
@@ -1237,11 +1243,11 @@ func normaliseError(err error) error {
 	switch err := err.(type) {
 	case *StatusError:
 		switch err.Code {
-		case ssh_FX_EOF:
+		case sshFxEOF:
 			return io.EOF
-		case ssh_FX_NO_SUCH_FILE:
+		case sshFxNoSuchFile:
 			return os.ErrNotExist
-		case ssh_FX_OK:
+		case sshFxOk:
 			return nil
 		default:
 			return err
@@ -1279,24 +1285,24 @@ func flags(f int) uint32 {
 	var out uint32
 	switch f & os.O_WRONLY {
 	case os.O_WRONLY:
-		out |= ssh_FXF_WRITE
+		out |= sshFxfWrite
 	case os.O_RDONLY:
-		out |= ssh_FXF_READ
+		out |= sshFxfRead
 	}
 	if f&os.O_RDWR == os.O_RDWR {
-		out |= ssh_FXF_READ | ssh_FXF_WRITE
+		out |= sshFxfRead | sshFxfWrite
 	}
 	if f&os.O_APPEND == os.O_APPEND {
-		out |= ssh_FXF_APPEND
+		out |= sshFxfAppend
 	}
 	if f&os.O_CREATE == os.O_CREATE {
-		out |= ssh_FXF_CREAT
+		out |= sshFxfCreat
 	}
 	if f&os.O_TRUNC == os.O_TRUNC {
-		out |= ssh_FXF_TRUNC
+		out |= sshFxfTrunc
 	}
 	if f&os.O_EXCL == os.O_EXCL {
-		out |= ssh_FXF_EXCL
+		out |= sshFxfExcl
 	}
 	return out
 }

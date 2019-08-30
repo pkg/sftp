@@ -9,7 +9,7 @@ func TestClientStatVFS(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("go server does not support FXP_EXTENDED")
 	}
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 

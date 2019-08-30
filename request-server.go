@@ -177,7 +177,7 @@ func (rs *RequestServer) packetWorker(
 		case *sshFxpExtendedPacket:
 			switch expkt := pkt.SpecificPacket.(type) {
 			default:
-				rpkt = statusFromError(pkt, ErrSshFxOpUnsupported)
+				rpkt = statusFromError(pkt, ErrSSHFxOpUnsupported)
 			case *sshFxpExtendedPacketPosixRename:
 				request := NewRequest("Rename", expkt.Oldpath)
 				request.Target = expkt.Newpath
@@ -196,11 +196,11 @@ func (rs *RequestServer) packetWorker(
 			rpkt = request.call(rs.Handlers, pkt)
 			request.close()
 		default:
-			rpkt = statusFromError(pkt, ErrSshFxOpUnsupported)
+			rpkt = statusFromError(pkt, ErrSSHFxOpUnsupported)
 		}
 
 		rs.pktMgr.readyPacket(
-			rs.pktMgr.newOrderedResponse(rpkt, pkt.orderId()))
+			rs.pktMgr.newOrderedResponse(rpkt, pkt.orderID()))
 	}
 	return nil
 }

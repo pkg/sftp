@@ -200,7 +200,7 @@ var recvPacketTests = []struct {
 		Extensions: []extensionPair{
 			{"posix-rename@openssh.com", "1"},
 		},
-	}), ssh_FXP_INIT, []byte{0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x18, 0x70, 0x6f, 0x73, 0x69, 0x78, 0x2d, 0x72, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x40, 0x6f, 0x70, 0x65, 0x6e, 0x73, 0x73, 0x68, 0x2e, 0x63, 0x6f, 0x6d, 0x0, 0x0, 0x0, 0x1, 0x31}},
+	}), sshFxpInit, []byte{0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x18, 0x70, 0x6f, 0x73, 0x69, 0x78, 0x2d, 0x72, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x40, 0x6f, 0x70, 0x65, 0x6e, 0x73, 0x73, 0x68, 0x2e, 0x63, 0x6f, 0x6d, 0x0, 0x0, 0x0, 0x1, 0x31}},
 }
 
 func TestRecvPacket(t *testing.T) {
@@ -219,15 +219,15 @@ func TestSSHFxpOpenPacketreadonly(t *testing.T) {
 		ok     bool
 	}{
 		{
-			pflags: ssh_FXF_READ,
+			pflags: sshFxfRead,
 			ok:     true,
 		},
 		{
-			pflags: ssh_FXF_WRITE,
+			pflags: sshFxfWrite,
 			ok:     false,
 		},
 		{
-			pflags: ssh_FXF_READ | ssh_FXF_WRITE,
+			pflags: sshFxfRead | sshFxfWrite,
 			ok:     false,
 		},
 	}
@@ -253,32 +253,32 @@ func TestSSHFxpOpenPackethasPflags(t *testing.T) {
 	}{
 		{
 			desc:      "have read, test against write",
-			haveFlags: ssh_FXF_READ,
-			testFlags: []uint32{ssh_FXF_WRITE},
+			haveFlags: sshFxfRead,
+			testFlags: []uint32{sshFxfWrite},
 			ok:        false,
 		},
 		{
 			desc:      "have write, test against read",
-			haveFlags: ssh_FXF_WRITE,
-			testFlags: []uint32{ssh_FXF_READ},
+			haveFlags: sshFxfWrite,
+			testFlags: []uint32{sshFxfRead},
 			ok:        false,
 		},
 		{
 			desc:      "have read+write, test against read",
-			haveFlags: ssh_FXF_READ | ssh_FXF_WRITE,
-			testFlags: []uint32{ssh_FXF_READ},
+			haveFlags: sshFxfRead | sshFxfWrite,
+			testFlags: []uint32{sshFxfRead},
 			ok:        true,
 		},
 		{
 			desc:      "have read+write, test against write",
-			haveFlags: ssh_FXF_READ | ssh_FXF_WRITE,
-			testFlags: []uint32{ssh_FXF_WRITE},
+			haveFlags: sshFxfRead | sshFxfWrite,
+			testFlags: []uint32{sshFxfWrite},
 			ok:        true,
 		},
 		{
 			desc:      "have read+write, test against read+write",
-			haveFlags: ssh_FXF_READ | ssh_FXF_WRITE,
-			testFlags: []uint32{ssh_FXF_READ, ssh_FXF_WRITE},
+			haveFlags: sshFxfRead | sshFxfWrite,
+			testFlags: []uint32{sshFxfRead, sshFxfWrite},
 			ok:        true,
 		},
 	}
