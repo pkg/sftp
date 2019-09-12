@@ -53,3 +53,10 @@ type FileLister interface {
 type ListerAt interface {
 	ListAt([]os.FileInfo, int64) (int, error)
 }
+
+// TransferError is an optional interface that readerAt and writerAt
+// can implement to be notified about the error causing Serve() to exit
+// with the request still open
+type TransferError interface {
+	TransferError(err error)
+}
