@@ -208,13 +208,15 @@ func (fs *root) fetch(path string) (*memFile, error) {
 
 // Implements os.FileInfo, Reader and Writer interfaces.
 // These are the 3 interfaces necessary for the Handlers.
+// Implements the optional interface TransferError.
 type memFile struct {
-	name        string
-	modtime     time.Time
-	symlink     string
-	isdir       bool
-	content     []byte
-	contentLock sync.RWMutex
+	name          string
+	modtime       time.Time
+	symlink       string
+	isdir         bool
+	content       []byte
+	transferError error
+	contentLock   sync.RWMutex
 }
 
 // factory to make sure modtime is set
@@ -273,4 +275,8 @@ func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
 	}
 	copy(f.content[off:], p)
 	return len(p), nil
+}
+
+func (f *memFile) TransferError(err error) {
+	f.transferError = err
 }
