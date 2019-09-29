@@ -156,15 +156,15 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		if !file.IsDir() {
 			return nil, syscall.ENOTDIR
 		}
-		ordered_names := []string{}
-		for fn, _ := range fs.files {
+		orderedNames := []string{}
+		for fn := range fs.files {
 			if filepath.Dir(fn) == r.Filepath {
-				ordered_names = append(ordered_names, fn)
+				orderedNames = append(orderedNames, fn)
 			}
 		}
-		sort.Strings(ordered_names)
-		list := make([]os.FileInfo, len(ordered_names))
-		for i, fn := range ordered_names {
+		sort.Strings(orderedNames)
+		list := make([]os.FileInfo, len(orderedNames))
+		for i, fn := range orderedNames {
 			list[i] = fs.files[fn]
 		}
 		return listerat(list), nil

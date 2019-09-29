@@ -31,7 +31,7 @@ import (
 const (
 	READONLY                = true
 	READWRITE               = false
-	NO_DELAY  time.Duration = 0
+	NODELAY   time.Duration = 0
 
 	debuglevel = "ERROR" // set to "DEBUG" for debugging
 )
@@ -134,7 +134,7 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 	go server.Serve()
 
 	var ctx io.WriteCloser = c2
-	if delay > NO_DELAY {
+	if delay > NODELAY {
 		ctx = newDelayedWriter(ctx, delay)
 	}
 
@@ -167,7 +167,7 @@ func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exe
 	if err != nil {
 		t.Fatal(err)
 	}
-	if delay > NO_DELAY {
+	if delay > NODELAY {
 		pw = newDelayedWriter(pw, delay)
 	}
 	pr, err := cmd.StdoutPipe()
@@ -187,7 +187,7 @@ func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exe
 }
 
 func TestNewClient(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 
 	if err := sftp.Close(); err != nil {
@@ -196,7 +196,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClientLstat(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -223,7 +223,7 @@ func TestClientLstat(t *testing.T) {
 }
 
 func TestClientLstatIsNotExist(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -240,7 +240,7 @@ func TestClientLstatIsNotExist(t *testing.T) {
 }
 
 func TestClientMkdir(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -257,7 +257,7 @@ func TestClientMkdir(t *testing.T) {
 	}
 }
 func TestClientMkdirAll(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -279,7 +279,7 @@ func TestClientMkdirAll(t *testing.T) {
 }
 
 func TestClientOpen(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -300,7 +300,7 @@ func TestClientOpen(t *testing.T) {
 }
 
 func TestClientOpenIsNotExist(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -310,7 +310,7 @@ func TestClientOpenIsNotExist(t *testing.T) {
 }
 
 func TestClientStatIsNotExist(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -359,7 +359,7 @@ func (s seek) end(t *testing.T, r io.ReadSeeker) {
 }
 
 func TestClientSeek(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -403,7 +403,7 @@ func TestClientSeek(t *testing.T) {
 }
 
 func TestClientCreate(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -422,7 +422,7 @@ func TestClientCreate(t *testing.T) {
 }
 
 func TestClientAppend(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -441,7 +441,7 @@ func TestClientAppend(t *testing.T) {
 }
 
 func TestClientCreateFailed(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -453,8 +453,8 @@ func TestClientCreateFailed(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	f2, err := sftp.Create(f.Name())
-	if err1, ok := err.(*StatusError); !ok || err1.Code != ssh_FX_PERMISSION_DENIED {
-		t.Fatalf("Create: want: %v, got %#v", ssh_FX_PERMISSION_DENIED, err)
+	if err1, ok := err.(*StatusError); !ok || err1.Code != sshFxPermissionDenied {
+		t.Fatalf("Create: want: %v, got %#v", sshFxPermissionDenied, err)
 	}
 	if err == nil {
 		f2.Close()
@@ -462,7 +462,7 @@ func TestClientCreateFailed(t *testing.T) {
 }
 
 func TestClientFileName(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -483,7 +483,7 @@ func TestClientFileName(t *testing.T) {
 }
 
 func TestClientFileStat(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -516,7 +516,7 @@ func TestClientFileStat(t *testing.T) {
 func TestClientStatLink(t *testing.T) {
 	skipIfWindows(t) // Windows does not support links.
 
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -576,7 +576,7 @@ func TestClientStatLink(t *testing.T) {
 }
 
 func TestClientRemove(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -595,7 +595,7 @@ func TestClientRemove(t *testing.T) {
 }
 
 func TestClientRemoveDir(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -612,7 +612,7 @@ func TestClientRemoveDir(t *testing.T) {
 }
 
 func TestClientRemoveFailed(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -629,7 +629,7 @@ func TestClientRemoveFailed(t *testing.T) {
 }
 
 func TestClientRename(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -652,7 +652,7 @@ func TestClientRename(t *testing.T) {
 }
 
 func TestClientPosixRename(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -675,7 +675,7 @@ func TestClientPosixRename(t *testing.T) {
 }
 
 func TestClientGetwd(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -696,7 +696,7 @@ func TestClientGetwd(t *testing.T) {
 }
 
 func TestClientReadLink(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -716,7 +716,7 @@ func TestClientReadLink(t *testing.T) {
 }
 
 func TestClientLink(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -742,7 +742,7 @@ func TestClientLink(t *testing.T) {
 }
 
 func TestClientSymlink(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -763,7 +763,7 @@ func TestClientSymlink(t *testing.T) {
 
 func TestClientChmod(t *testing.T) {
 	skipIfWindows(t) // No UNIX permissions.
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -785,7 +785,7 @@ func TestClientChmod(t *testing.T) {
 
 func TestClientChmodReadonly(t *testing.T) {
 	skipIfWindows(t) // No UNIX permissions.
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -802,7 +802,7 @@ func TestClientChmodReadonly(t *testing.T) {
 
 func TestClientChown(t *testing.T) {
 	skipIfWindows(t) // No UNIX permissions.
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -860,7 +860,7 @@ func TestClientChown(t *testing.T) {
 
 func TestClientChownReadonly(t *testing.T) {
 	skipIfWindows(t) // No UNIX permissions.
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -896,7 +896,7 @@ func TestClientChownReadonly(t *testing.T) {
 }
 
 func TestClientChtimes(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -918,7 +918,7 @@ func TestClientChtimes(t *testing.T) {
 }
 
 func TestClientChtimesReadonly(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -935,7 +935,7 @@ func TestClientChtimesReadonly(t *testing.T) {
 }
 
 func TestClientTruncate(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -961,7 +961,7 @@ func TestClientTruncate(t *testing.T) {
 }
 
 func TestClientTruncateReadonly(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -994,7 +994,7 @@ func sameFile(want, got os.FileInfo) bool {
 }
 
 func TestClientReadSimple(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1031,8 +1031,8 @@ func TestClientReadSimple(t *testing.T) {
 }
 
 func TestClientReadDir(t *testing.T) {
-	sftp1, cmd1 := testClient(t, READONLY, NO_DELAY)
-	sftp2, cmd2 := testClientGoSvr(t, READONLY, NO_DELAY)
+	sftp1, cmd1 := testClient(t, READONLY, NODELAY)
+	sftp2, cmd2 := testClientGoSvr(t, READONLY, NODELAY)
 	defer cmd1.Wait()
 	defer cmd2.Wait()
 	defer sftp1.Close()
@@ -1124,7 +1124,7 @@ var clientReadTests = []struct {
 }
 
 func TestClientRead(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1208,7 +1208,7 @@ var clientWriteTests = []struct {
 }
 
 func TestClientWrite(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1245,7 +1245,7 @@ func TestClientWrite(t *testing.T) {
 
 // ReadFrom is basically Write with io.Reader as the arg
 func TestClientReadFrom(t *testing.T) {
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1285,7 +1285,7 @@ func TestClientReadFrom(t *testing.T) {
 // Deadlock would occur anytime desiredInFlight-inFlight==2 and 2 errors
 // occured in a row. The channel to report the errors only had a buffer
 // of 1 and 2 would be sent.
-var fakeNetErr = errors.New("Fake network issue")
+var errFakeNet = errors.New("Fake network issue")
 
 func TestClientReadFromDeadlock(t *testing.T) {
 	clientWriteDeadlock(t, 1, func(f *File) {
@@ -1295,7 +1295,7 @@ func TestClientReadFromDeadlock(t *testing.T) {
 		if n != 0 {
 			t.Fatal("Write should return 0", n)
 		}
-		if err != fakeNetErr {
+		if err != errFakeNet {
 			t.Fatal("Didn't recieve correct error", err)
 		}
 	})
@@ -1309,7 +1309,7 @@ func TestClientWriteDeadlock(t *testing.T) {
 		if n != 0 {
 			t.Fatal("Write should return 0", n)
 		}
-		if err != fakeNetErr {
+		if err != errFakeNet {
 			t.Fatal("Didn't recieve correct error", err)
 		}
 	})
@@ -1320,7 +1320,7 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	if !*testServerImpl {
 		t.Skipf("skipping without -testserver")
 	}
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1343,7 +1343,7 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
 		count++
 		if count > N {
-			return fakeNetErr
+			return errFakeNet
 		}
 		return sendPacket(w, m)
 	}
@@ -1364,7 +1364,7 @@ func TestClientReadDeadlock(t *testing.T) {
 		if n != 0 {
 			t.Fatal("Write should return 0", n)
 		}
-		if err != fakeNetErr {
+		if err != errFakeNet {
 			t.Fatal("Didn't recieve correct error", err)
 		}
 	})
@@ -1378,7 +1378,7 @@ func TestClientWriteToDeadlock(t *testing.T) {
 		if n != 32768 {
 			t.Fatal("Write should return 0", n)
 		}
-		if err != fakeNetErr {
+		if err != errFakeNet {
 			t.Fatal("Didn't recieve correct error", err)
 		}
 	})
@@ -1388,7 +1388,7 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	if !*testServerImpl {
 		t.Skipf("skipping without -testserver")
 	}
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1421,7 +1421,7 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
 		count++
 		if count > N {
-			return fakeNetErr
+			return errFakeNet
 		}
 		return sendPacket(w, m)
 	}
@@ -1522,7 +1522,7 @@ func mark(path string, info os.FileInfo, err error, errors *[]error, clear bool)
 }
 
 func TestClientWalk(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1720,7 +1720,7 @@ func TestMatch(t *testing.T) {
 }
 
 func TestGlob(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1749,7 +1749,7 @@ func TestGlob(t *testing.T) {
 }
 
 func TestGlobError(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1760,7 +1760,7 @@ func TestGlobError(t *testing.T) {
 }
 
 func TestGlobUNC(t *testing.T) {
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 	// Just make sure this runs without crashing for now.
@@ -1774,7 +1774,7 @@ func TestServerRoughDisconnect(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("skipping with -testserver")
 	}
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1799,7 +1799,7 @@ func TestServerRoughDisconnect2(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("skipping with -testserver")
 	}
-	sftp, cmd := testClient(t, READONLY, NO_DELAY)
+	sftp, cmd := testClient(t, READONLY, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1827,7 +1827,7 @@ func TestServerRoughDisconnect3(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("skipping with -testserver")
 	}
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1855,7 +1855,7 @@ func TestServerRoughDisconnect4(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("skipping with -testserver")
 	}
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1888,7 +1888,7 @@ func TestServerRoughDisconnect4(t *testing.T) {
 // sftp/issue/26 writing to a read only file caused client to loop.
 func TestClientWriteToROFile(t *testing.T) {
 	skipIfWindows(t)
-	sftp, cmd := testClient(t, READWRITE, NO_DELAY)
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
@@ -1943,31 +1943,31 @@ func benchmarkRead(b *testing.B, bufsize int, delay time.Duration) {
 }
 
 func BenchmarkRead1k(b *testing.B) {
-	benchmarkRead(b, 1*1024, NO_DELAY)
+	benchmarkRead(b, 1*1024, NODELAY)
 }
 
 func BenchmarkRead16k(b *testing.B) {
-	benchmarkRead(b, 16*1024, NO_DELAY)
+	benchmarkRead(b, 16*1024, NODELAY)
 }
 
 func BenchmarkRead32k(b *testing.B) {
-	benchmarkRead(b, 32*1024, NO_DELAY)
+	benchmarkRead(b, 32*1024, NODELAY)
 }
 
 func BenchmarkRead128k(b *testing.B) {
-	benchmarkRead(b, 128*1024, NO_DELAY)
+	benchmarkRead(b, 128*1024, NODELAY)
 }
 
 func BenchmarkRead512k(b *testing.B) {
-	benchmarkRead(b, 512*1024, NO_DELAY)
+	benchmarkRead(b, 512*1024, NODELAY)
 }
 
 func BenchmarkRead1MiB(b *testing.B) {
-	benchmarkRead(b, 1024*1024, NO_DELAY)
+	benchmarkRead(b, 1024*1024, NODELAY)
 }
 
 func BenchmarkRead4MiB(b *testing.B) {
-	benchmarkRead(b, 4*1024*1024, NO_DELAY)
+	benchmarkRead(b, 4*1024*1024, NODELAY)
 }
 
 func BenchmarkRead4MiBDelay10Msec(b *testing.B) {
@@ -2039,31 +2039,31 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 }
 
 func BenchmarkWrite1k(b *testing.B) {
-	benchmarkWrite(b, 1*1024, NO_DELAY)
+	benchmarkWrite(b, 1*1024, NODELAY)
 }
 
 func BenchmarkWrite16k(b *testing.B) {
-	benchmarkWrite(b, 16*1024, NO_DELAY)
+	benchmarkWrite(b, 16*1024, NODELAY)
 }
 
 func BenchmarkWrite32k(b *testing.B) {
-	benchmarkWrite(b, 32*1024, NO_DELAY)
+	benchmarkWrite(b, 32*1024, NODELAY)
 }
 
 func BenchmarkWrite128k(b *testing.B) {
-	benchmarkWrite(b, 128*1024, NO_DELAY)
+	benchmarkWrite(b, 128*1024, NODELAY)
 }
 
 func BenchmarkWrite512k(b *testing.B) {
-	benchmarkWrite(b, 512*1024, NO_DELAY)
+	benchmarkWrite(b, 512*1024, NODELAY)
 }
 
 func BenchmarkWrite1MiB(b *testing.B) {
-	benchmarkWrite(b, 1024*1024, NO_DELAY)
+	benchmarkWrite(b, 1024*1024, NODELAY)
 }
 
 func BenchmarkWrite4MiB(b *testing.B) {
-	benchmarkWrite(b, 4*1024*1024, NO_DELAY)
+	benchmarkWrite(b, 4*1024*1024, NODELAY)
 }
 
 func BenchmarkWrite4MiBDelay10Msec(b *testing.B) {
@@ -2121,31 +2121,31 @@ func benchmarkReadFrom(b *testing.B, bufsize int, delay time.Duration) {
 }
 
 func BenchmarkReadFrom1k(b *testing.B) {
-	benchmarkReadFrom(b, 1*1024, NO_DELAY)
+	benchmarkReadFrom(b, 1*1024, NODELAY)
 }
 
 func BenchmarkReadFrom16k(b *testing.B) {
-	benchmarkReadFrom(b, 16*1024, NO_DELAY)
+	benchmarkReadFrom(b, 16*1024, NODELAY)
 }
 
 func BenchmarkReadFrom32k(b *testing.B) {
-	benchmarkReadFrom(b, 32*1024, NO_DELAY)
+	benchmarkReadFrom(b, 32*1024, NODELAY)
 }
 
 func BenchmarkReadFrom128k(b *testing.B) {
-	benchmarkReadFrom(b, 128*1024, NO_DELAY)
+	benchmarkReadFrom(b, 128*1024, NODELAY)
 }
 
 func BenchmarkReadFrom512k(b *testing.B) {
-	benchmarkReadFrom(b, 512*1024, NO_DELAY)
+	benchmarkReadFrom(b, 512*1024, NODELAY)
 }
 
 func BenchmarkReadFrom1MiB(b *testing.B) {
-	benchmarkReadFrom(b, 1024*1024, NO_DELAY)
+	benchmarkReadFrom(b, 1024*1024, NODELAY)
 }
 
 func BenchmarkReadFrom4MiB(b *testing.B) {
-	benchmarkReadFrom(b, 4*1024*1024, NO_DELAY)
+	benchmarkReadFrom(b, 4*1024*1024, NODELAY)
 }
 
 func BenchmarkReadFrom4MiBDelay10Msec(b *testing.B) {

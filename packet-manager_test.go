@@ -46,7 +46,7 @@ type pair struct {
 	in, out fakepacket
 }
 
-type ordered_pair struct {
+type orderedPair struct {
 	in  orderedRequest
 	out orderedResponse
 }
@@ -91,17 +91,17 @@ func TestPacketManager(t *testing.T) {
 
 	for i := range tables {
 		table := tables[i]
-		ordered_pairs := make([]ordered_pair, 0, len(table))
+		orderedPairs := make([]orderedPair, 0, len(table))
 		for _, p := range table {
-			ordered_pairs = append(ordered_pairs, ordered_pair{
+			orderedPairs = append(orderedPairs, orderedPair{
 				in:  orderedRequest{p.in, p.in.oid},
 				out: orderedResponse{p.out, p.out.oid},
 			})
 		}
-		for _, p := range ordered_pairs {
+		for _, p := range orderedPairs {
 			s.incomingPacket(p.in)
 		}
-		for _, p := range ordered_pairs {
+		for _, p := range orderedPairs {
 			s.readyPacket(p.out)
 		}
 		for _, p := range table {

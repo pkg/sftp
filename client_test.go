@@ -18,10 +18,10 @@ var _ io.ReadWriteCloser = new(File)
 
 func TestNormaliseError(t *testing.T) {
 	var (
-		ok         = &StatusError{Code: ssh_FX_OK}
-		eof        = &StatusError{Code: ssh_FX_EOF}
-		fail       = &StatusError{Code: ssh_FX_FAILURE}
-		noSuchFile = &StatusError{Code: ssh_FX_NO_SUCH_FILE}
+		ok         = &StatusError{Code: sshFxOk}
+		eof        = &StatusError{Code: sshFxEOF}
+		fail       = &StatusError{Code: sshFxFailure}
+		noSuchFile = &StatusError{Code: sshFxNoSuchFile}
 		foo        = errors.New("foo")
 	)
 
@@ -72,11 +72,11 @@ var flagsTests = []struct {
 	flags int
 	want  uint32
 }{
-	{os.O_RDONLY, ssh_FXF_READ},
-	{os.O_WRONLY, ssh_FXF_WRITE},
-	{os.O_RDWR, ssh_FXF_READ | ssh_FXF_WRITE},
-	{os.O_RDWR | os.O_CREATE | os.O_TRUNC, ssh_FXF_READ | ssh_FXF_WRITE | ssh_FXF_CREAT | ssh_FXF_TRUNC},
-	{os.O_WRONLY | os.O_APPEND, ssh_FXF_WRITE | ssh_FXF_APPEND},
+	{os.O_RDONLY, sshFxfRead},
+	{os.O_WRONLY, sshFxfWrite},
+	{os.O_RDWR, sshFxfRead | sshFxfWrite},
+	{os.O_RDWR | os.O_CREATE | os.O_TRUNC, sshFxfRead | sshFxfWrite | sshFxfCreat | sshFxfTrunc},
+	{os.O_WRONLY | os.O_APPEND, sshFxfWrite | sshFxfAppend},
 }
 
 func TestFlags(t *testing.T) {
@@ -92,7 +92,7 @@ func TestUnmarshalStatus(t *testing.T) {
 	requestID := uint32(1)
 
 	id := marshalUint32([]byte{}, requestID)
-	idCode := marshalUint32(id, ssh_FX_FAILURE)
+	idCode := marshalUint32(id, sshFxFailure)
 	idCodeMsg := marshalString(idCode, "err msg")
 	idCodeMsgLang := marshalString(idCodeMsg, "lang tag")
 
@@ -107,7 +107,7 @@ func TestUnmarshalStatus(t *testing.T) {
 			reqID:  1,
 			status: idCodeMsgLang,
 			want: &StatusError{
-				Code: ssh_FX_FAILURE,
+				Code: sshFxFailure,
 				msg:  "err msg",
 				lang: "lang tag",
 			},
@@ -117,7 +117,7 @@ func TestUnmarshalStatus(t *testing.T) {
 			reqID:  1,
 			status: idCode,
 			want: &StatusError{
-				Code: ssh_FX_FAILURE,
+				Code: sshFxFailure,
 			},
 		},
 		{
@@ -125,7 +125,7 @@ func TestUnmarshalStatus(t *testing.T) {
 			reqID:  1,
 			status: idCodeMsg,
 			want: &StatusError{
-				Code: ssh_FX_FAILURE,
+				Code: sshFxFailure,
 				msg:  "err msg",
 			},
 		},
