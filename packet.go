@@ -13,11 +13,13 @@ import (
 )
 
 var (
+	errLongPacket            = errors.New("packet too long")
 	errShortPacket           = errors.New("packet too short")
 	errUnknownExtendedPacket = errors.New("unknown extended packet")
 )
 
 const (
+	maxMsgLength           = 256 * 1024
 	debugDumpTxPacket      = false
 	debugDumpRxPacket      = false
 	debugDumpTxPacketBytes = false
@@ -143,6 +145,10 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 		return 0, nil, err
 	}
 	l, _ := unmarshalUint32(b)
+	if l > maxMsgLength {
+		debug("recv packet %d bytes too long", l)
+		return 0, nil, errLongPacket
+	}
 	b = make([]byte, l)
 	if _, err := io.ReadFull(r, b); err != nil {
 		debug("recv packet %d bytes: err %v", l, err)
