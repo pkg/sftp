@@ -167,6 +167,10 @@ type Client struct {
 // already exists. If successful, methods on the returned File can be used for
 // I/O; the associated file descriptor has mode O_RDWR. If you need more
 // control over the flags/mode used to open the file see client.OpenFile.
+//
+// Note that some SFTP servers (eg. AWS Transfer) do not support opening files
+// read/write at the same time. For those services you will need to use
+// `client.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC)`.
 func (c *Client) Create(path string) (*File, error) {
 	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
 }
