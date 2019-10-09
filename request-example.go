@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -90,11 +91,36 @@ func (fs *root) Filecmd(r *Request) error {
 		file.name = r.Target
 		fs.files[r.Target] = file
 		delete(fs.files, r.Filepath)
+
+		if file.IsDir() {
+			fmt.Printf("Rename Dir %v, %v, %v\n", r.Target, file.name, r.Filepath)
+			for path, file := range fs.files {
+				if strings.HasPrefix(path, r.Filepath+"/") {
+					fmt.Printf("renaming %v from %v to %v\n", file.name, path, r.Target+path[len(r.Filepath):])
+					file.name = r.Target + path[len(r.Filepath):]
+					fs.files[r.Target+path[len(r.Filepath):]] = file
+					delete(fs.files, path)
+				}
+			}
+		}
 	case "Rmdir", "Remove":
-		_, err := fs.fetch(filepath.Dir(r.Filepath))
+		file, err := fs.fetch(filepath.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
+
+		if file.IsDir() {
+			for path := range fs.files {
+				if strings.HasPrefix(path, r.Filepath+"/") {
+					return &os.PathError{
+						Op:   "remove",
+						Path: r.Filepath + "/",
+						Err:  fmt.Errorf("directory is not empty"),
+					}
+				}
+			}
+		}
+
 		delete(fs.files, r.Filepath)
 	case "Mkdir":
 		_, err := fs.fetch(filepath.Dir(r.Filepath))
