@@ -159,7 +159,9 @@ func (rs *RequestServer) packetWorker(
 ) error {
 	for pkt := range pktChan {
 		if epkt, ok := pkt.requestPacket.(*sshFxpExtendedPacket); ok {
-			pkt.requestPacket = epkt.SpecificPacket
+			if epkt.SpecificPacket != nil {
+				pkt.requestPacket = epkt.SpecificPacket
+			}
 		}
 
 		var rpkt responsePacket
