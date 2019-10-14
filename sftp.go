@@ -219,4 +219,11 @@ type StatusError struct {
 	msg, lang string
 }
 
-func (s *StatusError) Error() string { return fmt.Sprintf("sftp: %q (%v)", s.msg, fx(s.Code)) }
+func (s *StatusError) Error() string {
+	return fmt.Sprintf("sftp: %q (%v)", s.msg, fx(s.Code))
+}
+
+// FxCode returns the error code typed to match against the exported codes
+func (s *StatusError) FxCode() fxerr {
+	return fxerr(s.Code)
+}
