@@ -122,6 +122,14 @@ func (fs *root) Filecmd(r *Request) error {
 		}
 
 		delete(fs.files, r.Filepath)
+
+		if file.IsDir() {
+			for path := range fs.files {
+				if strings.HasPrefix(path, r.Filepath+"/") {
+					delete(fs.files, path)
+				}
+			}
+		}
 	case "Mkdir":
 		_, err := fs.fetch(filepath.Dir(r.Filepath))
 		if err != nil {
