@@ -56,7 +56,7 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
-		dir, err := fs.fetch(filepath.Dir(r.Filepath))
+		dir, err := fs.fetch(dir(r.Filepath))
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +102,7 @@ func (fs *root) Filecmd(r *Request) error {
 			}
 		}
 	case "Rmdir", "Remove":
-		file, err := fs.fetch(filepath.Dir(r.Filepath))
+		file, err := fs.fetch(dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (fs *root) Filecmd(r *Request) error {
 		delete(fs.files, r.Filepath)
 
 	case "Mkdir":
-		_, err := fs.fetch(filepath.Dir(r.Filepath))
+		_, err := fs.fetch(dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		}
 		orderedNames := []string{}
 		for fn := range fs.files {
-			if filepath.Dir(fn) == r.Filepath {
+			if dir(fn) == r.Filepath {
 				orderedNames = append(orderedNames, fn)
 			}
 		}
@@ -304,4 +304,15 @@ func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
 
 func (f *memFile) TransferError(err error) {
 	f.transferError = err
+}
+
+func dir(path string) string {
+	i := len(path) - 1
+	for i >= 0 && !os.IsPathSeparator(path[i]) {
+		i--
+	}
+	if i == 0 {
+		return path[:i+1]
+	}
+	return path[:i]
 }
