@@ -188,15 +188,10 @@ func (rs *RequestServer) packetWorker(
 				request = NewRequest("Stat", request.Filepath)
 				rpkt = request.call(rs.Handlers, pkt)
 			}
-		case *sshFxpExtendedPacket:
-			switch expkt := pkt.SpecificPacket.(type) {
-			default:
-				rpkt = statusFromError(pkt, ErrSSHFxOpUnsupported)
-			case *sshFxpExtendedPacketPosixRename:
-				request := NewRequest("Rename", expkt.Oldpath)
-				request.Target = expkt.Newpath
-				rpkt = request.call(rs.Handlers, pkt)
-			}
+		case *sshFxpExtendedPacketPosixRename:
+			request := NewRequest("Rename", pkt.Oldpath)
+			request.Target = pkt.Newpath
+			rpkt = request.call(rs.Handlers, pkt)
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
