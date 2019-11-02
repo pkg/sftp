@@ -241,9 +241,20 @@ func TestRequestRename(t *testing.T) {
 	err = p.cli.Rename("/foo", "/bar")
 	assert.Nil(t, err)
 	f, err := r.fetch("/bar")
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
 	assert.Equal(t, "bar", f.Name())
-	assert.Nil(t, err)
 	_, err = r.fetch("/foo")
+	assert.Equal(t, os.ErrNotExist, err)
+	err = p.cli.PosixRename("/bar", "/baz")
+	assert.Nil(t, err)
+	f, err = r.fetch("/baz")
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+	assert.Equal(t, "baz", f.Name())
+	_, err = r.fetch("/bar")
 	assert.Equal(t, os.ErrNotExist, err)
 }
 
