@@ -85,10 +85,14 @@ const (
 	sshFxfExcl   = 0x00000020
 )
 
-var sftpExtensions = []sshExtensionPair{
-	{"hardlink@openssh.com", "1"},
-	{"posix-rename@openssh.com", "1"},
-}
+var (
+	// supportedSFTPExtensions defines the supported extensions
+	supportedSFTPExtensions = []sshExtensionPair{
+		{"hardlink@openssh.com", "1"},
+		{"posix-rename@openssh.com", "1"},
+	}
+	sftpExtensions = supportedSFTPExtensions
+)
 
 type fxp uint8
 
@@ -226,4 +230,30 @@ func (s *StatusError) Error() string {
 // FxCode returns the error code typed to match against the exported codes
 func (s *StatusError) FxCode() fxerr {
 	return fxerr(s.Code)
+}
+
+func getSupportedExtensionByName(extensionName string) (sshExtensionPair, error) {
+	for _, supportedExtension := range supportedSFTPExtensions {
+		if supportedExtension.Name == extensionName {
+			return supportedExtension, nil
+		}
+	}
+	return sshExtensionPair{}, fmt.Errorf("Unsupported extension: %v", extensionName)
+}
+
+// SetSFTPExtensions allows to customize the supported server extensions.
+// See the variable supportedSFTPExtensions for supported extensions.
+// This method accepts a slice of sshExtensionPair names for example 'hardlink@openssh.com'.
+// If an invalid extension is given an error will be returned and nothing will be changed
+func SetSFTPExtensions(extensions ...string) error {
+	tempExtensions := []sshExtensionPair{}
+	for _, extension := range extensions {
+		sftpExtension, err := getSupportedExtensionByName(extension)
+		if err != nil {
+			return err
+		}
+		tempExtensions = append(tempExtensions, sftpExtension)
+	}
+	sftpExtensions = tempExtensions
+	return nil
 }
