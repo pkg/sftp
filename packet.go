@@ -842,6 +842,26 @@ func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
+type sshFxpExtendedPacketCheckFileReply struct {
+	ID uint32
+	CheckFileResponse
+}
+
+func (p sshFxpExtendedPacketCheckFileReply) id() uint32 { return p.ID }
+
+func (p sshFxpExtendedPacketCheckFileReply) MarshalBinary() ([]byte, error) {
+	l := 1 + 4 + // type(byte) + uint32
+		len(p.HashAlgoUsed) +
+		len(p.Hash)
+
+	b := make([]byte, 0, l)
+	b = append(b, sshFxpExtendedReply)
+	b = marshalUint32(b, p.ID)
+	b = marshalString(b, p.HashAlgoUsed)
+	b = append(b, p.Hash...)
+	return b, nil
+}
+
 type sshFxpStatvfsPacket struct {
 	ID   uint32
 	Path string
@@ -937,6 +957,10 @@ func (p *sshFxpExtendedPacket) UnmarshalBinary(b []byte) error {
 		p.SpecificPacket = &sshFxpExtendedPacketPosixRename{}
 	case "hardlink@openssh.com":
 		p.SpecificPacket = &sshFxpExtendedPacketHardlink{}
+	case "check-file-handle":
+		p.SpecificPacket = &sshFxpExtendedPacketCheckFileHandle{}
+	case "check-file-name":
+		p.SpecificPacket = &sshFxpExtendedPacketCheckFileName{}
 	default:
 		return errors.Wrapf(errUnknownExtendedPacket, "packet type %v", p.SpecificPacket)
 	}
@@ -1019,4 +1043,65 @@ func (p *sshFxpExtendedPacketHardlink) UnmarshalBinary(b []byte) error {
 func (p sshFxpExtendedPacketHardlink) respond(s *Server) responsePacket {
 	err := os.Link(p.Oldpath, p.Newpath)
 	return statusFromError(p, err)
+}
+
+type sshFxpExtendedPacketCheckFile struct {
+	ID              uint32
+	ExtendedRequest string
+	HashAlgoList    string
+	StartOffset     uint64
+	Length          uint64
+	BlockSize       uint32
+}
+
+type sshFxpExtendedPacketCheckFileHandle struct {
+	sshFxpExtendedPacketCheckFile
+	Handle string
+}
+
+type sshFxpExtendedPacketCheckFileName struct {
+	sshFxpExtendedPacketCheckFile
+	Path string
+}
+
+func (p sshFxpExtendedPacketCheckFile) id() uint32     { return p.ID }
+func (p sshFxpExtendedPacketCheckFile) readonly() bool { return true }
+func (p *sshFxpExtendedPacketCheckFile) unmarshalBinary(b []byte) (string, error) {
+	var err error
+	var pathOrHandle string
+	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
+		return pathOrHandle, err
+	} else if p.ExtendedRequest, b, err = unmarshalStringSafe(b); err != nil {
+		return pathOrHandle, err
+	} else if pathOrHandle, b, err = unmarshalStringSafe(b); err != nil {
+		return pathOrHandle, err
+	} else if p.HashAlgoList, b, err = unmarshalStringSafe(b); err != nil {
+		return pathOrHandle, err
+	} else if p.StartOffset, b, err = unmarshalUint64Safe(b); err != nil {
+		return pathOrHandle, err
+	} else if p.Length, b, err = unmarshalUint64Safe(b); err != nil {
+		return pathOrHandle, err
+	} else if p.BlockSize, _, err = unmarshalUint32Safe(b); err != nil {
+		return pathOrHandle, err
+	}
+	return pathOrHandle, nil
+}
+func (p *sshFxpExtendedPacketCheckFileHandle) UnmarshalBinary(b []byte) error {
+	var err error
+	p.Handle, err = p.unmarshalBinary(b)
+	return err
+}
+
+func (p *sshFxpExtendedPacketCheckFileName) UnmarshalBinary(b []byte) error {
+	var err error
+	p.Path, err = p.unmarshalBinary(b)
+	return err
+}
+
+func (p sshFxpExtendedPacketCheckFileHandle) respond(s *Server) responsePacket {
+	return statusFromError(p, ErrSSHFxOpUnsupported)
+}
+
+func (p sshFxpExtendedPacketCheckFileName) respond(s *Server) responsePacket {
+	return statusFromError(p, ErrSSHFxOpUnsupported)
 }

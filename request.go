@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -15,16 +16,43 @@ import (
 // MaxFilelist is the max number of files to return in a readdir batch.
 var MaxFilelist int64 = 100
 
+// CheckFileRequest contains the data for a file hashing request
+type CheckFileRequest struct {
+	HashAlgoList string
+	StartOffset  uint64
+	Length       uint64
+	BlockSize    uint32
+}
+
+// GetHashAlgoAsList returns the comma separataed HashAlgoList string as slice
+func (r CheckFileRequest) GetHashAlgoAsList() []string {
+	result := []string{}
+	for _, v := range strings.Split(r.HashAlgoList, ",") {
+		algo := strings.TrimSpace(v)
+		if len(algo) > 0 {
+			result = append(result, algo)
+		}
+	}
+	return result
+}
+
+// CheckFileResponse defines the response for file hashing requests
+type CheckFileResponse struct {
+	HashAlgoUsed string
+	Hash         []byte
+}
+
 // Request contains the data and state for the incoming service request.
 type Request struct {
 	// Get, Put, Setstat, Stat, Rename, Remove
 	// Rmdir, Mkdir, List, Readlink, Link, Symlink
-	Method   string
-	Filepath string
-	Flags    uint32
-	Attrs    []byte // convert to sub-struct
-	Target   string // for renames and sym-links
-	handle   string
+	Method    string
+	Filepath  string
+	Flags     uint32
+	Attrs     []byte // convert to sub-struct
+	Target    string // for renames and sym-links
+	handle    string
+	CheckFile CheckFileRequest // for CheckFile requests
 	// reader/writer/readdir from handlers
 	state state
 	// context lasts duration of request
@@ -166,6 +194,8 @@ func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
 		return filelist(handlers.FileList, r, pkt)
 	case "Stat", "Readlink":
 		return filestat(handlers.FileList, r, pkt)
+	case "CheckFile":
+		return filecheck(handlers.FileCheck, r, pkt)
 	default:
 		return statusFromError(pkt,
 			errors.Errorf("unexpected method: %s", r.Method))
@@ -310,6 +340,20 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	}
 }
 
+func filecheck(h FileChecker, r *Request, pkt requestPacket) responsePacket {
+	if h == nil {
+		return statusFromError(pkt, ErrSSHFxOpUnsupported)
+	}
+	response, err := h.CheckFile(r)
+	if err != nil {
+		return statusFromError(pkt, err)
+	}
+	return &sshFxpExtendedPacketCheckFileReply{
+		ID:                pkt.id(),
+		CheckFileResponse: response,
+	}
+}
+
 func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	lister, err := h.Filelist(r)
 	if err != nil {
@@ -382,6 +426,8 @@ func requestMethod(p requestPacket) (method string) {
 		method = "Mkdir"
 	case *sshFxpExtendedPacketHardlink:
 		method = "Link"
+	case *sshFxpExtendedPacketCheckFileHandle, *sshFxpExtendedPacketCheckFileName:
+		method = "CheckFile"
 	}
 	return method
 }

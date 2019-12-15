@@ -60,3 +60,8 @@ type ListerAt interface {
 type TransferError interface {
 	TransferError(err error)
 }
+
+// FileChecker is an optional interface to handle file hashing requests
+type FileChecker interface {
+	CheckFile(*Request) (CheckFileResponse, error)
+}

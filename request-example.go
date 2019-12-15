@@ -6,7 +6,13 @@ package sftp
 
 import (
 	"bytes"
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,7 +29,7 @@ func InMemHandler() Handlers {
 		files: make(map[string]*memFile),
 	}
 	root.memFile = newMemFile("/", true)
-	return Handlers{root, root, root, root}
+	return Handlers{root, root, root, root, root}
 }
 
 // Example Handlers
@@ -67,6 +73,48 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 		fs.files[r.Filepath] = file
 	}
 	return file.WriterAt()
+}
+
+func (fs *root) CheckFile(r *Request) (CheckFileResponse, error) {
+	response := CheckFileResponse{}
+	requestedAlgos := r.CheckFile.GetHashAlgoAsList()
+	var h hash.Hash
+	for _, algo := range requestedAlgos {
+		if algo == "md5" {
+			h = md5.New()
+			response.HashAlgoUsed = "md5"
+		} else if algo == "sha1" {
+			h = sha1.New()
+			response.HashAlgoUsed = "sha1"
+		} else if algo == "sha224" {
+			h = sha256.New224()
+			response.HashAlgoUsed = "sha224"
+		} else if algo == "sha256" {
+			h = sha256.New()
+			response.HashAlgoUsed = "sha256"
+		} else if algo == "sha384" {
+			h = sha512.New384()
+			response.HashAlgoUsed = "sha384"
+		} else if algo == "sha512" {
+			h = sha512.New()
+			response.HashAlgoUsed = "sha512"
+		}
+	}
+	if h == nil {
+		return response, errors.New("Unsupported hash algorithm requested")
+	}
+	// in this example we only support the full file hash
+	if r.CheckFile.StartOffset > 0 || r.CheckFile.Length > 0 || r.CheckFile.BlockSize > 0 {
+		return response, errors.New("Only full file hash is supported")
+	}
+	file, err := fs.fetch(r.Filepath)
+	if err != nil {
+		return response, err
+	}
+	h.Write(file.content)
+	response.Hash = append(response.Hash, []byte(fmt.Sprintf("%x", h.Sum(nil)))...)
+
+	return response, nil
 }
 
 func (fs *root) Filecmd(r *Request) error {

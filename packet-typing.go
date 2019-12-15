@@ -48,16 +48,18 @@ func (p sshFxpSymlinkPacket) getPath() string  { return p.Targetpath }
 func (p sshFxpOpendirPacket) getPath() string  { return p.Path }
 func (p sshFxpOpenPacket) getPath() string     { return p.Path }
 
-func (p sshFxpExtendedPacketPosixRename) getPath() string { return p.Oldpath }
-func (p sshFxpExtendedPacketHardlink) getPath() string    { return p.Oldpath }
+func (p sshFxpExtendedPacketPosixRename) getPath() string   { return p.Oldpath }
+func (p sshFxpExtendedPacketHardlink) getPath() string      { return p.Oldpath }
+func (p sshFxpExtendedPacketCheckFileName) getPath() string { return p.Path }
 
 // getHandle
-func (p sshFxpFstatPacket) getHandle() string    { return p.Handle }
-func (p sshFxpFsetstatPacket) getHandle() string { return p.Handle }
-func (p sshFxpReadPacket) getHandle() string     { return p.Handle }
-func (p sshFxpWritePacket) getHandle() string    { return p.Handle }
-func (p sshFxpReaddirPacket) getHandle() string  { return p.Handle }
-func (p sshFxpClosePacket) getHandle() string    { return p.Handle }
+func (p sshFxpFstatPacket) getHandle() string                   { return p.Handle }
+func (p sshFxpFsetstatPacket) getHandle() string                { return p.Handle }
+func (p sshFxpReadPacket) getHandle() string                    { return p.Handle }
+func (p sshFxpWritePacket) getHandle() string                   { return p.Handle }
+func (p sshFxpReaddirPacket) getHandle() string                 { return p.Handle }
+func (p sshFxpClosePacket) getHandle() string                   { return p.Handle }
+func (p sshFxpExtendedPacketCheckFileHandle) getHandle() string { return p.Handle }
 
 // notReadOnly
 func (p sshFxpWritePacket) notReadOnly()               {}

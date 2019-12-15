@@ -16,10 +16,11 @@ var maxTxPacket uint32 = 1 << 15
 
 // Handlers contains the 4 SFTP server request handlers.
 type Handlers struct {
-	FileGet  FileReader
-	FilePut  FileWriter
-	FileCmd  FileCmder
-	FileList FileLister
+	FileGet   FileReader
+	FilePut   FileWriter
+	FileCmd   FileCmder
+	FileList  FileLister
+	FileCheck FileChecker
 }
 
 // RequestServer abstracts the sftp protocol with an http request-like protocol
@@ -193,6 +194,32 @@ func (rs *RequestServer) packetWorker(
 		case *sshFxpExtendedPacketPosixRename:
 			request := NewRequest("Rename", pkt.Oldpath)
 			request.Target = pkt.Newpath
+			rpkt = request.call(rs.Handlers, pkt)
+		case *sshFxpExtendedPacketCheckFileHandle:
+			handle := pkt.getHandle()
+			request, ok := rs.getRequest(handle)
+			if !ok {
+				rpkt = statusFromError(pkt, syscall.EBADF)
+			} else {
+				checkFileRequest := CheckFileRequest{
+					HashAlgoList: pkt.HashAlgoList,
+					StartOffset:  pkt.StartOffset,
+					Length:       pkt.Length,
+					BlockSize:    pkt.BlockSize,
+				}
+				request = NewRequest("CheckFile", request.Filepath)
+				request.CheckFile = checkFileRequest
+				rpkt = request.call(rs.Handlers, pkt)
+			}
+		case *sshFxpExtendedPacketCheckFileName:
+			checkFileRequest := CheckFileRequest{
+				HashAlgoList: pkt.HashAlgoList,
+				StartOffset:  pkt.StartOffset,
+				Length:       pkt.Length,
+				BlockSize:    pkt.BlockSize,
+			}
+			request := NewRequest("CheckFile", pkt.Path)
+			request.CheckFile = checkFileRequest
 			rpkt = request.call(rs.Handlers, pkt)
 		case hasHandle:
 			handle := pkt.getHandle()
