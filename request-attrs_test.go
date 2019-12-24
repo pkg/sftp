@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"math"
 	"os"
 
 	"github.com/stretchr/testify/assert"
@@ -48,4 +49,12 @@ func TestRequestAttributes(t *testing.T) {
 	assert.True(t, testFs.FileMode().IsRegular())
 	assert.False(t, testFs.FileMode().IsDir())
 	assert.Equal(t, testFs.FileMode().Perm(), os.FileMode(700).Perm())
+}
+
+func TestRequestAttributesEmpty(t *testing.T) {
+	fs, b := getFileStat(math.MaxUint32, nil)
+	assert.Equal(t, &FileStat{
+		Extended: []StatExtended{},
+	}, fs)
+	assert.Empty(t, b)
 }

@@ -102,30 +102,30 @@ func unmarshalAttrs(b []byte) (*FileStat, []byte) {
 func getFileStat(flags uint32, b []byte) (*FileStat, []byte) {
 	var fs FileStat
 	if flags&sshFileXferAttrSize == sshFileXferAttrSize {
-		fs.Size, b = unmarshalUint64(b)
+		fs.Size, b, _ = unmarshalUint64Safe(b)
 	}
 	if flags&sshFileXferAttrUIDGID == sshFileXferAttrUIDGID {
-		fs.UID, b = unmarshalUint32(b)
+		fs.UID, b, _ = unmarshalUint32Safe(b)
 	}
 	if flags&sshFileXferAttrUIDGID == sshFileXferAttrUIDGID {
-		fs.GID, b = unmarshalUint32(b)
+		fs.GID, b, _ = unmarshalUint32Safe(b)
 	}
 	if flags&sshFileXferAttrPermissions == sshFileXferAttrPermissions {
-		fs.Mode, b = unmarshalUint32(b)
+		fs.Mode, b, _ = unmarshalUint32Safe(b)
 	}
 	if flags&sshFileXferAttrACmodTime == sshFileXferAttrACmodTime {
-		fs.Atime, b = unmarshalUint32(b)
-		fs.Mtime, b = unmarshalUint32(b)
+		fs.Atime, b, _ = unmarshalUint32Safe(b)
+		fs.Mtime, b, _ = unmarshalUint32Safe(b)
 	}
 	if flags&sshFileXferAttrExtented == sshFileXferAttrExtented {
 		var count uint32
-		count, b = unmarshalUint32(b)
+		count, b, _ = unmarshalUint32Safe(b)
 		ext := make([]StatExtended, count)
 		for i := uint32(0); i < count; i++ {
 			var typ string
 			var data string
-			typ, b = unmarshalString(b)
-			data, b = unmarshalString(b)
+			typ, b, _ = unmarshalStringSafe(b)
+			data, b, _ = unmarshalStringSafe(b)
 			ext[i] = StatExtended{typ, data}
 		}
 		fs.Extended = ext
