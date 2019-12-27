@@ -15,6 +15,9 @@ const (
 	sshFileXferAttrPermissions = 0x00000004
 	sshFileXferAttrACmodTime   = 0x00000008
 	sshFileXferAttrExtented    = 0x80000000
+
+	sshFileXferAttrAll = sshFileXferAttrSize|sshFileXferAttrUIDGID|sshFileXferAttrPermissions|
+		sshFileXferAttrACmodTime|sshFileXferAttrExtented
 )
 
 // fileInfo is an artificial type designed to satisfy os.FileInfo.

@@ -1,12 +1,10 @@
 package sftp
 
 import (
-	"math"
 	"os"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"testing"
 )
 
 func TestRequestPflags(t *testing.T) {
@@ -52,7 +50,7 @@ func TestRequestAttributes(t *testing.T) {
 }
 
 func TestRequestAttributesEmpty(t *testing.T) {
-	fs, b := getFileStat(math.MaxUint32, nil)
+	fs, b := getFileStat(sshFileXferAttrAll, nil)
 	assert.Equal(t, &FileStat{
 		Extended: []StatExtended{},
 	}, fs)
