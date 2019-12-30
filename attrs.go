@@ -16,8 +16,8 @@ const (
 	sshFileXferAttrACmodTime   = 0x00000008
 	sshFileXferAttrExtented    = 0x80000000
 
-	sshFileXferAttrAll = sshFileXferAttrSize|sshFileXferAttrUIDGID|sshFileXferAttrPermissions|
-		sshFileXferAttrACmodTime|sshFileXferAttrExtented
+	sshFileXferAttrAll = sshFileXferAttrSize | sshFileXferAttrUIDGID | sshFileXferAttrPermissions |
+		sshFileXferAttrACmodTime | sshFileXferAttrExtented
 )
 
 // fileInfo is an artificial type designed to satisfy os.FileInfo.
@@ -176,7 +176,7 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 // toFileMode converts sftp filemode bits to the os.FileMode specification
 func toFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
-	switch mode & syscall.S_IFMT {
+	switch mode & S_IFMT {
 	case syscall.S_IFBLK:
 		fm |= os.ModeDevice
 	case syscall.S_IFCHR:
