@@ -398,9 +398,9 @@ func (p sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		return statusFromError(p, syscall.EINVAL)
 	}
 
-	if p.hasPflags(sshFxfAppend) {
-		osFlags |= os.O_APPEND
-	}
+	// Don't use O_APPEND flag as it conflicts with WriteAt.
+	// The sshFxfAppend flag is a no-op here as the client sends the offsets.
+
 	if p.hasPflags(sshFxfCreat) {
 		osFlags |= os.O_CREATE
 	}
