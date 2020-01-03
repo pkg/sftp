@@ -51,6 +51,23 @@ func MaxPacketChecked(size int) ClientOption {
 	}
 }
 
+// UseFstat sets whether to use Fstat or Stat when File.WriteTo is called (usually when copying files).
+// Some servers limit the amount of open files and calling Stat after opening the file will throw an error
+// From the server. Setting this flag will call Fstat instead of Stat which is suppose to be called on an
+// open file handle.
+//
+// From our experience it happens often with IBM Sterling SFTP servers that have "extractability" level
+// set to 1 which means only 1 file can be open at any given time.
+//
+// If the server you are working with still has an issue with both Stat and Fstat calls you can always
+// open a file and just loop through multiple Read calls until the file is completely read.
+func UseFstat(value bool) ClientOption {
+	return func(c *Client) error {
+		c.useFstat = value
+		return nil
+	}
+}
+
 // MaxPacketUnchecked sets the maximum size of the payload, measured in bytes.
 // It accepts sizes larger than the 32768 bytes all servers should support.
 // Only use a setting higher than 32768 if your application always connects to
@@ -161,6 +178,7 @@ type Client struct {
 	maxPacket             int // max packet size read or written.
 	nextid                uint32
 	maxConcurrentRequests int
+	useFstat              bool
 }
 
 // Create creates the named file mode 0666 (before umask), truncating it if it
@@ -913,15 +931,27 @@ func (f *File) Read(b []byte) (int, error) {
 // maximise throughput for transferring the entire file (especially
 // over high latency links).
 func (f *File) WriteTo(w io.Writer) (int64, error) {
-	fi, err := f.c.Stat(f.path)
-	if err != nil {
-		return 0, err
+	var err error
+	fileSize := uint64(0)
+	if f.c.useFstat {
+		var fileStat *FileStat
+		if fileStat, err = f.c.fstat(f.handle); err != nil {
+			return 0, err
+		}
+		fileSize = uint64(fileStat.Size)
+
+	} else {
+		var fi os.FileInfo
+		if fi, err = f.c.Stat(f.path); err != nil {
+			return 0, err
+		}
+		fileSize = uint64(fi.Size())
 	}
+
 	inFlight := 0
 	desiredInFlight := 1
 	offset := f.offset
 	writeOffset := offset
-	fileSize := uint64(fi.Size())
 	// see comment on same line in Read() above
 	ch := make(chan result, f.c.maxConcurrentRequests+1)
 	type inflightRead struct {
