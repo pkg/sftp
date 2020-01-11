@@ -649,6 +649,53 @@ func TestServerPut(t *testing.T) {
 	}
 }
 
+func TestServerResume(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpFileLocal := "/tmp/" + randName()
+	tmpFileRemote := "/tmp/" + randName()
+	defer os.RemoveAll(tmpFileLocal)
+	defer os.RemoveAll(tmpFileRemote)
+
+	t.Logf("put: local %v remote %v", tmpFileLocal, tmpFileRemote)
+
+	// create a local file with random contents to be pushed to the server
+	tmpFileLocalData := randData(2 * 1024 * 1024)
+	// only write half the data to simulate a split upload
+	half := 1024 * 1024
+	err := ioutil.WriteFile(tmpFileLocal, tmpFileLocalData[:half], 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// sftp the first half of the file to the server
+	output, err := runSftpClient(t, "put "+tmpFileLocal+" "+tmpFileRemote,
+		"/", hostGo, portGo)
+	if err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// write the full file out
+	err = ioutil.WriteFile(tmpFileLocal, tmpFileLocalData, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// re-sftp the full file with the append flag set
+	output, err = runSftpClient(t, "put -a "+tmpFileLocal+" "+tmpFileRemote,
+		"/", hostGo, portGo)
+	if err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// tmpFileRemote should now exist, with the same contents
+	if tmpFileRemoteData, err := ioutil.ReadFile(tmpFileRemote); err != nil {
+		t.Fatal(err)
+	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
+		t.Fatal("contents of file incorrect after put")
+	}
+}
+
 func TestServerGet(t *testing.T) {
 	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
