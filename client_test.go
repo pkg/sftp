@@ -194,3 +194,17 @@ func testMaxPacketOption(t *testing.T, o ClientOption, tt packetSizeTest) {
 		t.Errorf("MaxPacketChecked(%v)\n- want: %v\n- got: %v", tt.size, tt.size, c.maxPacket)
 	}
 }
+
+func testFstatOption(t *testing.T, o ClientOption, value bool) {
+	var c Client
+
+	err := o(&c)
+	if err == nil && c.useFstat != value {
+		t.Errorf("UseFStat(%v)\n- want: %v\n- got: %v", value, value, c.useFstat)
+	}
+}
+
+func TestUseFstatChecked(t *testing.T) {
+	testFstatOption(t, UseFstat(true), true)
+	testFstatOption(t, UseFstat(false), false)
+}
