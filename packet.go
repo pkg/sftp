@@ -681,7 +681,7 @@ func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
 		return errShortPacket
 	}
 
-	p.Data = append([]byte{}, b[:p.Length]...)
+	p.Data = b[:p.Length]
 	return nil
 }
 
@@ -837,8 +837,7 @@ func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) error {
 		return errShortPacket
 	}
 
-	p.Data = make([]byte, p.Length)
-	copy(p.Data, b)
+	p.Data = b[:p.Length]
 	return nil
 }
 
