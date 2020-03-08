@@ -31,6 +31,12 @@ func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
 	return sendPacket(c, m)
 }
 
+func (c *conn) Close() error {
+	c.Lock()
+	defer c.Unlock()
+	return c.WriteCloser.Close()
+}
+
 type clientConn struct {
 	conn
 	wg         sync.WaitGroup
@@ -67,9 +73,7 @@ func (c *clientConn) loop() {
 // appropriate channel.
 func (c *clientConn) recv() error {
 	defer func() {
-		c.conn.Lock()
 		c.conn.Close()
-		c.conn.Unlock()
 	}()
 	for {
 		typ, data, err := c.recvPacket()
