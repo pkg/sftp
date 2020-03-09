@@ -216,7 +216,10 @@ func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 	}
 
 	_, offset, length := packetData(pkt)
-	data := make([]byte, clamp(length, maxTxPacket))
+	dataLen := clamp(length, maxTxPacket)
+	// we allocate a slice with a bigger capacity so we avoid a new allocation in MarshalBinary and in sendPacket
+	// we need 9 bytes in MarshalBinary and 4 bytes in sendPacket
+	data := make([]byte, dataLen, dataLen+13)
 	n, err := reader.ReadAt(data, offset)
 	// only return EOF erro if no data left to read
 	if err != nil && (err != io.EOF || n == 0) {

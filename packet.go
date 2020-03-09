@@ -820,10 +820,11 @@ type sshFxpDataPacket struct {
 }
 
 func (p sshFxpDataPacket) MarshalBinary() ([]byte, error) {
-	b := []byte{sshFxpData}
-	b = marshalUint32(b, p.ID)
-	b = marshalUint32(b, p.Length)
-	b = append(b, p.Data[:p.Length]...)
+	b := append(p.Data, make([]byte, 9)...)
+	copy(b[9:], p.Data[:p.Length])
+	b[0] = sshFxpData
+	binary.BigEndian.PutUint32(b[1:5], p.ID)
+	binary.BigEndian.PutUint32(b[5:9], p.Length)
 	return b, nil
 }
 
