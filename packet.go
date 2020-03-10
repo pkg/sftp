@@ -586,9 +586,9 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 
 func (p *sshFxpReadPacket) getDataSlice() []byte {
 	dataLen := clamp(p.Len, maxTxPacket)
-	// we allocate a slice with a bigger capacity so we avoid a new allocation in MarshalBinary and in sendPacket
-	// we need 9 bytes in MarshalBinary and 4 bytes in sendPacket
-	return make([]byte, dataLen, dataLen+13)
+	// we allocate a slice with a bigger capacity so we avoid a new allocation in sshFxpDataPacket.MarshalBinary
+	// and in sendPacket, we need 9 bytes in MarshalBinary and 4 bytes in sendPacket
+	return make([]byte, dataLen, dataLen+9+4)
 }
 
 type sshFxpRenamePacket struct {

@@ -265,6 +265,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 				ID:     p.ID,
 				Length: uint32(n),
 				Data:   data[:n],
+				// do not use data[:n:n] here to clamp the capacity, we allocated extra capacity above to avoid reallocations
 			}
 		}
 		if err != nil {
