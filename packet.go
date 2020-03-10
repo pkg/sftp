@@ -826,6 +826,8 @@ type sshFxpDataPacket struct {
 	Data   []byte
 }
 
+// MarshalBinary encodes the receiver into a binary form and returns the result.
+// To avoid a new allocation the Data slice must have a capacity >= Length + 9
 func (p sshFxpDataPacket) MarshalBinary() ([]byte, error) {
 	b := append(p.Data, make([]byte, 9)...)
 	copy(b[9:], p.Data[:p.Length])
