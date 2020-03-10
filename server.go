@@ -258,7 +258,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		f, ok := s.getHandle(p.Handle)
 		if ok {
 			err = nil
-			data := make([]byte, clamp(p.Len, s.maxTxPacket))
+			data := p.getDataSlice()
 			n, _err := f.ReadAt(data, int64(p.Offset))
 			if _err != nil && (_err != io.EOF || n == 0) {
 				err = _err
