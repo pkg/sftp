@@ -34,7 +34,6 @@ type Server struct {
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int
-	maxTxPacket   uint32
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -87,7 +86,6 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		debugStream: ioutil.Discard,
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
-		maxTxPacket: 1 << 15,
 	}
 
 	for _, o := range options {
@@ -258,7 +256,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		f, ok := s.getHandle(p.Handle)
 		if ok {
 			err = nil
-			data := make([]byte, clamp(p.Len, s.maxTxPacket))
+			data := p.getDataSlice()
 			n, _err := f.ReadAt(data, int64(p.Offset))
 			if _err != nil && (_err != io.EOF || n == 0) {
 				err = _err
@@ -267,6 +265,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 				ID:     p.ID,
 				Length: uint32(n),
 				Data:   data[:n],
+				// do not use data[:n:n] here to clamp the capacity, we allocated extra capacity above to avoid reallocations
 			}
 		}
 		if err != nil {

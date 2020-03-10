@@ -584,6 +584,13 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
+func (p *sshFxpReadPacket) getDataSlice() []byte {
+	dataLen := clamp(p.Len, maxTxPacket)
+	// we allocate a slice with a bigger capacity so we avoid a new allocation in sshFxpDataPacket.MarshalBinary
+	// and in sendPacket, we need 9 bytes in MarshalBinary and 4 bytes in sendPacket
+	return make([]byte, dataLen, dataLen+9+4)
+}
+
 type sshFxpRenamePacket struct {
 	ID      uint32
 	Oldpath string
@@ -819,11 +826,14 @@ type sshFxpDataPacket struct {
 	Data   []byte
 }
 
+// MarshalBinary encodes the receiver into a binary form and returns the result.
+// To avoid a new allocation the Data slice must have a capacity >= Length + 9
 func (p sshFxpDataPacket) MarshalBinary() ([]byte, error) {
-	b := []byte{sshFxpData}
-	b = marshalUint32(b, p.ID)
-	b = marshalUint32(b, p.Length)
-	b = append(b, p.Data[:p.Length]...)
+	b := append(p.Data, make([]byte, 9)...)
+	copy(b[9:], p.Data[:p.Length])
+	b[0] = sshFxpData
+	binary.BigEndian.PutUint32(b[1:5], p.ID)
+	binary.BigEndian.PutUint32(b[5:9], p.Length)
 	return b, nil
 }
 

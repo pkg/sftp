@@ -215,8 +215,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 		return statusFromError(pkt, errors.New("unexpected read packet"))
 	}
 
-	_, offset, length := packetData(pkt)
-	data := make([]byte, clamp(length, maxTxPacket))
+	data, offset, _ := packetData(pkt)
 	n, err := reader.ReadAt(data, offset)
 	// only return EOF erro if no data left to read
 	if err != nil && (err != io.EOF || n == 0) {
@@ -250,6 +249,7 @@ func packetData(p requestPacket) (data []byte, offset int64, length uint32) {
 	case *sshFxpReadPacket:
 		length = p.Len
 		offset = int64(p.Offset)
+		data = p.getDataSlice()
 	case *sshFxpWritePacket:
 		data = p.Data
 		length = p.Length
