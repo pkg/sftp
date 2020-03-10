@@ -34,7 +34,6 @@ type Server struct {
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int
-	maxTxPacket   uint32
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -87,7 +86,6 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		debugStream: ioutil.Discard,
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
-		maxTxPacket: 1 << 15,
 	}
 
 	for _, o := range options {
