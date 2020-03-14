@@ -206,7 +206,7 @@ var recvPacketTests = []struct {
 func TestRecvPacket(t *testing.T) {
 	for _, tt := range recvPacketTests {
 		r := bytes.NewReader(tt.b)
-		got, rest, _ := recvPacket(r)
+		got, rest, _ := recvPacket(r, nil, 0)
 		if got != tt.want || !bytes.Equal(rest, tt.rest) {
 			t.Errorf("recvPacket(%#v): want %v, %#v, got %v, %#v", tt.b, tt.want, tt.rest, got, rest)
 		}

@@ -139,9 +139,14 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	return nil
 }
 
-func recvPacket(r io.Reader) (uint8, []byte, error) {
-	var b = []byte{0, 0, 0, 0}
-	if _, err := io.ReadFull(r, b); err != nil {
+func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, error) {
+	var b []byte
+	if alloc != nil {
+		b = alloc.GetPage(orderID)
+	} else {
+		b = make([]byte, 4)
+	}
+	if _, err := io.ReadFull(r, b[:4]); err != nil {
 		return 0, nil, err
 	}
 	l, _ := unmarshalUint32(b)
@@ -149,17 +154,19 @@ func recvPacket(r io.Reader) (uint8, []byte, error) {
 		debug("recv packet %d bytes too long", l)
 		return 0, nil, errLongPacket
 	}
-	b = make([]byte, l)
-	if _, err := io.ReadFull(r, b); err != nil {
+	if alloc == nil {
+		b = make([]byte, l)
+	}
+	if _, err := io.ReadFull(r, b[0:l]); err != nil {
 		debug("recv packet %d bytes: err %v", l, err)
 		return 0, nil, err
 	}
 	if debugDumpRxPacketBytes {
-		debug("recv packet: %s %d bytes %x", fxp(b[0]), l, b[1:])
+		debug("recv packet: %s %d bytes %x", fxp(b[0]), l, b[1:l])
 	} else if debugDumpRxPacket {
 		debug("recv packet: %s %d bytes", fxp(b[0]), l)
 	}
-	return b[0], b[1:], nil
+	return b[0], b[1:l], nil
 }
 
 type extensionPair struct {
@@ -584,10 +591,13 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-func (p *sshFxpReadPacket) getDataSlice() []byte {
+func (p *sshFxpReadPacket) getDataSlice(alloc *allocator, orderID uint32) []byte {
 	dataLen := clamp(p.Len, maxTxPacket)
 	// we allocate a slice with a bigger capacity so we avoid a new allocation in sshFxpDataPacket.MarshalBinary
-	// and in sendPacket, we need 9 bytes in MarshalBinary and 4 bytes in sendPacket
+	// and in sendPacket, we need 9 bytes in MarshalBinary and 4 bytes in sendPacket.
+	if alloc != nil {
+		return alloc.GetPage(orderID)[:dataLen]
+	}
 	return make([]byte, dataLen, dataLen+9+4)
 }
 

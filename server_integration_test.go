@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kr/fs"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -52,6 +53,9 @@ func TestMain(m *testing.M) {
 	}
 	testSftp = flag.String("sftp", sftpServer, "location of the sftp server binary")
 	flag.Parse()
+	if *testOptimizedAllocator {
+		SetEnabledAllocationMode(AllocationModeOptimized)
+	}
 
 	os.Exit(m.Run())
 }
@@ -64,6 +68,7 @@ func skipIfWindows(t testing.TB) {
 
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
+var testOptimizedAllocator = flag.Bool("optimized-allocator", false, "perform tests using AllocationModeOptimized instead of AllocationModeStandard")
 var testSftp *string
 
 var testSftpClientBin *string
@@ -466,6 +471,24 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 		err = fmt.Errorf("%v: %s", err, stderr.String())
 	}
 	return stdout.String(), err
+}
+
+func checkAllocatorBeforeServerClose(t *testing.T, alloc *allocator) {
+	if alloc != nil {
+		// before closing the server we are, generally, waiting for new packets in recvPacket and we have a page allocated.
+		// Sometime the sendPacket returns some milliseconds after the client receives the response, and so we have 2
+		// allocated pages here, so wait some milliseconds. To avoid crashes we must be sure to not release the pages
+		// too soon.
+		assert.Eventually(t, func() bool { return alloc.countUsedPages() <= 1 }, 100*time.Millisecond, 10*time.Millisecond)
+	}
+}
+
+func checkAllocatorAfterServerClose(t *testing.T, alloc *allocator) {
+	if alloc != nil {
+		// wait for the server cleanup
+		assert.Eventually(t, func() bool { return alloc.countUsedPages() == 0 }, 100*time.Millisecond, 10*time.Millisecond)
+		assert.Eventually(t, func() bool { return alloc.countAvailablePages() == 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	}
 }
 
 func TestServerCompareSubsystems(t *testing.T) {

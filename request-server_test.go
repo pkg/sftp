@@ -60,6 +60,15 @@ func clientRequestServerPair(t *testing.T) *csPair {
 	return &csPair{client, server}
 }
 
+func checkRequestServerAllocator(t *testing.T, p *csPair) {
+	if p.svr.pktMgr.alloc == nil {
+		return
+	}
+	checkAllocatorBeforeServerClose(t, p.svr.pktMgr.alloc)
+	p.Close()
+	checkAllocatorAfterServerClose(t, p.svr.pktMgr.alloc)
+}
+
 // after adding logging, maybe check log to make sure packet handling
 // was split over more than one worker
 func TestRequestSplitWrite(t *testing.T) {
@@ -74,6 +83,7 @@ func TestRequestSplitWrite(t *testing.T) {
 	r := p.testHandler()
 	f, _ := r.fetch("/foo")
 	assert.Equal(t, contents, string(f.content))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestCache(t *testing.T) {
@@ -101,6 +111,7 @@ func TestRequestCache(t *testing.T) {
 	assert.Equal(t, _foo.Context().Err(), context.Canceled, "context is now canceled")
 	p.svr.closeRequest(bh)
 	assert.Len(t, p.svr.openRequests, 0)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestCacheState(t *testing.T) {
@@ -114,6 +125,7 @@ func TestRequestCacheState(t *testing.T) {
 	err = p.cli.Remove("/foo")
 	assert.Nil(t, err)
 	assert.Len(t, p.svr.openRequests, 0)
+	checkRequestServerAllocator(t, p)
 }
 
 func putTestFile(cli *Client, path, content string) (int, error) {
@@ -136,6 +148,7 @@ func TestRequestWrite(t *testing.T) {
 	assert.Nil(t, err)
 	assert.False(t, f.isdir)
 	assert.Equal(t, f.content, []byte("hello"))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestWriteEmpty(t *testing.T) {
@@ -156,6 +169,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	assert.Error(t, err)
 	r.returnErr(nil)
 	assert.Equal(t, 0, n)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestFilename(t *testing.T) {
@@ -169,6 +183,7 @@ func TestRequestFilename(t *testing.T) {
 	assert.Equal(t, f.Name(), "foo")
 	_, err = r.fetch("/bar")
 	assert.Error(t, err)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestJustRead(t *testing.T) {
@@ -186,6 +201,7 @@ func TestRequestJustRead(t *testing.T) {
 	}
 	assert.Equal(t, 5, n)
 	assert.Equal(t, "hello", string(contents[0:5]))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestOpenFail(t *testing.T) {
@@ -194,6 +210,7 @@ func TestRequestOpenFail(t *testing.T) {
 	rf, err := p.cli.Open("/foo")
 	assert.Exactly(t, os.ErrNotExist, err)
 	assert.Nil(t, rf)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestCreate(t *testing.T) {
@@ -203,6 +220,7 @@ func TestRequestCreate(t *testing.T) {
 	assert.Nil(t, err)
 	err = fh.Close()
 	assert.Nil(t, err)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestMkdir(t *testing.T) {
@@ -214,6 +232,7 @@ func TestRequestMkdir(t *testing.T) {
 	f, err := r.fetch("/foo")
 	assert.Nil(t, err)
 	assert.True(t, f.isdir)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestRemove(t *testing.T) {
@@ -228,6 +247,7 @@ func TestRequestRemove(t *testing.T) {
 	assert.Nil(t, err)
 	_, err = r.fetch("/foo")
 	assert.Equal(t, err, os.ErrNotExist)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestRename(t *testing.T) {
@@ -256,6 +276,7 @@ func TestRequestRename(t *testing.T) {
 	assert.Equal(t, "baz", f.Name())
 	_, err = r.fetch("/bar")
 	assert.Equal(t, os.ErrNotExist, err)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestRenameFail(t *testing.T) {
@@ -267,6 +288,7 @@ func TestRequestRenameFail(t *testing.T) {
 	assert.Nil(t, err)
 	err = p.cli.Rename("/foo", "/bar")
 	assert.IsType(t, &StatusError{}, err)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestStat(t *testing.T) {
@@ -280,6 +302,7 @@ func TestRequestStat(t *testing.T) {
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
 	assert.NoError(t, err)
+	checkRequestServerAllocator(t, p)
 }
 
 // NOTE: Setstat is a noop in the request server tests, but we want to test
@@ -298,6 +321,7 @@ func TestRequestSetstat(t *testing.T) {
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestFstat(t *testing.T) {
@@ -314,6 +338,7 @@ func TestRequestFstat(t *testing.T) {
 		assert.Equal(t, fi.Mode(), os.FileMode(0644))
 		assert.NoError(t, testOsSys(fi.Sys()))
 	}
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestStatFail(t *testing.T) {
@@ -322,6 +347,7 @@ func TestRequestStatFail(t *testing.T) {
 	fi, err := p.cli.Stat("/foo")
 	assert.Nil(t, fi)
 	assert.True(t, os.IsNotExist(err))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestLink(t *testing.T) {
@@ -335,6 +361,7 @@ func TestRequestLink(t *testing.T) {
 	fi, err := r.fetch("/bar")
 	assert.Nil(t, err)
 	assert.True(t, int(fi.Size()) == len("hello"))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestLinkFail(t *testing.T) {
@@ -343,6 +370,7 @@ func TestRequestLinkFail(t *testing.T) {
 	err := p.cli.Link("/foo", "/bar")
 	t.Log(err)
 	assert.True(t, os.IsNotExist(err))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestSymlink(t *testing.T) {
@@ -356,6 +384,7 @@ func TestRequestSymlink(t *testing.T) {
 	fi, err := r.fetch("/bar")
 	assert.Nil(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestSymlinkFail(t *testing.T) {
@@ -363,6 +392,7 @@ func TestRequestSymlinkFail(t *testing.T) {
 	defer p.Close()
 	err := p.cli.Symlink("/foo", "/bar")
 	assert.True(t, os.IsNotExist(err))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestReadlink(t *testing.T) {
@@ -375,6 +405,7 @@ func TestRequestReadlink(t *testing.T) {
 	rl, err := p.cli.ReadLink("/bar")
 	assert.Nil(t, err)
 	assert.Equal(t, "foo", rl)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestReaddir(t *testing.T) {
@@ -398,6 +429,7 @@ func TestRequestReaddir(t *testing.T) {
 	assert.Len(t, di, 100)
 	names := []string{di[18].Name(), di[81].Name()}
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestCleanPath(t *testing.T) {

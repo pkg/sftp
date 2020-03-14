@@ -18,6 +18,8 @@ type packetManager struct {
 	sender      packetSender // connection object
 	working     *sync.WaitGroup
 	packetCount uint32
+	// it is not nil if AllocationModeOptimized is enabled
+	alloc *allocator
 }
 
 type packetSender interface {
@@ -34,6 +36,9 @@ func newPktMgr(sender packetSender) *packetManager {
 		sender:    sender,
 		working:   &sync.WaitGroup{},
 	}
+	if enabledAllocationMode == AllocationModeOptimized {
+		s.alloc = newAllocator()
+	}
 	go s.controller()
 	return s
 }
@@ -42,6 +47,14 @@ func newPktMgr(sender packetSender) *packetManager {
 func (s *packetManager) newOrderID() uint32 {
 	s.packetCount++
 	return s.packetCount
+}
+
+// returns the next orderID without incrementing it.
+// This is used before receiving a new packet in AllocationModeOptimized to associate
+// the slice allocated for the received packet with the orderID that will be used to mark
+// the allocated slices for reuse once the request is served
+func (s *packetManager) getNextOrderID() uint32 {
+	return s.packetCount + 1
 }
 
 type orderedRequest struct {
@@ -174,6 +187,10 @@ func (s *packetManager) maybeSendPackets() {
 		if in.orderID() == out.orderID() {
 			debug("Sending packet: %v", out.id())
 			s.sender.sendPacket(out.(encoding.BinaryMarshaler))
+			if s.alloc != nil {
+				// mark for reuse the slices allocated for this request
+				s.alloc.ReleasePages(in.orderID())
+			}
 			// pop off heads
 			copy(s.incoming, s.incoming[1:])            // shift left
 			s.incoming[len(s.incoming)-1] = nil         // clear last

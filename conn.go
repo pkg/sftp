@@ -18,8 +18,10 @@ type conn struct {
 	sendPacketTest func(w io.Writer, m encoding.BinaryMarshaler) error
 }
 
-func (c *conn) recvPacket() (uint8, []byte, error) {
-	return recvPacket(c)
+// the allocator and the orderID are used in server mode if AllocationModeOptimized is enabled.
+// For the client just pass nil and 0
+func (c *conn) recvPacket(alloc *allocator, orderID uint32) (uint8, []byte, error) {
+	return recvPacket(c, alloc, orderID)
 }
 
 func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
@@ -76,7 +78,7 @@ func (c *clientConn) recv() error {
 		c.conn.Close()
 	}()
 	for {
-		typ, data, err := c.recvPacket()
+		typ, data, err := c.recvPacket(nil, 0)
 		if err != nil {
 			return err
 		}

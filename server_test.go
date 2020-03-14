@@ -198,6 +198,15 @@ func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+func checkServerAllocator(t *testing.T, server *Server) {
+	if server.pktMgr.alloc == nil {
+		return
+	}
+	checkAllocatorBeforeServerClose(t, server.pktMgr.alloc)
+	server.Close()
+	checkAllocatorAfterServerClose(t, server.pktMgr.alloc)
+}
+
 // test that errors are sent back when we request an invalid extended packet operation
 // this validates the following rfc draft is followed https://tools.ietf.org/html/draft-ietf-secsh-filexfer-extensions-00
 func TestInvalidExtendedPacket(t *testing.T) {
@@ -222,6 +231,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if statusErr.Code != sshFxOPUnsupported {
 		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, sshFxOPUnsupported)
 	}
+	checkServerAllocator(t, server)
 }
 
 // test that server handles concurrent requests correctly
@@ -251,6 +261,7 @@ func TestConcurrentRequests(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	checkServerAllocator(t, server)
 }
 
 // Test error conversion
@@ -327,4 +338,5 @@ func TestOpenStatRace(t *testing.T) {
 	testreply(id1, ch)
 	testreply(id2, ch)
 	os.Remove(tmppath)
+	checkServerAllocator(t, server)
 }

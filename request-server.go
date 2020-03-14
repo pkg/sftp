@@ -107,11 +107,11 @@ func (rs *RequestServer) Serve() error {
 	var pktType uint8
 	var pktBytes []byte
 	for {
-		pktType, pktBytes, err = rs.recvPacket()
+		pktType, pktBytes, err = rs.recvPacket(rs.pktMgr.alloc, rs.pktMgr.getNextOrderID())
 		if err != nil {
+			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
 			break
 		}
-
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
 			switch errors.Cause(err) {
@@ -150,6 +150,9 @@ func (rs *RequestServer) Serve() error {
 		delete(rs.openRequests, handle)
 		req.close()
 	}
+	if rs.pktMgr.alloc != nil {
+		rs.pktMgr.alloc.Free()
+	}
 
 	return err
 }
@@ -158,6 +161,7 @@ func (rs *RequestServer) packetWorker(
 	ctx context.Context, pktChan chan orderedRequest,
 ) error {
 	for pkt := range pktChan {
+		orderID := pkt.orderID()
 		if epkt, ok := pkt.requestPacket.(*sshFxpExtendedPacket); ok {
 			if epkt.SpecificPacket != nil {
 				pkt.requestPacket = epkt.SpecificPacket
@@ -188,30 +192,30 @@ func (rs *RequestServer) packetWorker(
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
 				request = NewRequest("Stat", request.Filepath)
-				rpkt = request.call(rs.Handlers, pkt)
+				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
 		case *sshFxpExtendedPacketPosixRename:
 			request := NewRequest("Rename", pkt.Oldpath)
 			request.Target = pkt.Newpath
-			rpkt = request.call(rs.Handlers, pkt)
+			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
-				rpkt = request.call(rs.Handlers, pkt)
+				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
 		case hasPath:
 			request := requestFromPacket(ctx, pkt)
-			rpkt = request.call(rs.Handlers, pkt)
+			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			request.close()
 		default:
 			rpkt = statusFromError(pkt, ErrSSHFxOpUnsupported)
 		}
 
 		rs.pktMgr.readyPacket(
-			rs.pktMgr.newOrderedResponse(rpkt, pkt.orderID()))
+			rs.pktMgr.newOrderedResponse(rpkt, orderID))
 	}
 	return nil
 }
