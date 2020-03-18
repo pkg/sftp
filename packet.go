@@ -149,24 +149,24 @@ func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, e
 	if _, err := io.ReadFull(r, b[:4]); err != nil {
 		return 0, nil, err
 	}
-	l, _ := unmarshalUint32(b)
-	if l > maxMsgLength {
-		debug("recv packet %d bytes too long", l)
+	length, _ := unmarshalUint32(b)
+	if length > maxMsgLength {
+		debug("recv packet %d bytes too long", length)
 		return 0, nil, errLongPacket
 	}
 	if alloc == nil {
-		b = make([]byte, l)
+		b = make([]byte, length)
 	}
-	if _, err := io.ReadFull(r, b[0:l]); err != nil {
-		debug("recv packet %d bytes: err %v", l, err)
+	if _, err := io.ReadFull(r, b[:length]); err != nil {
+		debug("recv packet %d bytes: err %v", length, err)
 		return 0, nil, err
 	}
 	if debugDumpRxPacketBytes {
-		debug("recv packet: %s %d bytes %x", fxp(b[0]), l, b[1:l])
+		debug("recv packet: %s %d bytes %x", fxp(b[0]), length, b[1:length])
 	} else if debugDumpRxPacket {
-		debug("recv packet: %s %d bytes", fxp(b[0]), l)
+		debug("recv packet: %s %d bytes", fxp(b[0]), length)
 	}
-	return b[0], b[1:l], nil
+	return b[0], b[1:length], nil
 }
 
 type extensionPair struct {
@@ -593,11 +593,13 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 
 func (p *sshFxpReadPacket) getDataSlice(alloc *allocator, orderID uint32) []byte {
 	dataLen := clamp(p.Len, maxTxPacket)
-	// we allocate a slice with a bigger capacity so we avoid a new allocation in sshFxpDataPacket.MarshalBinary
-	// and in sendPacket, we need 9 bytes in MarshalBinary and 4 bytes in sendPacket.
 	if alloc != nil {
+		// GetPage returns a slice with capacity = maxMsgLength this is enough to avoid new allocations in
+		// sshFxpDataPacket.MarshalBinary and sendPacket
 		return alloc.GetPage(orderID)[:dataLen]
 	}
+	// we allocate a slice with a bigger capacity so we avoid a new allocation in sshFxpDataPacket.MarshalBinary
+	// and in sendPacket, we need 9 bytes in MarshalBinary and 4 bytes in sendPacket.
 	return make([]byte, dataLen, dataLen+9+4)
 }
 

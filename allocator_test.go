@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// I like the full flow of the test here, but probably I will be asked to split it in separate test cases
 func TestAllocator(t *testing.T) {
 	allocator := newAllocator()
 	// get a page for request order id 1

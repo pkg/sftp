@@ -162,10 +162,14 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 func clientServerPair(t *testing.T) (*Client, *Server) {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
+	var options []ServerOption
+	if *testAllocator {
+		options = append(options, WithAllocator())
+	}
 	server, err := NewServer(struct {
 		io.Reader
 		io.WriteCloser
-	}{sr, sw})
+	}{sr, sw}, options...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -33,20 +33,52 @@ type RequestServer struct {
 }
 
 // NewRequestServer creates/allocates/returns new RequestServer.
-// Normally there there will be one server per user-session.
+// Normally there will be one server per user-session.
+//
+// Deprecated: please use NewRequestServerWithOptions
 func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
+	rs, _ := NewRequestServerWithOptions(rwc, h)
+	return rs
+}
+
+// A RequestServerOption is a function which applies configuration to a RequestServer.
+type RequestServerOption func(*RequestServer) error
+
+// WithRSAllocator enable the allocator.
+// After processing a packet we keep in memory the allocated slices
+// and we reuse them for new packets.
+// The allocator is experimental
+func WithRSAllocator() RequestServerOption {
+	return func(rs *RequestServer) error {
+		alloc := newAllocator()
+		rs.pktMgr.alloc = alloc
+		rs.conn.alloc = alloc
+		return nil
+	}
+}
+
+// NewRequestServerWithOptions creates/allocates/returns new RequestServer adding the specified options
+// If options is nil or empty this is equivalent to NewRequestServer
+func NewRequestServerWithOptions(rwc io.ReadWriteCloser, h Handlers, options ...RequestServerOption) (*RequestServer, error) {
 	svrConn := &serverConn{
 		conn: conn{
 			Reader:      rwc,
 			WriteCloser: rwc,
 		},
 	}
-	return &RequestServer{
+	rs := &RequestServer{
 		serverConn:   svrConn,
 		Handlers:     h,
 		pktMgr:       newPktMgr(svrConn),
 		openRequests: make(map[string]*Request),
 	}
+
+	for _, o := range options {
+		if err := o(rs); err != nil {
+			return nil, err
+		}
+	}
+	return rs, nil
 }
 
 // New Open packet/Request
@@ -88,6 +120,11 @@ func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
 // Serve requests for user session
 func (rs *RequestServer) Serve() error {
+	defer func() {
+		if rs.pktMgr.alloc != nil {
+			rs.pktMgr.alloc.Free()
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var wg sync.WaitGroup
@@ -107,7 +144,7 @@ func (rs *RequestServer) Serve() error {
 	var pktType uint8
 	var pktBytes []byte
 	for {
-		pktType, pktBytes, err = rs.recvPacket(rs.pktMgr.alloc, rs.pktMgr.getNextOrderID())
+		pktType, pktBytes, err = rs.serverConn.recvPacket(rs.pktMgr.getNextOrderID())
 		if err != nil {
 			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
 			break
@@ -149,9 +186,6 @@ func (rs *RequestServer) Serve() error {
 		}
 		delete(rs.openRequests, handle)
 		req.close()
-	}
-	if rs.pktMgr.alloc != nil {
-		rs.pktMgr.alloc.Free()
 	}
 
 	return err

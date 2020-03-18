@@ -5,15 +5,16 @@ import (
 )
 
 type allocator struct {
+	sync.Mutex
 	available [][]byte
 	// map key is the request order
 	used map[uint32][][]byte
-	sync.Mutex
 }
 
 func newAllocator() *allocator {
 	return &allocator{
-		available: nil,
+		// micro optimization: initialize available pages with an initial capacity
+		available: make([][]byte, 0, SftpServerWorkerCount*2),
 		used:      make(map[uint32][][]byte),
 	}
 }
@@ -27,7 +28,7 @@ func (a *allocator) GetPage(requestOrderID uint32) []byte {
 
 	var result []byte
 
-	// get an available page and remove it from the available ones
+	// get an available page and remove it from the available ones.
 	if len(a.available) > 0 {
 		truncLength := len(a.available) - 1
 		result = a.available[truncLength]
@@ -52,15 +53,13 @@ func (a *allocator) ReleasePages(requestOrderID uint32) {
 	a.Lock()
 	defer a.Unlock()
 
-	if used, ok := a.used[requestOrderID]; ok && len(used) > 0 {
+	if used := a.used[requestOrderID]; len(used) > 0 {
 		a.available = append(a.available, used...)
-		// this is probably useless
-		a.used[requestOrderID] = nil
 	}
 	delete(a.used, requestOrderID)
 }
 
-// Free removes all the used and free pages.
+// Free removes all the used and available pages.
 // Call this method when the allocator is not needed anymore
 func (a *allocator) Free() {
 	a.Lock()
@@ -92,8 +91,6 @@ func (a *allocator) isRequestOrderIDUsed(requestOrderID uint32) bool {
 	a.Lock()
 	defer a.Unlock()
 
-	if _, ok := a.used[requestOrderID]; ok {
-		return true
-	}
-	return false
+	_, ok := a.used[requestOrderID]
+	return ok
 }

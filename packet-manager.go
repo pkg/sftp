@@ -18,7 +18,7 @@ type packetManager struct {
 	sender      packetSender // connection object
 	working     *sync.WaitGroup
 	packetCount uint32
-	// it is not nil if AllocationModeOptimized is enabled
+	// it is not nil if the allocator is enabled
 	alloc *allocator
 }
 
@@ -36,9 +36,6 @@ func newPktMgr(sender packetSender) *packetManager {
 		sender:    sender,
 		working:   &sync.WaitGroup{},
 	}
-	if enabledAllocationMode == AllocationModeOptimized {
-		s.alloc = newAllocator()
-	}
 	go s.controller()
 	return s
 }
@@ -50,7 +47,7 @@ func (s *packetManager) newOrderID() uint32 {
 }
 
 // returns the next orderID without incrementing it.
-// This is used before receiving a new packet in AllocationModeOptimized to associate
+// This is used before receiving a new packet, with the allocator enabled, to associate
 // the slice allocated for the received packet with the orderID that will be used to mark
 // the allocated slices for reuse once the request is served
 func (s *packetManager) getNextOrderID() uint32 {

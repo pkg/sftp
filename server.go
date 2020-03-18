@@ -22,34 +22,6 @@ const (
 	SftpServerWorkerCount = 8
 )
 
-// AllocationMode defines allocation modes
-type AllocationMode uint8
-
-const (
-	// AllocationModeStandard a new slice is allocated for each new SFTP packet
-	AllocationModeStandard AllocationMode = iota
-	// AllocationModeOptimized after processing a packet we keep in memory the allocated slices
-	// and we reuse them for new packets. This mode is experimental
-	AllocationModeOptimized
-)
-
-// enabledAllocationMode defines the allocation mode.
-var enabledAllocationMode = AllocationModeStandard
-
-// SetEnabledAllocationMode sets the allocation mode.
-// Allowed values are:
-// - AllocationModeStandard, default
-// - AllocationModeOptimized
-// This method must be called before creating the Server or the RequestServer
-func SetEnabledAllocationMode(mode AllocationMode) {
-	enabledAllocationMode = mode
-}
-
-// GetEnabledAllocationMode returns the configured AllocationMode
-func GetEnabledAllocationMode() AllocationMode {
-	return enabledAllocationMode
-}
-
 // Server is an SSH File Transfer Protocol (sftp) server.
 // This is intended to provide the sftp subsystem to an ssh server daemon.
 // This implementation currently supports most of sftp server protocol version 3,
@@ -144,6 +116,19 @@ func ReadOnly() ServerOption {
 	}
 }
 
+// WithAllocator enable the allocator.
+// After processing a packet we keep in memory the allocated slices
+// and we reuse them for new packets.
+// The allocator is experimental
+func WithAllocator() ServerOption {
+	return func(s *Server) error {
+		alloc := newAllocator()
+		s.pktMgr.alloc = alloc
+		s.conn.alloc = alloc
+		return nil
+	}
+}
+
 type rxPacket struct {
 	pktType  fxp
 	pktBytes []byte
@@ -167,7 +152,8 @@ func (svr *Server) sftpServerWorker(pktChan chan orderedRequest) error {
 		// return permission denied
 		if !readonly && svr.readOnly {
 			svr.pktMgr.readyPacket(
-				svr.pktMgr.newOrderedResponse(statusFromError(pkt, syscall.EPERM), pkt.orderID()))
+				svr.pktMgr.newOrderedResponse(statusFromError(pkt, syscall.EPERM), pkt.orderID()),
+			)
 			continue
 		}
 
@@ -326,6 +312,11 @@ func handlePacket(s *Server, p orderedRequest) error {
 // Serve serves SFTP connections until the streams stop or the SFTP subsystem
 // is stopped.
 func (svr *Server) Serve() error {
+	defer func() {
+		if svr.pktMgr.alloc != nil {
+			svr.pktMgr.alloc.Free()
+		}
+	}()
 	var wg sync.WaitGroup
 	runWorker := func(ch chan orderedRequest) {
 		wg.Add(1)
@@ -343,7 +334,7 @@ func (svr *Server) Serve() error {
 	var pktType uint8
 	var pktBytes []byte
 	for {
-		pktType, pktBytes, err = svr.recvPacket(svr.pktMgr.alloc, svr.pktMgr.getNextOrderID())
+		pktType, pktBytes, err = svr.serverConn.recvPacket(svr.pktMgr.getNextOrderID())
 		if err != nil {
 			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
 			break
@@ -375,9 +366,6 @@ func (svr *Server) Serve() error {
 	for handle, file := range svr.openFiles {
 		fmt.Fprintf(svr.debugStream, "sftp server file with handle %q left open: %v\n", handle, file.Name())
 		file.Close()
-	}
-	if svr.pktMgr.alloc != nil {
-		svr.pktMgr.alloc.Free()
 	}
 	return err // error from recvPacket
 }
