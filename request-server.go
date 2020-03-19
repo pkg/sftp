@@ -32,34 +32,24 @@ type RequestServer struct {
 	handleCount     int
 }
 
-// NewRequestServer creates/allocates/returns new RequestServer.
-// Normally there will be one server per user-session.
-//
-// Deprecated: please use NewRequestServerWithOptions
-func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
-	rs, _ := NewRequestServerWithOptions(rwc, h)
-	return rs
-}
-
 // A RequestServerOption is a function which applies configuration to a RequestServer.
-type RequestServerOption func(*RequestServer) error
+type RequestServerOption func(*RequestServer)
 
 // WithRSAllocator enable the allocator.
 // After processing a packet we keep in memory the allocated slices
 // and we reuse them for new packets.
 // The allocator is experimental
 func WithRSAllocator() RequestServerOption {
-	return func(rs *RequestServer) error {
+	return func(rs *RequestServer) {
 		alloc := newAllocator()
 		rs.pktMgr.alloc = alloc
 		rs.conn.alloc = alloc
-		return nil
 	}
 }
 
-// NewRequestServerWithOptions creates/allocates/returns new RequestServer adding the specified options
-// If options is nil or empty this is equivalent to NewRequestServer
-func NewRequestServerWithOptions(rwc io.ReadWriteCloser, h Handlers, options ...RequestServerOption) (*RequestServer, error) {
+// NewRequestServer creates/allocates/returns new RequestServer.
+// Normally there will be one server per user-session.
+func NewRequestServer(rwc io.ReadWriteCloser, h Handlers, options ...RequestServerOption) *RequestServer {
 	svrConn := &serverConn{
 		conn: conn{
 			Reader:      rwc,
@@ -74,11 +64,9 @@ func NewRequestServerWithOptions(rwc io.ReadWriteCloser, h Handlers, options ...
 	}
 
 	for _, o := range options {
-		if err := o(rs); err != nil {
-			return nil, err
-		}
+		o(rs)
 	}
-	return rs, nil
+	return rs
 }
 
 // New Open packet/Request

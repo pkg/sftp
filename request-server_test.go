@@ -46,12 +46,11 @@ func clientRequestServerPair(t *testing.T) *csPair {
 		fd, err := l.Accept()
 		assert.Nil(t, err)
 		handlers := InMemHandler()
+		var options []RequestServerOption
 		if *testAllocator {
-			options := []RequestServerOption{WithRSAllocator()}
-			server, _ = NewRequestServerWithOptions(fd, handlers, options...)
-		} else {
-			server = NewRequestServer(fd, handlers)
+			options = append(options, WithRSAllocator())
 		}
+		server = NewRequestServer(fd, handlers, options...)
 		server.Serve()
 	}()
 	<-ready
