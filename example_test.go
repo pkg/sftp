@@ -18,14 +18,14 @@ func Example() {
 	var conn *ssh.Client
 
 	// open an SFTP session over an existing ssh connection.
-	sftp, err := sftp.NewClient(conn)
+	client, err := sftp.NewClient(conn)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer sftp.Close()
 
 	// walk a directory
-	w := sftp.Walk("/home/user")
+	w := client.Walk("/home/user")
 	for w.Step() {
 		if w.Err() != nil {
 			continue
@@ -34,7 +34,7 @@ func Example() {
 	}
 
 	// leave your mark
-	f, err := sftp.Create("hello.txt")
+	f, err := client.Create("hello.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func Example() {
 	}
 
 	// check it's there
-	fi, err := sftp.Lstat("hello.txt")
+	fi, err := client.Lstat("hello.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
