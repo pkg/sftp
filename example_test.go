@@ -41,6 +41,7 @@ func Example() {
 	if _, err := f.Write([]byte("Hello world!")); err != nil {
 		log.Fatal(err)
 	}
+	defer f.Close()
 
 	// check it's there
 	fi, err := client.Lstat("hello.txt")
