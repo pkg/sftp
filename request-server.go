@@ -258,7 +258,7 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 // Makes sure we have a clean POSIX (/) absolute path to work with
 func cleanPath(p string) string {
 	p = filepath.ToSlash(p)
-	if !filepath.IsAbs(p) {
+	if !path.IsAbs(p) {
 		p = "/" + p
 	}
 	return path.Clean(p)
