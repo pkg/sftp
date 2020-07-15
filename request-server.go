@@ -133,19 +133,17 @@ func (rs *RequestServer) Serve() error {
 	// make sure all open requests are properly closed
 	// (eg. possible on dropped connections, client crashes, etc.)
 	for handle, req := range rs.openRequests {
-		if err != nil {
-			req.state.RLock()
-			writer := req.state.writerAt
-			reader := req.state.readerAt
-			req.state.RUnlock()
-			if t, ok := writer.(TransferError); ok {
-				debug("notify error: %v to writer: %v\n", err, writer)
-				t.TransferError(err)
-			}
-			if t, ok := reader.(TransferError); ok {
-				debug("notify error: %v to reader: %v\n", err, reader)
-				t.TransferError(err)
-			}
+		req.state.RLock()
+		writer := req.state.writerAt
+		reader := req.state.readerAt
+		req.state.RUnlock()
+		if t, ok := writer.(TransferError); ok {
+			debug("notify error: %v to writer: %v\n", err, writer)
+			t.TransferError(err)
+		}
+		if t, ok := reader.(TransferError); ok {
+			debug("notify error: %v to reader: %v\n", err, reader)
+			t.TransferError(err)
 		}
 		delete(rs.openRequests, handle)
 		req.close()
