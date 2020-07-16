@@ -116,6 +116,19 @@ func ReadOnly() ServerOption {
 	}
 }
 
+// WithAllocator enable the allocator.
+// After processing a packet we keep in memory the allocated slices
+// and we reuse them for new packets.
+// The allocator is experimental
+func WithAllocator() ServerOption {
+	return func(s *Server) error {
+		alloc := newAllocator()
+		s.pktMgr.alloc = alloc
+		s.conn.alloc = alloc
+		return nil
+	}
+}
+
 type rxPacket struct {
 	pktType  fxp
 	pktBytes []byte
@@ -138,9 +151,9 @@ func (svr *Server) sftpServerWorker(pktChan chan orderedRequest) error {
 		// If server is operating read-only and a write operation is requested,
 		// return permission denied
 		if !readonly && svr.readOnly {
-			svr.sendPacket(orderedResponse{
-				responsePacket: statusFromError(pkt, syscall.EPERM),
-				orderid:        pkt.orderID()})
+			svr.pktMgr.readyPacket(
+				svr.pktMgr.newOrderedResponse(statusFromError(pkt, syscall.EPERM), pkt.orderID()),
+			)
 			continue
 		}
 
@@ -153,6 +166,7 @@ func (svr *Server) sftpServerWorker(pktChan chan orderedRequest) error {
 
 func handlePacket(s *Server, p orderedRequest) error {
 	var rpkt responsePacket
+	orderID := p.orderID()
 	switch p := p.requestPacket.(type) {
 	case *sshFxInitPacket:
 		rpkt = sshFxVersionPacket{
@@ -256,7 +270,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		f, ok := s.getHandle(p.Handle)
 		if ok {
 			err = nil
-			data := p.getDataSlice()
+			data := p.getDataSlice(s.pktMgr.alloc, orderID)
 			n, _err := f.ReadAt(data, int64(p.Offset))
 			if _err != nil && (_err != io.EOF || n == 0) {
 				err = _err
@@ -291,13 +305,18 @@ func handlePacket(s *Server, p orderedRequest) error {
 		return errors.Errorf("unexpected packet type %T", p)
 	}
 
-	s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, p.orderID()))
+	s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, orderID))
 	return nil
 }
 
 // Serve serves SFTP connections until the streams stop or the SFTP subsystem
 // is stopped.
 func (svr *Server) Serve() error {
+	defer func() {
+		if svr.pktMgr.alloc != nil {
+			svr.pktMgr.alloc.Free()
+		}
+	}()
 	var wg sync.WaitGroup
 	runWorker := func(ch chan orderedRequest) {
 		wg.Add(1)
@@ -315,8 +334,9 @@ func (svr *Server) Serve() error {
 	var pktType uint8
 	var pktBytes []byte
 	for {
-		pktType, pktBytes, err = svr.recvPacket()
+		pktType, pktBytes, err = svr.serverConn.recvPacket(svr.pktMgr.getNextOrderID())
 		if err != nil {
+			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
 			break
 		}
 

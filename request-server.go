@@ -32,21 +32,41 @@ type RequestServer struct {
 	handleCount     int
 }
 
+// A RequestServerOption is a function which applies configuration to a RequestServer.
+type RequestServerOption func(*RequestServer)
+
+// WithRSAllocator enable the allocator.
+// After processing a packet we keep in memory the allocated slices
+// and we reuse them for new packets.
+// The allocator is experimental
+func WithRSAllocator() RequestServerOption {
+	return func(rs *RequestServer) {
+		alloc := newAllocator()
+		rs.pktMgr.alloc = alloc
+		rs.conn.alloc = alloc
+	}
+}
+
 // NewRequestServer creates/allocates/returns new RequestServer.
-// Normally there there will be one server per user-session.
-func NewRequestServer(rwc io.ReadWriteCloser, h Handlers) *RequestServer {
+// Normally there will be one server per user-session.
+func NewRequestServer(rwc io.ReadWriteCloser, h Handlers, options ...RequestServerOption) *RequestServer {
 	svrConn := &serverConn{
 		conn: conn{
 			Reader:      rwc,
 			WriteCloser: rwc,
 		},
 	}
-	return &RequestServer{
+	rs := &RequestServer{
 		serverConn:   svrConn,
 		Handlers:     h,
 		pktMgr:       newPktMgr(svrConn),
 		openRequests: make(map[string]*Request),
 	}
+
+	for _, o := range options {
+		o(rs)
+	}
+	return rs
 }
 
 // New Open packet/Request
@@ -88,6 +108,11 @@ func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
 // Serve requests for user session
 func (rs *RequestServer) Serve() error {
+	defer func() {
+		if rs.pktMgr.alloc != nil {
+			rs.pktMgr.alloc.Free()
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var wg sync.WaitGroup
@@ -107,11 +132,11 @@ func (rs *RequestServer) Serve() error {
 	var pktType uint8
 	var pktBytes []byte
 	for {
-		pktType, pktBytes, err = rs.recvPacket()
+		pktType, pktBytes, err = rs.serverConn.recvPacket(rs.pktMgr.getNextOrderID())
 		if err != nil {
+			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
 			break
 		}
-
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
 			switch errors.Cause(err) {
@@ -158,6 +183,7 @@ func (rs *RequestServer) packetWorker(
 	ctx context.Context, pktChan chan orderedRequest,
 ) error {
 	for pkt := range pktChan {
+		orderID := pkt.orderID()
 		if epkt, ok := pkt.requestPacket.(*sshFxpExtendedPacket); ok {
 			if epkt.SpecificPacket != nil {
 				pkt.requestPacket = epkt.SpecificPacket
@@ -188,30 +214,30 @@ func (rs *RequestServer) packetWorker(
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
 				request = NewRequest("Stat", request.Filepath)
-				rpkt = request.call(rs.Handlers, pkt)
+				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
 		case *sshFxpExtendedPacketPosixRename:
 			request := NewRequest("Rename", pkt.Oldpath)
 			request.Target = pkt.Newpath
-			rpkt = request.call(rs.Handlers, pkt)
+			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 		case hasHandle:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
 				rpkt = statusFromError(pkt, syscall.EBADF)
 			} else {
-				rpkt = request.call(rs.Handlers, pkt)
+				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
 		case hasPath:
 			request := requestFromPacket(ctx, pkt)
-			rpkt = request.call(rs.Handlers, pkt)
+			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			request.close()
 		default:
 			rpkt = statusFromError(pkt, ErrSSHFxOpUnsupported)
 		}
 
 		rs.pktMgr.readyPacket(
-			rs.pktMgr.newOrderedResponse(rpkt, pkt.orderID()))
+			rs.pktMgr.newOrderedResponse(rpkt, orderID))
 	}
 	return nil
 }
@@ -232,7 +258,7 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 // Makes sure we have a clean POSIX (/) absolute path to work with
 func cleanPath(p string) string {
 	p = filepath.ToSlash(p)
-	if !filepath.IsAbs(p) {
+	if !path.IsAbs(p) {
 		p = "/" + p
 	}
 	return path.Clean(p)

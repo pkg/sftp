@@ -13,13 +13,17 @@ import (
 type conn struct {
 	io.Reader
 	io.WriteCloser
+	// this is the same allocator used in packet manager
+	alloc      *allocator
 	sync.Mutex // used to serialise writes to sendPacket
 	// sendPacketTest is needed to replicate packet issues in testing
 	sendPacketTest func(w io.Writer, m encoding.BinaryMarshaler) error
 }
 
-func (c *conn) recvPacket() (uint8, []byte, error) {
-	return recvPacket(c)
+// the orderID is used in server mode if the allocator is enabled.
+// For the client mode just pass 0
+func (c *conn) recvPacket(orderID uint32) (uint8, []byte, error) {
+	return recvPacket(c, c.alloc, orderID)
 }
 
 func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
@@ -76,7 +80,7 @@ func (c *clientConn) recv() error {
 		c.conn.Close()
 	}()
 	for {
-		typ, data, err := c.recvPacket()
+		typ, data, err := c.recvPacket(0)
 		if err != nil {
 			return err
 		}

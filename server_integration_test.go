@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kr/fs"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -64,6 +65,7 @@ func skipIfWindows(t testing.TB) {
 
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
+var testAllocator = flag.Bool("allocator", false, "perform tests using the allocator")
 var testSftp *string
 
 var testSftpClientBin *string
@@ -466,6 +468,38 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 		err = fmt.Errorf("%v: %s", err, stderr.String())
 	}
 	return stdout.String(), err
+}
+
+// assert.Eventually seems to have a data rate on macOS with go 1.14 so replace it with this simpler function
+func waitForCondition(t *testing.T, condition func() bool) {
+	start := time.Now()
+	tick := 10 * time.Millisecond
+	waitFor := 100 * time.Millisecond
+	for !condition() {
+		time.Sleep(tick)
+		if time.Since(start) > waitFor {
+			break
+		}
+	}
+	assert.True(t, condition())
+}
+
+func checkAllocatorBeforeServerClose(t *testing.T, alloc *allocator) {
+	if alloc != nil {
+		// before closing the server we are, generally, waiting for new packets in recvPacket and we have a page allocated.
+		// Sometime the sendPacket returns some milliseconds after the client receives the response, and so we have 2
+		// allocated pages here, so wait some milliseconds. To avoid crashes we must be sure to not release the pages
+		// too soon.
+		waitForCondition(t, func() bool { return alloc.countUsedPages() <= 1 })
+	}
+}
+
+func checkAllocatorAfterServerClose(t *testing.T, alloc *allocator) {
+	if alloc != nil {
+		// wait for the server cleanup
+		waitForCondition(t, func() bool { return alloc.countUsedPages() == 0 })
+		waitForCondition(t, func() bool { return alloc.countAvailablePages() == 0 })
+	}
 }
 
 func TestServerCompareSubsystems(t *testing.T) {

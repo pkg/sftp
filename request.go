@@ -154,12 +154,12 @@ func (r *Request) close() error {
 }
 
 // called from worker to handle packet/request
-func (r *Request) call(handlers Handlers, pkt requestPacket) responsePacket {
+func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
 	switch r.Method {
 	case "Get":
-		return fileget(handlers.FileGet, r, pkt)
+		return fileget(handlers.FileGet, r, pkt, alloc, orderID)
 	case "Put":
-		return fileput(handlers.FilePut, r, pkt)
+		return fileput(handlers.FilePut, r, pkt, alloc, orderID)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove":
 		return filecmd(handlers.FileCmd, r, pkt)
 	case "List":
@@ -206,7 +206,7 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
+func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
 	//fmt.Println("fileget", r)
 	r.state.RLock()
 	reader := r.state.readerAt
@@ -215,7 +215,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 		return statusFromError(pkt, errors.New("unexpected read packet"))
 	}
 
-	data, offset, _ := packetData(pkt)
+	data, offset, _ := packetData(pkt, alloc, orderID)
 	n, err := reader.ReadAt(data, offset)
 	// only return EOF erro if no data left to read
 	if err != nil && (err != io.EOF || n == 0) {
@@ -229,7 +229,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket) responsePacket {
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
+func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
 	//fmt.Println("fileput", r)
 	r.state.RLock()
 	writer := r.state.writerAt
@@ -238,18 +238,18 @@ func fileput(h FileWriter, r *Request, pkt requestPacket) responsePacket {
 		return statusFromError(pkt, errors.New("unexpected write packet"))
 	}
 
-	data, offset, _ := packetData(pkt)
+	data, offset, _ := packetData(pkt, alloc, orderID)
 	_, err := writer.WriteAt(data, offset)
 	return statusFromError(pkt, err)
 }
 
 // file data for additional read/write packets
-func packetData(p requestPacket) (data []byte, offset int64, length uint32) {
+func packetData(p requestPacket, alloc *allocator, orderID uint32) (data []byte, offset int64, length uint32) {
 	switch p := p.(type) {
 	case *sshFxpReadPacket:
 		length = p.Len
 		offset = int64(p.Offset)
-		data = p.getDataSlice()
+		data = p.getDataSlice(alloc, orderID)
 	case *sshFxpWritePacket:
 		data = p.Data
 		length = p.Length
