@@ -22,7 +22,7 @@ func Example() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer sftp.Close()
+	defer client.Close()
 
 	// walk a directory
 	w := client.Walk("/home/user")
