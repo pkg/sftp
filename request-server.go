@@ -106,6 +106,35 @@ func (rs *RequestServer) closeRequest(handle string) error {
 // Close the read/write/closer to trigger exiting the main server loop
 func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
+func (rs *RequestServer) serveLoop(pktChan chan<- orderedRequest) error {
+	var err error
+	var pkt requestPacket
+	var pktType uint8
+	var pktBytes []byte
+
+	for {
+		pktType, pktBytes, err = rs.serverConn.recvPacket(rs.pktMgr.getNextOrderID())
+		if err != nil {
+			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
+			return err
+		}
+
+		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
+		if err != nil {
+			switch errors.Cause(err) {
+			case errUnknownExtendedPacket:
+				// do nothing
+			default:
+				debug("makePacket err: %v", err)
+				rs.conn.Close() // shuts down recvPacket
+				return err
+			}
+		}
+
+		pktChan <- rs.pktMgr.newOrderedRequest(pkt)
+	}
+}
+
 // Serve requests for user session
 func (rs *RequestServer) Serve() error {
 	defer func() {
@@ -127,51 +156,19 @@ func (rs *RequestServer) Serve() error {
 	}
 	pktChan := rs.pktMgr.workerChan(runWorker)
 
-	var err error
-	var pkt requestPacket
-	var pktType uint8
-	var pktBytes []byte
-	for {
-		pktType, pktBytes, err = rs.serverConn.recvPacket(rs.pktMgr.getNextOrderID())
-		if err != nil {
-			// we don't care about releasing allocated pages here, the server will quit and the allocator freed
-			break
-		}
-		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
-		if err != nil {
-			switch errors.Cause(err) {
-			case errUnknownExtendedPacket:
-				// do nothing
-			default:
-				debug("makePacket err: %v", err)
-				rs.conn.Close() // shuts down recvPacket
-				break
-			}
-		}
-
-		pktChan <- rs.pktMgr.newOrderedRequest(pkt)
-	}
+	err := rs.serveLoop(pktChan)
 
 	close(pktChan) // shuts down sftpServerWorkers
 	wg.Wait()      // wait for all workers to exit
 
+	rs.openRequestLock.Lock()
+	defer rs.openRequestLock.Unlock()
+
 	// make sure all open requests are properly closed
 	// (eg. possible on dropped connections, client crashes, etc.)
 	for handle, req := range rs.openRequests {
-		if err != nil {
-			req.state.RLock()
-			writer := req.state.writerAt
-			reader := req.state.readerAt
-			req.state.RUnlock()
-			if t, ok := writer.(TransferError); ok {
-				debug("notify error: %v to writer: %v\n", err, writer)
-				t.TransferError(err)
-			}
-			if t, ok := reader.(TransferError); ok {
-				debug("notify error: %v to reader: %v\n", err, reader)
-				t.TransferError(err)
-			}
-		}
+		req.transferError(err)
+
 		delete(rs.openRequests, handle)
 		req.close()
 	}

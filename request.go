@@ -138,19 +138,49 @@ func (r *Request) close() error {
 			r.cancelCtx()
 		}
 	}()
+
 	r.state.RLock()
 	rd := r.state.readerAt
+	wr := r.state.writerAt
 	r.state.RUnlock()
+
+	var err error
+
 	if c, ok := rd.(io.Closer); ok {
-		return c.Close()
+		if err2 := c.Close(); err == nil {
+			// update error if it is still nil
+			err = err2
+		}
 	}
+
+	if c, ok := wr.(io.Closer); ok {
+		if err2 := c.Close(); err == nil {
+			// update error if it is still nil
+			err = err2
+		}
+	}
+
+	return err
+}
+
+// Close reader/writer if possible
+func (r *Request) transferError(err error) {
+	if err == nil {
+		return
+	}
+
 	r.state.RLock()
-	wt := r.state.writerAt
+	rd := r.state.readerAt
+	wr := r.state.writerAt
 	r.state.RUnlock()
-	if c, ok := wt.(io.Closer); ok {
-		return c.Close()
+
+	if t, ok := rd.(TransferError); ok {
+		t.TransferError(err)
 	}
-	return nil
+
+	if t, ok := wr.(TransferError); ok {
+		t.TransferError(err)
+	}
 }
 
 // called from worker to handle packet/request
