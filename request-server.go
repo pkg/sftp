@@ -107,6 +107,8 @@ func (rs *RequestServer) closeRequest(handle string) error {
 func (rs *RequestServer) Close() error { return rs.conn.Close() }
 
 func (rs *RequestServer) serveLoop(pktChan chan<- orderedRequest) error {
+	defer close(pktChan) // shuts down sftpServerWorkers
+
 	var err error
 	var pkt requestPacket
 	var pktType uint8
@@ -158,8 +160,7 @@ func (rs *RequestServer) Serve() error {
 
 	err := rs.serveLoop(pktChan)
 
-	close(pktChan) // shuts down sftpServerWorkers
-	wg.Wait()      // wait for all workers to exit
+	wg.Wait() // wait for all workers to exit
 
 	rs.openRequestLock.Lock()
 	defer rs.openRequestLock.Unlock()
