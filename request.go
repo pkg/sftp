@@ -140,20 +140,22 @@ func (r *Request) close() error {
 	}()
 
 	r.state.RLock()
-	rd := r.state.readerAt
 	wr := r.state.writerAt
+	rd := r.state.readerAt
 	r.state.RUnlock()
 
 	var err error
 
-	if c, ok := rd.(io.Closer); ok {
+	// Close errors on a Writer are far more likely to be the important one.
+	// As they can be information that there was a loss of data.
+	if c, ok := wr.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
 		}
 	}
 
-	if c, ok := wr.(io.Closer); ok {
+	if c, ok := rd.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
@@ -170,15 +172,15 @@ func (r *Request) transferError(err error) {
 	}
 
 	r.state.RLock()
-	rd := r.state.readerAt
 	wr := r.state.writerAt
+	rd := r.state.readerAt
 	r.state.RUnlock()
 
-	if t, ok := rd.(TransferError); ok {
+	if t, ok := wr.(TransferError); ok {
 		t.TransferError(err)
 	}
 
-	if t, ok := wr.(TransferError); ok {
+	if t, ok := rd.(TransferError); ok {
 		t.TransferError(err)
 	}
 }
