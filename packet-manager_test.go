@@ -53,34 +53,34 @@ type orderedPair struct {
 
 // basic test
 var ttable1 = []pair{
-	pair{fake(0, 0), fake(0, 0)},
-	pair{fake(1, 1), fake(1, 1)},
-	pair{fake(2, 2), fake(2, 2)},
-	pair{fake(3, 3), fake(3, 3)},
+	{fake(0, 0), fake(0, 0)},
+	{fake(1, 1), fake(1, 1)},
+	{fake(2, 2), fake(2, 2)},
+	{fake(3, 3), fake(3, 3)},
 }
 
 // outgoing packets out of order
 var ttable2 = []pair{
-	pair{fake(10, 0), fake(12, 2)},
-	pair{fake(11, 1), fake(11, 1)},
-	pair{fake(12, 2), fake(13, 3)},
-	pair{fake(13, 3), fake(10, 0)},
+	{fake(10, 0), fake(12, 2)},
+	{fake(11, 1), fake(11, 1)},
+	{fake(12, 2), fake(13, 3)},
+	{fake(13, 3), fake(10, 0)},
 }
 
 // request ids are not incremental
 var ttable3 = []pair{
-	pair{fake(7, 0), fake(7, 0)},
-	pair{fake(1, 1), fake(1, 1)},
-	pair{fake(9, 2), fake(3, 3)},
-	pair{fake(3, 3), fake(9, 2)},
+	{fake(7, 0), fake(7, 0)},
+	{fake(1, 1), fake(1, 1)},
+	{fake(9, 2), fake(3, 3)},
+	{fake(3, 3), fake(9, 2)},
 }
 
 // request ids are all the same
 var ttable4 = []pair{
-	pair{fake(1, 0), fake(1, 0)},
-	pair{fake(1, 1), fake(1, 1)},
-	pair{fake(1, 2), fake(1, 3)},
-	pair{fake(1, 3), fake(1, 2)},
+	{fake(1, 0), fake(1, 0)},
+	{fake(1, 1), fake(1, 1)},
+	{fake(1, 2), fake(1, 3)},
+	{fake(1, 3), fake(1, 2)},
 }
 
 var tables = [][]pair{ttable1, ttable2, ttable3, ttable4}
