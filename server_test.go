@@ -281,14 +281,14 @@ func TestStatusFromError(t *testing.T) {
 		}
 	}
 	testCases := []test{
-		test{syscall.ENOENT, tpkt(1, sshFxNoSuchFile)},
-		test{&os.PathError{Err: syscall.ENOENT},
+		{syscall.ENOENT, tpkt(1, sshFxNoSuchFile)},
+		{&os.PathError{Err: syscall.ENOENT},
 			tpkt(2, sshFxNoSuchFile)},
-		test{&os.PathError{Err: errors.New("foo")}, tpkt(3, sshFxFailure)},
-		test{ErrSSHFxEOF, tpkt(4, sshFxEOF)},
-		test{ErrSSHFxOpUnsupported, tpkt(5, sshFxOPUnsupported)},
-		test{io.EOF, tpkt(6, sshFxEOF)},
-		test{os.ErrNotExist, tpkt(7, sshFxNoSuchFile)},
+		{&os.PathError{Err: errors.New("foo")}, tpkt(3, sshFxFailure)},
+		{ErrSSHFxEOF, tpkt(4, sshFxEOF)},
+		{ErrSSHFxOpUnsupported, tpkt(5, sshFxOPUnsupported)},
+		{io.EOF, tpkt(6, sshFxEOF)},
+		{os.ErrNotExist, tpkt(7, sshFxNoSuchFile)},
 	}
 	for _, tc := range testCases {
 		tc.pkt.StatusError.msg = tc.err.Error()
