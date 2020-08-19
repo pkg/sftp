@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -815,6 +816,8 @@ type File struct {
 	c      *Client
 	path   string
 	handle string
+
+	mu sync.Mutex
 	offset uint64 // current offset within remote file
 }
 
@@ -839,6 +842,9 @@ func (f *File) Name() string {
 // than calling Read multiple times. io.Copy will do this
 // automatically.
 func (f *File) Read(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	r, err := f.ReadAt(b, int64( f.offset ))
 	f.offset += uint64(r)
 	return r, err
