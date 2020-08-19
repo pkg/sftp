@@ -839,13 +839,22 @@ func (f *File) Name() string {
 // than calling Read multiple times. io.Copy will do this
 // automatically.
 func (f *File) Read(b []byte) (int, error) {
+	r, err := f.ReadAt(b, int64( f.offset ))
+	f.offset += uint64(r)
+	return r, err
+}
+
+// ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns 
+// the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics, 
+// so the file offset is not altered during the read.
+func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
 	// Split the read into multiple maxPacket sized concurrent reads
 	// bounded by maxConcurrentRequests. This allows reads with a suitably
 	// large buffer to transfer data at a much faster rate due to
 	// overlapping round trip times.
 	inFlight := 0
 	desiredInFlight := 1
-	offset := f.offset
+	offset := uint64( off )
 	// maxConcurrentRequests buffer to deal with broadcastErr() floods
 	// also must have a buffer of max value of (desiredInFlight - inFlight)
 	ch := make(chan result, f.c.maxConcurrentRequests+1)
@@ -927,7 +936,6 @@ func (f *File) Read(b []byte) (int, error) {
 	if firstErr.err != nil && firstErr.err != io.EOF {
 		read = 0
 	}
-	f.offset += uint64(read)
 	return read, firstErr.err
 }
 
