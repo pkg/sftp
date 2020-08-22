@@ -345,6 +345,40 @@ func TestRequestFstat(t *testing.T) {
 	checkRequestServerAllocator(t, p)
 }
 
+func TestRequestFsetstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	fp, err := p.cli.OpenFile("/foo", os.O_WRONLY)
+	assert.Nil(t, err)
+	err = fp.Truncate(2)
+	if assert.NoError(t, err) {
+		fi, err := fp.Stat()
+		if assert.NoError(t, err) {
+			assert.Equal(t, fi.Name(), "foo")
+			assert.Equal(t, fi.Size(), int64(2))
+		}
+	}
+	// we expect the truncate size (2) as offset for this write
+	n, err := fp.Write([]byte("hello"))
+	assert.NoError(t, err)
+	assert.Equal(t, 5, n)
+	err = fp.Close()
+	assert.NoError(t, err)
+	rf, err := p.cli.Open("/foo")
+	assert.Nil(t, err)
+	defer rf.Close()
+	contents := make([]byte, 20)
+	n, err = rf.Read(contents)
+	if err != nil && err != io.EOF {
+		t.Fatalf("err: %v", err)
+	}
+	assert.Equal(t, 2+5, n)
+	assert.Equal(t, "hehello", string(contents[0:n]))
+	checkRequestServerAllocator(t, p)
+}
+
 func TestRequestStatFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()

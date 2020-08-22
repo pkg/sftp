@@ -432,6 +432,25 @@ func (c *Client) Symlink(oldname, newname string) error {
 	}
 }
 
+func (c *Client) setfstat(handle string, flags uint32, attrs interface{}) error {
+	id := c.nextID()
+	typ, data, err := c.sendPacket(sshFxpFsetstatPacket{
+		ID:     id,
+		Handle: handle,
+		Flags:  flags,
+		Attrs:  attrs,
+	})
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case sshFxpStatus:
+		return normaliseError(unmarshalStatus(id, data))
+	default:
+		return unimplementedPacketErr(typ)
+	}
+}
+
 // setstat is a convience wrapper to allow for changing of various parts of the file descriptor.
 func (c *Client) setstat(path string, flags uint32, attrs interface{}) error {
 	id := c.nextID()
@@ -817,7 +836,7 @@ type File struct {
 	path   string
 	handle string
 
-	mu sync.Mutex
+	mu     sync.Mutex
 	offset uint64 // current offset within remote file
 }
 
@@ -845,13 +864,13 @@ func (f *File) Read(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	r, err := f.ReadAt(b, int64( f.offset ))
+	r, err := f.ReadAt(b, int64(f.offset))
 	f.offset += uint64(r)
 	return r, err
 }
 
-// ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns 
-// the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics, 
+// ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns
+// the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics,
 // so the file offset is not altered during the read.
 func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
 	// Split the read into multiple maxPacket sized concurrent reads
@@ -860,7 +879,7 @@ func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
 	// overlapping round trip times.
 	inFlight := 0
 	desiredInFlight := 1
-	offset := uint64( off )
+	offset := uint64(off)
 	// maxConcurrentRequests buffer to deal with broadcastErr() floods
 	// also must have a buffer of max value of (desiredInFlight - inFlight)
 	ch := make(chan result, f.c.maxConcurrentRequests+1)
@@ -1280,8 +1299,17 @@ func (f *File) Chmod(mode os.FileMode) error {
 // that if the size is less than its current size it will be truncated to fit,
 // the SFTP protocol does not specify what behavior the server should do when setting
 // size greater than the current size.
+// We send a SSH_FXP_FSETSTAT here since we have a file handle
 func (f *File) Truncate(size int64) error {
-	return f.c.Truncate(f.path, size)
+	err := f.c.setfstat(f.handle, sshFileXferAttrSize, uint64(size))
+	if err == nil {
+		// reset the offset for future writes
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		f.offset = uint64(size)
+	}
+	return err
 }
 
 func min(a, b int) int {
