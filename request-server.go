@@ -214,6 +214,15 @@ func (rs *RequestServer) packetWorker(
 				request = NewRequest("Stat", request.Filepath)
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
+		case *sshFxpFsetstatPacket:
+			handle := pkt.getHandle()
+			request, ok := rs.getRequest(handle)
+			if !ok {
+				rpkt = statusFromError(pkt, syscall.EBADF)
+			} else {
+				request = NewRequest("Setstat", request.Filepath)
+				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
+			}
 		case *sshFxpExtendedPacketPosixRename:
 			request := NewRequest("Rename", pkt.Oldpath)
 			request.Target = pkt.Newpath

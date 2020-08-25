@@ -78,6 +78,13 @@ func (fs *root) Filecmd(r *Request) error {
 	defer fs.filesLock.Unlock()
 	switch r.Method {
 	case "Setstat":
+		file, err := fs.fetch(r.Filepath)
+		if err != nil {
+			return err
+		}
+		if r.AttrFlags().Size {
+			return file.Truncate(int64(r.Attributes().Size))
+		}
 		return nil
 	case "Rename":
 		file, err := fs.fetch(r.Filepath)
@@ -300,6 +307,18 @@ func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
 	}
 	copy(f.content[off:], p)
 	return len(p), nil
+}
+
+func (f *memFile) Truncate(size int64) error {
+	f.contentLock.Lock()
+	defer f.contentLock.Unlock()
+	grow := size - int64(len(f.content))
+	if grow <= 0 {
+		f.content = f.content[:size]
+	} else {
+		f.content = append(f.content, make([]byte, grow)...)
+	}
+	return nil
 }
 
 func (f *memFile) TransferError(err error) {

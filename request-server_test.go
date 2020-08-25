@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = fmt.Print
@@ -342,6 +343,37 @@ func TestRequestFstat(t *testing.T) {
 		assert.Equal(t, fi.Mode(), os.FileMode(0644))
 		assert.NoError(t, testOsSys(fi.Sys()))
 	}
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestFsetstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	require.NoError(t, err)
+	fp, err := p.cli.OpenFile("/foo", os.O_WRONLY)
+	require.NoError(t, err)
+	err = fp.Truncate(2)
+	fi, err := fp.Stat()
+	require.NoError(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(2))
+	err = fp.Truncate(5)
+	require.NoError(t, err)
+	fi, err = fp.Stat()
+	require.NoError(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(5))
+	err = fp.Close()
+	assert.NoError(t, err)
+	rf, err := p.cli.Open("/foo")
+	assert.NoError(t, err)
+	defer rf.Close()
+	contents := make([]byte, 20)
+	n, err := rf.Read(contents)
+	assert.EqualError(t, err, io.EOF.Error())
+	assert.Equal(t, 5, n)
+	assert.Equal(t, []byte{'h', 'e', 0, 0, 0}, contents[0:n])
 	checkRequestServerAllocator(t, p)
 }
 
