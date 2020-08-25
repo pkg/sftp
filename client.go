@@ -1301,15 +1301,7 @@ func (f *File) Chmod(mode os.FileMode) error {
 // size greater than the current size.
 // We send a SSH_FXP_FSETSTAT here since we have a file handle
 func (f *File) Truncate(size int64) error {
-	err := f.c.setfstat(f.handle, sshFileXferAttrSize, uint64(size))
-	if err == nil {
-		// reset the offset for future writes
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		f.offset = uint64(size)
-	}
-	return err
+	return f.c.setfstat(f.handle, sshFileXferAttrSize, uint64(size))
 }
 
 func min(a, b int) int {
