@@ -34,10 +34,11 @@ type Request struct {
 
 type state struct {
 	*sync.RWMutex
-	writerAt io.WriterAt
-	readerAt io.ReaderAt
-	listerAt ListerAt
-	lsoffset int64
+	writerAt       io.WriterAt
+	readerAt       io.ReaderAt
+	writerReaderAt WriterAtReaderAt
+	listerAt       ListerAt
+	lsoffset       int64
 }
 
 // New Request initialized based on packet data
@@ -142,6 +143,7 @@ func (r *Request) close() error {
 	r.state.RLock()
 	wr := r.state.writerAt
 	rd := r.state.readerAt
+	writerReader := r.state.writerReaderAt
 	r.state.RUnlock()
 
 	var err error
@@ -155,6 +157,14 @@ func (r *Request) close() error {
 		}
 	}
 
+	if c, ok := writerReader.(io.Closer); ok {
+		if err2 := c.Close(); err == nil {
+			// update error if it is still nil
+			err = err2
+			r.state.writerReaderAt = nil
+		}
+	}
+
 	if c, ok := rd.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
@@ -165,7 +175,7 @@ func (r *Request) close() error {
 	return err
 }
 
-// Close reader/writer if possible
+// Notify transfer error if any
 func (r *Request) transferError(err error) {
 	if err == nil {
 		return
@@ -174,7 +184,12 @@ func (r *Request) transferError(err error) {
 	r.state.RLock()
 	wr := r.state.writerAt
 	rd := r.state.readerAt
+	writerReader := r.state.writerReaderAt
 	r.state.RUnlock()
+
+	if t, ok := writerReader.(TransferError); ok {
+		t.TransferError(err)
+	}
 
 	if t, ok := wr.(TransferError); ok {
 		t.TransferError(err)
@@ -192,6 +207,8 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 		return fileget(handlers.FileGet, r, pkt, alloc, orderID)
 	case "Put":
 		return fileput(handlers.FilePut, r, pkt, alloc, orderID)
+	case "Open":
+		return fileputget(handlers.FilePut, r, pkt, alloc, orderID)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove":
 		return filecmd(handlers.FileCmd, r, pkt)
 	case "List":
@@ -210,8 +227,13 @@ func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	var err error
 	switch {
 	case flags.Write, flags.Append, flags.Creat, flags.Trunc:
-		r.Method = "Put"
-		r.state.writerAt, err = h.FilePut.Filewrite(r)
+		if openFileWriter, ok := h.FilePut.(OpenFileWriter); ok && flags.Read {
+			r.Method = "Open"
+			r.state.writerReaderAt, err = openFileWriter.OpenFile(r)
+		} else {
+			r.Method = "Put"
+			r.state.writerAt, err = h.FilePut.Filewrite(r)
+		}
 	case flags.Read:
 		r.Method = "Get"
 		r.state.readerAt, err = h.FileGet.Fileread(r)
@@ -249,7 +271,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 
 	data, offset, _ := packetData(pkt, alloc, orderID)
 	n, err := reader.ReadAt(data, offset)
-	// only return EOF erro if no data left to read
+	// only return EOF error if no data left to read
 	if err != nil && (err != io.EOF || n == 0) {
 		return statusFromError(pkt, err)
 	}
@@ -273,6 +295,36 @@ func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orde
 	data, offset, _ := packetData(pkt, alloc, orderID)
 	_, err := writer.WriteAt(data, offset)
 	return statusFromError(pkt, err)
+}
+
+// wrap OpenFileWriter handler
+func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+	r.state.RLock()
+	writerReader := r.state.writerReaderAt
+	r.state.RUnlock()
+	if writerReader == nil {
+		return statusFromError(pkt, errors.New("unexpected write and read packet"))
+	}
+	switch pkt.(type) {
+	case *sshFxpReadPacket:
+		data, offset, _ := packetData(pkt, alloc, orderID)
+		n, err := writerReader.ReadAt(data, offset)
+		// only return EOF error if no data left to read
+		if err != nil && (err != io.EOF || n == 0) {
+			return statusFromError(pkt, err)
+		}
+		return &sshFxpDataPacket{
+			ID:     pkt.id(),
+			Length: uint32(n),
+			Data:   data[:n],
+		}
+	case *sshFxpWritePacket:
+		data, offset, _ := packetData(pkt, alloc, orderID)
+		_, err := writerReader.WriteAt(data, offset)
+		return statusFromError(pkt, err)
+	default:
+		return statusFromError(pkt, errors.New("unexpected packet type for read or write"))
+	}
 }
 
 // file data for additional read/write packets

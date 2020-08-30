@@ -228,6 +228,25 @@ func TestRequestCreate(t *testing.T) {
 	checkRequestServerAllocator(t, p)
 }
 
+func TestRequestReadAndWrite(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR)
+	require.NoError(t, err)
+
+	defer file.Close()
+
+	n, err := file.Write([]byte("hello"))
+	require.NoError(t, err)
+	assert.Equal(t, 5, n)
+	buf := make([]byte, 4)
+	n, err = file.ReadAt(buf, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
+	checkRequestServerAllocator(t, p)
+}
+
 func TestRequestMkdir(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()

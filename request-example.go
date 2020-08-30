@@ -69,6 +69,28 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	return file.WriterAt()
 }
 
+func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
+	file, err := fs.fetch(r.Filepath)
+	if err == os.ErrNotExist {
+		dir, err := fs.fetch(filepath.Dir(r.Filepath))
+		if err != nil {
+			return nil, err
+		}
+		if !dir.isdir {
+			return nil, os.ErrInvalid
+		}
+		file = newMemFile(r.Filepath, false)
+		fs.files[r.Filepath] = file
+	}
+	return file, nil
+}
+
 func (fs *root) Filecmd(r *Request) error {
 	if fs.mockErr != nil {
 		return fs.mockErr
@@ -307,6 +329,13 @@ func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
 	}
 	copy(f.content[off:], p)
 	return len(p), nil
+}
+
+func (f *memFile) ReadAt(p []byte, off int64) (int, error) {
+	f.contentLock.Lock()
+	defer f.contentLock.Unlock()
+	reader := bytes.NewReader(f.content)
+	return reader.ReadAt(p, off)
 }
 
 func (f *memFile) Truncate(size int64) error {

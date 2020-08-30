@@ -5,6 +5,13 @@ import (
 	"os"
 )
 
+// WriterAtReaderAt defines the interface to return when a file is to
+// be opened for reading and writing
+type WriterAtReaderAt interface {
+	io.WriterAt
+	io.ReaderAt
+}
+
 // Interfaces are differentiated based on required returned values.
 // All input arguments are to be pulled from Request (the only arg).
 
@@ -30,6 +37,16 @@ type FileReader interface {
 // Called for Methods: Put, Open
 type FileWriter interface {
 	Filewrite(*Request) (io.WriterAt, error)
+}
+
+// OpenFileWriter is a FileWriter that implements the generic OpenFile
+// method.
+// You need to implement this optional interface if you want to be able
+// to read and write from/to the same handle.
+// Called for Methods: Open
+type OpenFileWriter interface {
+	FileWriter
+	OpenFile(*Request) (WriterAtReaderAt, error)
 }
 
 // FileCmder should return an error
