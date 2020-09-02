@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -47,7 +48,7 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	return file.ReaderAt()
 }
 
-func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
+func (fs *root) getFileForWrite(r *Request) (*memFile, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
@@ -56,29 +57,7 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
-		dir, err := fs.fetch(filepath.Dir(r.Filepath))
-		if err != nil {
-			return nil, err
-		}
-		if !dir.isdir {
-			return nil, os.ErrInvalid
-		}
-		file = newMemFile(r.Filepath, false)
-		fs.files[r.Filepath] = file
-	}
-	return file.WriterAt()
-}
-
-func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
-	if fs.mockErr != nil {
-		return nil, fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
-	file, err := fs.fetch(r.Filepath)
-	if err == os.ErrNotExist {
-		dir, err := fs.fetch(filepath.Dir(r.Filepath))
+		dir, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return nil, err
 		}
@@ -89,6 +68,18 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 		fs.files[r.Filepath] = file
 	}
 	return file, nil
+}
+
+func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
+	file, err := fs.getFileForWrite(r)
+	if err != nil {
+		return nil, err
+	}
+	return file.WriterAt()
+}
+
+func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
+	return fs.getFileForWrite(r)
 }
 
 func (fs *root) Filecmd(r *Request) error {

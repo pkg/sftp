@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"syscall"
 
@@ -143,21 +144,21 @@ func (r *Request) close() error {
 	r.state.RLock()
 	wr := r.state.writerAt
 	rd := r.state.readerAt
-	writerReader := r.state.writerReaderAt
+	rw := r.state.writerReaderAt
 	r.state.RUnlock()
 
 	var err error
 
 	// Close errors on a Writer are far more likely to be the important one.
 	// As they can be information that there was a loss of data.
-	if c, ok := wr.(io.Closer); ok {
+	if c, ok := wr.(io.Closer); ok && c != nil && !reflect.ValueOf(c).IsNil() {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
 		}
 	}
 
-	if c, ok := writerReader.(io.Closer); ok {
+	if c, ok := rw.(io.Closer); ok && c != nil && !reflect.ValueOf(c).IsNil() {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
@@ -165,7 +166,7 @@ func (r *Request) close() error {
 		}
 	}
 
-	if c, ok := rd.(io.Closer); ok {
+	if c, ok := rd.(io.Closer); ok && c != nil && !reflect.ValueOf(c).IsNil() {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
@@ -184,18 +185,18 @@ func (r *Request) transferError(err error) {
 	r.state.RLock()
 	wr := r.state.writerAt
 	rd := r.state.readerAt
-	writerReader := r.state.writerReaderAt
+	rw := r.state.writerReaderAt
 	r.state.RUnlock()
 
-	if t, ok := writerReader.(TransferError); ok {
+	if t, ok := wr.(TransferError); ok && t != nil && !reflect.ValueOf(t).IsNil() {
 		t.TransferError(err)
 	}
 
-	if t, ok := wr.(TransferError); ok {
+	if t, ok := rw.(TransferError); ok && t != nil && !reflect.ValueOf(t).IsNil() {
 		t.TransferError(err)
 	}
 
-	if t, ok := rd.(TransferError); ok {
+	if t, ok := rd.(TransferError); ok && t != nil && !reflect.ValueOf(t).IsNil() {
 		t.TransferError(err)
 	}
 }
@@ -227,10 +228,14 @@ func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	var err error
 	switch {
 	case flags.Write, flags.Append, flags.Creat, flags.Trunc:
-		if openFileWriter, ok := h.FilePut.(OpenFileWriter); ok && flags.Read {
-			r.Method = "Open"
-			r.state.writerReaderAt, err = openFileWriter.OpenFile(r)
-		} else {
+		if flags.Read {
+			openFileWriter, ok := h.FilePut.(OpenFileWriter)
+			if ok {
+				r.Method = "Open"
+				r.state.writerReaderAt, err = openFileWriter.OpenFile(r)
+			}
+		}
+		if r.Method == "" {
 			r.Method = "Put"
 			r.state.writerAt, err = h.FilePut.Filewrite(r)
 		}
