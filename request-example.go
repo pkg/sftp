@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -122,7 +121,7 @@ func (fs *root) Filecmd(r *Request) error {
 			}
 		}
 	case "Rmdir", "Remove":
-		file, err := fs.fetch(filepath.Dir(r.Filepath))
+		file, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -142,7 +141,7 @@ func (fs *root) Filecmd(r *Request) error {
 		delete(fs.files, r.Filepath)
 
 	case "Mkdir":
-		_, err := fs.fetch(filepath.Dir(r.Filepath))
+		_, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -203,7 +202,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		}
 		orderedNames := []string{}
 		for fn := range fs.files {
-			if filepath.Dir(fn) == r.Filepath {
+			if path.Dir(fn) == r.Filepath {
 				orderedNames = append(orderedNames, fn)
 			}
 		}
@@ -274,7 +273,7 @@ func newMemFile(name string, isdir bool) *memFile {
 }
 
 // Have memFile fulfill os.FileInfo interface
-func (f *memFile) Name() string { return filepath.Base(f.name) }
+func (f *memFile) Name() string { return path.Base(f.name) }
 func (f *memFile) Size() int64  { return int64(len(f.content)) }
 func (f *memFile) Mode() os.FileMode {
 	ret := os.FileMode(0644)
