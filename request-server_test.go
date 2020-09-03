@@ -80,7 +80,7 @@ func TestRequestSplitWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	w, err := p.cli.Create("/foo")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	p.cli.maxPacket = 3 // force it to send in small chunks
 	contents := "one two three four five six seven eight nine ten"
 	w.Write([]byte(contents))

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"sync"
 	"syscall"
 
@@ -151,14 +150,14 @@ func (r *Request) close() error {
 
 	// Close errors on a Writer are far more likely to be the important one.
 	// As they can be information that there was a loss of data.
-	if c, ok := wr.(io.Closer); ok && c != nil && !reflect.ValueOf(c).IsNil() {
+	if c, ok := wr.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
 		}
 	}
 
-	if c, ok := rw.(io.Closer); ok && c != nil && !reflect.ValueOf(c).IsNil() {
+	if c, ok := rw.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
@@ -166,7 +165,7 @@ func (r *Request) close() error {
 		}
 	}
 
-	if c, ok := rd.(io.Closer); ok && c != nil && !reflect.ValueOf(c).IsNil() {
+	if c, ok := rd.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
 			// update error if it is still nil
 			err = err2
@@ -188,15 +187,15 @@ func (r *Request) transferError(err error) {
 	rw := r.state.writerReaderAt
 	r.state.RUnlock()
 
-	if t, ok := wr.(TransferError); ok && t != nil && !reflect.ValueOf(t).IsNil() {
+	if t, ok := wr.(TransferError); ok {
 		t.TransferError(err)
 	}
 
-	if t, ok := rw.(TransferError); ok && t != nil && !reflect.ValueOf(t).IsNil() {
+	if t, ok := rw.(TransferError); ok {
 		t.TransferError(err)
 	}
 
-	if t, ok := rd.(TransferError); ok && t != nil && !reflect.ValueOf(t).IsNil() {
+	if t, ok := rd.(TransferError); ok {
 		t.TransferError(err)
 	}
 }
@@ -225,35 +224,42 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 // Additional initialization for Open packets
 func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	flags := r.Pflags()
-	var err error
+
 	switch {
 	case flags.Write, flags.Append, flags.Creat, flags.Trunc:
 		if flags.Read {
-			openFileWriter, ok := h.FilePut.(OpenFileWriter)
-			if ok {
+			if openFileWriter, ok := h.FilePut.(OpenFileWriter); ok {
 				r.Method = "Open"
-				r.state.writerReaderAt, err = openFileWriter.OpenFile(r)
+				rw, err := openFileWriter.OpenFile(r)
+				if err != nil {
+					return statusFromError(pkt, err)
+				}
+				r.state.writerReaderAt = rw
 			}
 		}
 		if r.Method == "" {
 			r.Method = "Put"
-			r.state.writerAt, err = h.FilePut.Filewrite(r)
+			wr, err := h.FilePut.Filewrite(r)
+			if err != nil {
+				return statusFromError(pkt, err)
+			}
+			r.state.writerAt = wr
 		}
 	case flags.Read:
 		r.Method = "Get"
-		r.state.readerAt, err = h.FileGet.Fileread(r)
+		rd, err := h.FileGet.Fileread(r)
+		if err != nil {
+			return statusFromError(pkt, err)
+		}
+		r.state.readerAt = rd
 	default:
 		return statusFromError(pkt, errors.New("bad file flags"))
-	}
-	if err != nil {
-		return statusFromError(pkt, err)
 	}
 	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
 }
 func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
-	var err error
 	r.Method = "List"
-	r.state.listerAt, err = h.FileList.Filelist(r)
+	la, err := h.FileList.Filelist(r)
 	if err != nil {
 		switch err.(type) {
 		case syscall.Errno:
@@ -261,12 +267,12 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 		}
 		return statusFromError(pkt, err)
 	}
+	r.state.listerAt = la
 	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
 }
 
 // wrap FileReader handler
 func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
-	//fmt.Println("fileget", r)
 	r.state.RLock()
 	reader := r.state.readerAt
 	r.state.RUnlock()
@@ -289,7 +295,6 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 
 // wrap FileWriter handler
 func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
-	//fmt.Println("fileput", r)
 	r.state.RLock()
 	writer := r.state.writerAt
 	r.state.RUnlock()
