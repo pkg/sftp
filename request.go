@@ -235,16 +235,16 @@ func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 					return statusFromError(pkt, err)
 				}
 				r.state.writerReaderAt = rw
+				return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
 			}
 		}
-		if r.Method == "" {
-			r.Method = "Put"
-			wr, err := h.FilePut.Filewrite(r)
-			if err != nil {
-				return statusFromError(pkt, err)
-			}
-			r.state.writerAt = wr
+
+		r.Method = "Put"
+		wr, err := h.FilePut.Filewrite(r)
+		if err != nil {
+			return statusFromError(pkt, err)
 		}
+		r.state.writerAt = wr
 	case flags.Read:
 		r.Method = "Get"
 		rd, err := h.FileGet.Fileread(r)
