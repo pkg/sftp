@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -47,7 +47,7 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	return file.ReaderAt()
 }
 
-func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
+func (fs *root) getFileForWrite(r *Request) (*memFile, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
@@ -56,7 +56,7 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	defer fs.filesLock.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
-		dir, err := fs.fetch(filepath.Dir(r.Filepath))
+		dir, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +66,19 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 		file = newMemFile(r.Filepath, false)
 		fs.files[r.Filepath] = file
 	}
+	return file, nil
+}
+
+func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
+	file, err := fs.getFileForWrite(r)
+	if err != nil {
+		return nil, err
+	}
 	return file.WriterAt()
+}
+
+func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
+	return fs.getFileForWrite(r)
 }
 
 func (fs *root) Filecmd(r *Request) error {
@@ -109,7 +121,7 @@ func (fs *root) Filecmd(r *Request) error {
 			}
 		}
 	case "Rmdir", "Remove":
-		file, err := fs.fetch(filepath.Dir(r.Filepath))
+		file, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -129,7 +141,7 @@ func (fs *root) Filecmd(r *Request) error {
 		delete(fs.files, r.Filepath)
 
 	case "Mkdir":
-		_, err := fs.fetch(filepath.Dir(r.Filepath))
+		_, err := fs.fetch(path.Dir(r.Filepath))
 		if err != nil {
 			return err
 		}
@@ -190,7 +202,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		}
 		orderedNames := []string{}
 		for fn := range fs.files {
-			if filepath.Dir(fn) == r.Filepath {
+			if path.Dir(fn) == r.Filepath {
 				orderedNames = append(orderedNames, fn)
 			}
 		}
@@ -261,7 +273,7 @@ func newMemFile(name string, isdir bool) *memFile {
 }
 
 // Have memFile fulfill os.FileInfo interface
-func (f *memFile) Name() string { return filepath.Base(f.name) }
+func (f *memFile) Name() string { return path.Base(f.name) }
 func (f *memFile) Size() int64  { return int64(len(f.content)) }
 func (f *memFile) Mode() os.FileMode {
 	ret := os.FileMode(0644)
@@ -307,6 +319,13 @@ func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
 	}
 	copy(f.content[off:], p)
 	return len(p), nil
+}
+
+func (f *memFile) ReadAt(p []byte, off int64) (int, error) {
+	f.contentLock.Lock()
+	defer f.contentLock.Unlock()
+	reader := bytes.NewReader(f.content)
+	return reader.ReadAt(p, off)
 }
 
 func (f *memFile) Truncate(size int64) error {

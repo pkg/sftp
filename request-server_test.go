@@ -80,7 +80,7 @@ func TestRequestSplitWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	w, err := p.cli.Create("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	p.cli.maxPacket = 3 // force it to send in small chunks
 	contents := "one two three four five six seven eight nine ten"
 	w.Write([]byte(contents))
@@ -225,6 +225,25 @@ func TestRequestCreate(t *testing.T) {
 	assert.Nil(t, err)
 	err = fh.Close()
 	assert.Nil(t, err)
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestReadAndWrite(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR)
+	require.NoError(t, err)
+
+	defer file.Close()
+
+	n, err := file.Write([]byte("hello"))
+	require.NoError(t, err)
+	assert.Equal(t, 5, n)
+	buf := make([]byte, 4)
+	n, err = file.ReadAt(buf, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
 	checkRequestServerAllocator(t, p)
 }
 
