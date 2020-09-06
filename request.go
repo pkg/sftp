@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -213,7 +214,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 		return filecmd(handlers.FileCmd, r, pkt)
 	case "List":
 		return filelist(handlers.FileList, r, pkt)
-	case "Stat", "Readlink":
+	case "Stat", "Lstat", "Readlink":
 		return filestat(handlers.FileList, r, pkt)
 	default:
 		return statusFromError(pkt,
@@ -405,7 +406,20 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 }
 
 func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
-	lister, err := h.Filelist(r)
+	var lister ListerAt
+	var err error
+
+	if r.Method == "Lstat" {
+		if lstatFileLister, ok := h.(LstatFileLister); ok {
+			lister, err = lstatFileLister.Lstat(r)
+		} else {
+			// LstatFileLister not implemented handle this request as a Stat
+			r.Method = "Stat"
+			lister, err = h.Filelist(r)
+		}
+	} else {
+		lister, err = h.Filelist(r)
+	}
 	if err != nil {
 		return statusFromError(pkt, err)
 	}
@@ -414,12 +428,12 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	finfo = finfo[:n] // avoid need for nil tests below
 
 	switch r.Method {
-	case "Stat":
+	case "Stat", "Lstat":
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt, err)
 		}
 		if n == 0 {
-			err = &os.PathError{Op: "stat", Path: r.Filepath,
+			err = &os.PathError{Op: strings.ToLower(r.Method), Path: r.Filepath,
 				Err: syscall.ENOENT}
 			return statusFromError(pkt, err)
 		}
@@ -466,8 +480,10 @@ func requestMethod(p requestPacket) (method string) {
 		method = "Symlink"
 	case *sshFxpRemovePacket:
 		method = "Remove"
-	case *sshFxpStatPacket, *sshFxpLstatPacket, *sshFxpFstatPacket:
+	case *sshFxpStatPacket, *sshFxpFstatPacket:
 		method = "Stat"
+	case *sshFxpLstatPacket:
+		method = "Lstat"
 	case *sshFxpRmdirPacket:
 		method = "Rmdir"
 	case *sshFxpReadlinkPacket:

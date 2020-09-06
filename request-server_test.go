@@ -405,6 +405,19 @@ func TestRequestStatFail(t *testing.T) {
 	checkRequestServerAllocator(t, p)
 }
 
+func TestRequestLstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	require.NoError(t, err)
+	err = p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+	fi, err := p.cli.Lstat("/bar")
+	require.NoError(t, err)
+	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+	checkRequestServerAllocator(t, p)
+}
+
 func TestRequestLink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
