@@ -184,8 +184,8 @@ type Client struct {
 	clientConn
 
 	maxPacket             int // max packet size read or written.
-	nextid                uint32
 	maxConcurrentRequests int
+	nextid                uint32
 	useFstat              bool
 }
 
@@ -978,7 +978,6 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 			return 0, err
 		}
 		fileSize = fileStat.Size
-
 	} else {
 		fi, err := f.c.Stat(f.path)
 		if err != nil {
