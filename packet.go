@@ -556,9 +556,9 @@ func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) error {
 
 type sshFxpReadPacket struct {
 	ID     uint32
-	Handle string
-	Offset uint64
 	Len    uint32
+	Offset uint64
+	Handle string
 }
 
 func (p sshFxpReadPacket) id() uint32 { return p.ID }
@@ -662,9 +662,9 @@ func (p sshFxpPosixRenamePacket) MarshalBinary() ([]byte, error) {
 
 type sshFxpWritePacket struct {
 	ID     uint32
-	Handle string
-	Offset uint64
 	Length uint32
+	Offset uint64
+	Handle string
 	Data   []byte
 }
 
@@ -706,8 +706,8 @@ func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
 
 type sshFxpMkdirPacket struct {
 	ID    uint32
-	Path  string
 	Flags uint32 // ignored
+	Path  string
 }
 
 func (p sshFxpMkdirPacket) id() uint32 { return p.ID }
@@ -739,15 +739,15 @@ func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) error {
 
 type sshFxpSetstatPacket struct {
 	ID    uint32
-	Path  string
 	Flags uint32
+	Path  string
 	Attrs interface{}
 }
 
 type sshFxpFsetstatPacket struct {
 	ID     uint32
-	Handle string
 	Flags  uint32
+	Handle string
 	Attrs  interface{}
 }
 
