@@ -53,7 +53,7 @@ func (svr *Server) closeHandle(handle string) error {
 		return f.Close()
 	}
 
-	return syscall.EBADF
+	return EBADF
 }
 
 func (svr *Server) getHandle(handle string) (*os.File, bool) {
@@ -195,7 +195,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		}
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
-		var err error = syscall.EBADF
+		var err error = EBADF
 		var info os.FileInfo
 		if ok {
 			info, err = f.Stat()
@@ -266,7 +266,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 			}.respond(s)
 		}
 	case *sshFxpReadPacket:
-		var err error = syscall.EBADF
+		var err error = EBADF
 		f, ok := s.getHandle(p.Handle)
 		if ok {
 			err = nil
@@ -288,7 +288,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 
 	case *sshFxpWritePacket:
 		f, ok := s.getHandle(p.Handle)
-		var err error = syscall.EBADF
+		var err error = EBADF
 		if ok {
 			_, err = f.WriteAt(p.Data, int64(p.Offset))
 		}
@@ -442,7 +442,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) responsePacket {
 func (p sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return statusFromError(p, syscall.EBADF)
+		return statusFromError(p, EBADF)
 	}
 
 	dirname := f.Name()
@@ -507,7 +507,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 func (p sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 	f, ok := svr.getHandle(p.Handle)
 	if !ok {
-		return statusFromError(p, syscall.EBADF)
+		return statusFromError(p, EBADF)
 	}
 
 	// additional unmarshalling is required for each possibility here
@@ -551,20 +551,6 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 	return statusFromError(p, err)
 }
 
-// translateErrno translates a syscall error number to a SFTP error code.
-func translateErrno(errno syscall.Errno) uint32 {
-	switch errno {
-	case 0:
-		return sshFxOk
-	case syscall.ENOENT:
-		return sshFxNoSuchFile
-	case syscall.EPERM:
-		return sshFxPermissionDenied
-	}
-
-	return sshFxFailure
-}
-
 func statusFromError(p ider, err error) sshFxpStatusPacket {
 	ret := sshFxpStatusPacket{
 		ID: p.id(),
@@ -589,14 +575,12 @@ func statusFromError(p ider, err error) sshFxpStatusPacket {
 	ret.StatusError.Code = sshFxFailure
 	ret.StatusError.msg = err.Error()
 
+	if code, ok := translateSyscallError(err); ok {
+		ret.StatusError.Code = code
+		return ret
+	}
+
 	switch e := err.(type) {
-	case syscall.Errno:
-		ret.StatusError.Code = translateErrno(e)
-	case *os.PathError:
-		debug("statusFromError,pathError: error is %T %#v", e.Err, e.Err)
-		if errno, ok := e.Err.(syscall.Errno); ok {
-			ret.StatusError.Code = translateErrno(errno)
-		}
 	case fxerr:
 		ret.StatusError.Code = uint32(e)
 	default:

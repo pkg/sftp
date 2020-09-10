@@ -261,11 +261,7 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 	r.Method = "List"
 	la, err := h.FileList.Filelist(r)
 	if err != nil {
-		switch err.(type) {
-		case syscall.Errno:
-			err = &os.PathError{Path: r.Filepath, Err: err}
-		}
-		return statusFromError(pkt, err)
+		return statusFromError(pkt, wrapPathError(r.Filepath, err))
 	}
 	r.state.listerAt = la
 	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}

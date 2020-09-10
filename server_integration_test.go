@@ -63,6 +63,12 @@ func skipIfWindows(t testing.TB) {
 	}
 }
 
+func skipIfPlan9(t testing.TB) {
+	if runtime.GOOS == "plan9" {
+		t.Skip("skipping test on plan9")
+	}
+}
+
 var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
 var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
 var testAllocator = flag.Bool("allocator", false, "perform tests using the allocator")
