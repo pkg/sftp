@@ -63,6 +63,13 @@ type FileLister interface {
 	Filelist(*Request) (ListerAt, error)
 }
 
+// LstatFileLister is a FileLister that implements the Lstat method.
+// If this interface is implemented Lstat requests will call it
+// otherwise they will be handled in the same way as Stat
+type LstatFileLister interface {
+	Lstat(*Request) (ListerAt, error)
+}
+
 // ListerAt does for file lists what io.ReaderAt does for files.
 // ListAt should return the number of entries copied and an io.EOF
 // error if at end of list. This is testable by comparing how many you

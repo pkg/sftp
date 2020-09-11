@@ -213,6 +213,12 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		}
 		return listerat(list), nil
 	case "Stat":
+		if file.symlink != "" {
+			file, err = fs.fetch(file.symlink)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return listerat([]os.FileInfo{file}), nil
 	case "Readlink":
 		if file.symlink != "" {
@@ -224,6 +230,22 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		return listerat([]os.FileInfo{file}), nil
 	}
 	return nil, nil
+}
+
+// implements LstatFileLister interface
+func (fs *root) Lstat(r *Request) (ListerAt, error) {
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
+
+	file, err := fs.fetch(r.Filepath)
+	if err != nil {
+		return nil, err
+	}
+	return listerat([]os.FileInfo{file}), nil
 }
 
 // In memory file-system-y thing that the Hanlders live on
