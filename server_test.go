@@ -354,7 +354,7 @@ func TestStatNonExistent(t *testing.T) {
 
 	for _, file := range []string{"/doesnotexist", "/doesnotexist/a/b"} {
 		_, err := client.Stat(file)
-		if err == nil || !os.IsNotExist(err) {
+		if !os.IsNotExist(err) {
 			t.Errorf("expected 'does not exist' err for file %q.  got: %v", file, err)
 		}
 	}

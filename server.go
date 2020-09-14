@@ -589,24 +589,24 @@ func statusFromError(p ider, err error) sshFxpStatusPacket {
 	ret.StatusError.Code = sshFxFailure
 	ret.StatusError.msg = err.Error()
 
+	if os.IsNotExist(err) {
+		ret.StatusError.Code = sshFxNoSuchFile
+		return ret
+	}
+
 	switch e := err.(type) {
 	case syscall.Errno:
 		ret.StatusError.Code = translateErrno(e)
 	case *os.PathError:
 		debug("statusFromError,pathError: error is %T %#v", e.Err, e.Err)
-		if os.IsNotExist(err) {
-			ret.StatusError.Code = sshFxNoSuchFile
-		} else if errno, ok := e.Err.(syscall.Errno); ok {
+		if errno, ok := e.Err.(syscall.Errno); ok {
 			ret.StatusError.Code = translateErrno(errno)
 		}
 	case fxerr:
 		ret.StatusError.Code = uint32(e)
 	default:
-		switch e {
-		case io.EOF:
+		if e == io.EOF {
 			ret.StatusError.Code = sshFxEOF
-		case os.ErrNotExist:
-			ret.StatusError.Code = sshFxNoSuchFile
 		}
 	}
 
