@@ -594,7 +594,9 @@ func statusFromError(p ider, err error) sshFxpStatusPacket {
 		ret.StatusError.Code = translateErrno(e)
 	case *os.PathError:
 		debug("statusFromError,pathError: error is %T %#v", e.Err, e.Err)
-		if errno, ok := e.Err.(syscall.Errno); ok {
+		if os.IsNotExist(err) {
+			ret.StatusError.Code = sshFxNoSuchFile
+		} else if errno, ok := e.Err.(syscall.Errno); ok {
 			ret.StatusError.Code = translateErrno(errno)
 		}
 	case fxerr:
