@@ -344,3 +344,18 @@ func TestOpenStatRace(t *testing.T) {
 	os.Remove(tmppath)
 	checkServerAllocator(t, server)
 }
+
+// Ensure that proper error codes are returned for non existent files, such
+// that they are mapped back to a 'not exists' error on the client side.
+func TestStatNonExistent(t *testing.T) {
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	for _, file := range []string{"/doesnotexist", "/doesnotexist/a/b"} {
+		_, err := client.Stat(file)
+		if !os.IsNotExist(err) {
+			t.Errorf("expected 'does not exist' err for file %q.  got: %v", file, err)
+		}
+	}
+}
