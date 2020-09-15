@@ -10,9 +10,8 @@ import (
 const EBADF = syscall.EBADF
 
 func wrapPathError(filepath string, err error) error {
-	switch err.(type) {
-	case syscall.Errno:
-		err = &os.PathError{Path: filepath, Err: err}
+	if errno, ok := err.(syscall.Errno); ok {
+		return &os.PathError{Path: filepath, Err: errno }
 	}
 	return err
 }

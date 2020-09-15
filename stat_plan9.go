@@ -8,9 +8,8 @@ import (
 var EBADF = syscall.NewError("fd out of range or not open")
 
 func wrapPathError(filepath string, err error) error {
-	switch err.(type) {
-	case syscall.ErrorString:
-		err = &os.PathError{Path: filepath, Err: err}
+	if errno, ok := err.(syscall.ErrorString); ok {
+		return &os.PathError{Path: filepath, Err: errno }
 	}
 	return err
 }
