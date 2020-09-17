@@ -244,6 +244,10 @@ func TestRequestReadAndWrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, n)
 	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
+
+	_, err = p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	assert.Error(t, err)
+
 	checkRequestServerAllocator(t, p)
 }
 

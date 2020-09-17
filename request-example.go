@@ -93,6 +93,10 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 		fs.files[pathname] = file
 	}
 
+	if pflags.Creat && pflags.Excl {
+		return nil, os.ErrExist
+	}
+
 	return file, nil
 }
 
