@@ -281,19 +281,19 @@ func TestOpenFileExclusiveNoSymlinkFollowing(t *testing.T) {
 	defer p.Close()
 
 	// make a directory
-	err := p.cli.Mkdir("/bar")
+	err := p.cli.Mkdir("/foo")
 	require.NoError(t, err)
 
 	// make a symlink to that directory
-	err = p.cli.Symlink("/bar", "/bar2")
+	err = p.cli.Symlink("/foo", "/foo2")
 	require.NoError(t, err)
 
 	// with O_EXCL, we must not follow any symlinks
-	file, err := p.cli.OpenFile("/bar2/baz", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	file, err := p.cli.OpenFile("/foo2/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	require.Error(t, err)
 
 	// we should not have created the file above; so we can now make it now without symlinks
-	file, err = p.cli.OpenFile("/bar/baz", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	file, err = p.cli.OpenFile("/foo/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	require.NoError(t, err)
 	file.Close()
 
@@ -562,6 +562,34 @@ func TestRequestSymlinkDanglingFiles(t *testing.T) {
 	// creating a symlink under a non-directory file should fail.
 	err = p.cli.Symlink("/dangle", "/foo/bar")
 	assert.Error(t, err)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestSymlinkDanglingDirectories(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	// dangling links are ok. We will use "/foo" later.
+	err := p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+
+	// reading from a dangling symlink should fail.
+	_, err = p.cli.ReadDir("/bar")
+	require.True(t, os.IsNotExist(err))
+
+	// making a directory on a dangling symlink should work.
+	err = p.cli.Mkdir("/bar")
+	require.NoError(t, err)
+
+	// should be able to make a file in that symlinked directory.
+	_, err = putTestFile(p.cli, "/bar/baz", "hello")
+	require.NoError(t, err)
+
+	// dangling directory creation should create the target directory itself.
+	content, err := getTestFile(p.cli, "/foo/baz")
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("hello"), content)
 
 	checkRequestServerAllocator(t, p)
 }

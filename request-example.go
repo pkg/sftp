@@ -71,6 +71,36 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	return fs.openfile(r.Filepath, r.Flags)
 }
 
+func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
+	if link, err := fs.lfetch(pathname); err == nil {
+		// get the true name of the end-point of any symlinks.
+		for err == nil {
+			pathname = link.symlink
+			link, err = fs.lfetch(pathname)
+		}
+	}
+
+	dirname, filename := path.Dir(pathname), path.Base(pathname)
+
+	dir, err := fs.fetchMaybeExclusive(dirname, exclusive)
+	if err != nil {
+		return nil, err
+	}
+
+	if !dir.isdir {
+		return nil, syscall.ENOTDIR
+	}
+
+	pathname = path.Join(dir.name, filename)
+
+	file := &memFile{
+		name: pathname,
+	}
+	fs.files[pathname] = file
+
+	return file, nil
+}
+
 func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 	pflags := newFileOpenFlags(flags)
 
@@ -81,26 +111,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			return nil, os.ErrNotExist
 		}
 
-		if link, err := fs.lfetch(pathname); err == nil {
-			for err == nil {
-				pathname = link.symlink
-				link, err = fs.lfetch(pathname)
-			}
-		}
-
-		dir, err := fs.fetchMaybeExclusive(path.Dir(pathname), pflags.Excl)
-		if err != nil {
-			return nil, err
-		}
-
-		if !dir.isdir {
-			return nil, syscall.ENOTDIR
-		}
-
-		file = newMemFile(pathname, false)
-		fs.files[pathname] = file
-
-		return file, nil
+		return fs.newfile(pathname, pflags.Excl)
 	}
 
 	if err != nil {
@@ -127,10 +138,13 @@ func (fs *root) Filecmd(r *Request) error {
 		if err != nil {
 			return err
 		}
+
 		if r.AttrFlags().Size {
 			return file.Truncate(int64(r.Attributes().Size))
 		}
+
 		return nil
+
 	case "Rename":
 		file, err := fs.fetch(r.Filepath)
 		if err != nil {
@@ -174,39 +188,37 @@ func (fs *root) Filecmd(r *Request) error {
 		delete(fs.files, r.Filepath)
 
 	case "Mkdir":
-		_, err := fs.fetch(path.Dir(r.Filepath))
+		dir, err := fs.newfile(r.Filepath, false)
 		if err != nil {
 			return err
 		}
-		fs.files[r.Filepath] = newMemFile(r.Filepath, true)
+
+		dir.isdir = true
+
 	case "Link":
 		file, err := fs.fetch(r.Filepath)
 		if err != nil {
 			return err
 		}
+
 		if file.IsDir() {
 			return fmt.Errorf("hard link not allowed for directory")
 		}
+
 		fs.files[r.Target] = file
+
 	case "Symlink":
 		_, err := fs.lfetch(r.Target)
 		if err != os.ErrNotExist {
 			return os.ErrExist
 		}
 
-		dir, err := fs.fetch(path.Dir(r.Target))
+		link, err := fs.newfile(r.Target, false)
 		if err != nil {
 			return err
 		}
 
-		if !dir.isdir {
-			return syscall.ENOTDIR
-		}
-
-		link := newMemFile(r.Target, false)
 		link.symlink = r.Filepath
-
-		fs.files[r.Target] = link
 	}
 	return nil
 }
