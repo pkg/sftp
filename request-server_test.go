@@ -34,6 +34,7 @@ const sock = "/tmp/rstest.sock"
 
 func clientRequestServerPair(t *testing.T) *csPair {
 	skipIfWindows(t)
+	skipIfPlan9(t)
 	ready := make(chan bool)
 	os.Remove(sock) // either this or signal handling
 	var server *RequestServer

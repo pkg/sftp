@@ -1,5 +1,3 @@
-// +build !darwin,!linux,!plan9
-
 package sftp
 
 import (
@@ -7,5 +5,5 @@ import (
 )
 
 func (p sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
-	return statusFromError(p, syscall.ENOTSUP)
+	return statusFromError(p, syscall.EPLAN9)
 }

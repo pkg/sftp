@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"runtime"
 	"sync"
 	"syscall"
 	"testing"
@@ -241,6 +242,10 @@ func TestInvalidExtendedPacket(t *testing.T) {
 // test that server handles concurrent requests correctly
 func TestConcurrentRequests(t *testing.T) {
 	skipIfWindows(t)
+	filename := "/etc/passwd"
+	if runtime.GOOS == "plan9" {
+		filename = "/lib/ndb/local"
+	}
 	client, server := clientServerPair(t)
 	defer client.Close()
 	defer server.Close()
@@ -254,9 +259,10 @@ func TestConcurrentRequests(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < 1024; j++ {
-				f, err := client.Open("/etc/passwd")
+				f, err := client.Open(filename)
 				if err != nil {
 					t.Errorf("failed to open file: %v", err)
+					continue
 				}
 				if err := f.Close(); err != nil {
 					t.Errorf("failed t close file: %v", err)

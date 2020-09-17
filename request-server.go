@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"syscall"
 
 	"github.com/pkg/errors"
 )
@@ -100,7 +99,7 @@ func (rs *RequestServer) closeRequest(handle string) error {
 		delete(rs.openRequests, handle)
 		return r.close()
 	}
-	return syscall.EBADF
+	return EBADF
 }
 
 // Close the read/write/closer to trigger exiting the main server loop
@@ -209,7 +208,7 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
-				rpkt = statusFromError(pkt, syscall.EBADF)
+				rpkt = statusFromError(pkt, EBADF)
 			} else {
 				request = NewRequest("Stat", request.Filepath)
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
@@ -218,7 +217,7 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
-				rpkt = statusFromError(pkt, syscall.EBADF)
+				rpkt = statusFromError(pkt, EBADF)
 			} else {
 				request = NewRequest("Setstat", request.Filepath)
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
@@ -231,7 +230,7 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
-				rpkt = statusFromError(pkt, syscall.EBADF)
+				rpkt = statusFromError(pkt, EBADF)
 			} else {
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}

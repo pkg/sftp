@@ -16,7 +16,7 @@ func TestErrFxCode(t *testing.T) {
 		fx  fxerr
 	}{
 		{err: errors.New("random error"), fx: ErrSSHFxFailure},
-		{err: syscall.EBADF, fx: ErrSSHFxFailure},
+		{err: EBADF, fx: ErrSSHFxFailure},
 		{err: syscall.ENOENT, fx: ErrSSHFxNoSuchFile},
 		{err: syscall.EPERM, fx: ErrSSHFxPermissionDenied},
 		{err: io.EOF, fx: ErrSSHFxEOF},
