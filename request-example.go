@@ -32,8 +32,8 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err != nil {
 		return nil, err
@@ -46,8 +46,8 @@ func (fs *root) getFileForWrite(r *Request) (*memFile, error) {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 	file, err := fs.fetch(r.Filepath)
 	if err == os.ErrNotExist {
 		dir, err := fs.fetch(path.Dir(r.Filepath))
@@ -80,8 +80,8 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 	switch r.Method {
 	case "Setstat":
 		file, err := fs.fetch(r.Filepath)
@@ -217,8 +217,8 @@ func (fs *root) ReadDir(r *Request) (ListerAt, error) {
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
 	files, err := fs.readdir(r.Filepath)
 	if err != nil {
@@ -228,33 +228,40 @@ func (fs *root) ReadDir(r *Request) (ListerAt, error) {
 	return listerat(files), nil
 }
 
+func (fs *root) readlink(pathname string) (string, error) {
+	file, err := fs.lfetch(pathname)
+	if err != nil {
+		return "", err
+	}
+
+	if file.symlink == "" {
+		return "", os.ErrInvalid
+	}
+
+	return file.symlink, nil
+}
+
 func (fs *root) ReadLink(r *Request) (ListerAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
-	file, err := fs.lfetch(r.Filepath)
+	symlink, err := fs.readlink(r.Filepath)
+
+	file, err := fs.lfetch(symlink)
 	if err != nil {
-		return nil, err
+		// return a dummy memFile, with appropriate name.
+		return listerat{&memFile{
+			name: symlink,
+			err:  os.ErrNotExist, // prevent accidental use as a reader/writer.
+		}}, nil
 	}
 
-	symlink := file.symlink
-
-	if symlink == "" {
-		return nil, os.ErrInvalid
-	}
-
-	file, err = fs.lfetch(symlink)
-	if err != nil {
-		// technically, we should return the symlink name regardless.
-		return nil, err
-	}
-
-	return listerat([]os.FileInfo{file}), nil
+	return listerat{file}, nil
 }
 
 func (fs *root) Stat(r *Request) (ListerAt, error) {
@@ -263,14 +270,14 @@ func (fs *root) Stat(r *Request) (ListerAt, error) {
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
 	file, err := fs.fetch(r.Filepath)
 	if err != nil {
 		return nil, err
 	}
-	return listerat([]os.FileInfo{file}), nil
+	return listerat{file}, nil
 }
 
 // implements LstatFileLister interface
@@ -280,22 +287,23 @@ func (fs *root) Lstat(r *Request) (ListerAt, error) {
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 
-	fs.filesLock.Lock()
-	defer fs.filesLock.Unlock()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
 	file, err := fs.lfetch(r.Filepath)
 	if err != nil {
 		return nil, err
 	}
-	return listerat([]os.FileInfo{file}), nil
+	return listerat{file}, nil
 }
 
 // In memory file-system-y thing that the Hanlders live on
 type root struct {
 	*memFile
-	files     map[string]*memFile
-	filesLock sync.Mutex
-	mockErr   error
+	mockErr error
+
+	mu    sync.Mutex
+	files map[string]*memFile
 }
 
 // Set a mocked error that the next handler call will return.
@@ -341,14 +349,14 @@ func (fs *root) fetch(path string) (*memFile, error) {
 // These are the 3 interfaces necessary for the Handlers.
 // Implements the optional interface TransferError.
 type memFile struct {
-	name          string
-	modtime       time.Time
-	symlink       string
-	isdir         bool
-	transferError error
+	name    string
+	modtime time.Time
+	symlink string
+	isdir   bool
 
 	mu      sync.RWMutex
 	content []byte
+	err     error
 }
 
 // factory to make sure modtime is set
@@ -399,6 +407,10 @@ func (f *memFile) ReadAt(b []byte, off int64) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if f.err != nil {
+		return 0, f.err
+	}
+
 	if off < 0 {
 		return 0, errors.New("memFile.ReadAt: negative offset")
 	}
@@ -430,6 +442,10 @@ func (f *memFile) WriteAt(b []byte, off int64) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if f.err != nil {
+		return 0, f.err
+	}
+
 	grow := int64(len(b)) + off - f.size()
 	if grow > 0 {
 		f.grow(grow)
@@ -442,6 +458,10 @@ func (f *memFile) Truncate(size int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if f.err != nil {
+		return f.err
+	}
+
 	grow := size - f.size()
 	if grow <= 0 {
 		f.content = f.content[:size]
@@ -453,5 +473,8 @@ func (f *memFile) Truncate(size int64) error {
 }
 
 func (f *memFile) TransferError(err error) {
-	f.transferError = err
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.err = err
 }
