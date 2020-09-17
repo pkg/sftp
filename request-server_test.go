@@ -445,14 +445,35 @@ func TestRequestLinkFail(t *testing.T) {
 func TestRequestSymlink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
+
 	err = p.cli.Symlink("/foo", "/bar")
-	assert.Nil(t, err)
+	require.NoError(t, err)
+	err = p.cli.Symlink("/bar", "/baz")
+	require.NoError(t, err)
+
 	r := p.testHandler()
+
 	fi, err := r.fetch("/bar")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+
+	fi, err = r.fetch("/baz")
+	assert.NoError(t, err)
+	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+
+	file, err := p.cli.Open("/baz")
+	require.NoError(t, err)
+	defer file.Close()
+
+	buf := make([]byte, 4)
+	n, err := file.ReadAt(buf, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
+
 	checkRequestServerAllocator(t, p)
 }
 
