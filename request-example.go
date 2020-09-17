@@ -182,12 +182,14 @@ func (fs *root) Filecmd(r *Request) error {
 		}
 		fs.files[r.Target] = file
 	case "Symlink":
-		_, err := fs.fetch(r.Filepath)
-		if err != nil {
-			return err
+		_, err := fs.lfetch(r.Target)
+		if err != os.ErrNotExist {
+			return os.ErrExist
 		}
+
 		link := newMemFile(r.Target, false)
 		link.symlink = r.Filepath
+
 		fs.files[r.Target] = link
 	}
 	return nil

@@ -513,8 +513,19 @@ func TestRequestSymlink(t *testing.T) {
 func TestRequestSymlinkFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
+	// dangling links are ok.
 	err := p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+
+	// overwriting links is not.
+	err = p.cli.Symlink("/foo2", "/bar")
+	assert.Error(t, err)
+
+	// opening a dangling link should fail with os.IsNotExist == true
+	_, err = p.cli.OpenFile("/bar", os.O_RDONLY)
 	assert.True(t, os.IsNotExist(err))
+
 	checkRequestServerAllocator(t, p)
 }
 
