@@ -194,6 +194,15 @@ func (fs *root) Filecmd(r *Request) error {
 			return os.ErrExist
 		}
 
+		dir, err := fs.fetch(path.Dir(r.Target))
+		if err != nil {
+			return err
+		}
+
+		if !dir.isdir {
+			return syscall.ENOTDIR
+		}
+
 		link := newMemFile(r.Target, false)
 		link.symlink = r.Filepath
 

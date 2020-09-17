@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"testing"
@@ -141,6 +142,16 @@ func putTestFile(cli *Client, path, content string) (int, error) {
 		return w.Write([]byte(content))
 	}
 	return 0, err
+}
+
+func getTestFile(cli *Client, path string) ([]byte, error) {
+	r, err := cli.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	return ioutil.ReadAll(r)
 }
 
 func TestRequestWrite(t *testing.T) {
@@ -504,58 +515,53 @@ func TestRequestSymlink(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
 
-	file, err := p.cli.Open("/baz")
+	content, err := getTestFile(p.cli, "/baz")
 	require.NoError(t, err)
-	defer file.Close()
-
-	buf := make([]byte, 4)
-	n, err := file.ReadAt(buf, 1)
-	require.NoError(t, err)
-	assert.Equal(t, 4, n)
-	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
+	assert.Equal(t, []byte("hello"), content)
 
 	checkRequestServerAllocator(t, p)
 }
 
-func TestRequestSymlinkFail(t *testing.T) {
+func TestRequestSymlinkDanglingFiles(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 
-	// dangling links are ok.
+	// dangling links are ok. We will use "/foo" later.
 	err := p.cli.Symlink("/foo", "/bar")
 	require.NoError(t, err)
+
+	// creating a symlink in a non-existant directory should fail.
+	err = p.cli.Symlink("/dangle", "/foo/bar")
+	require.Error(t, err)
+
+	// creating a symlink under a dangling symlink should fail.
+	err = p.cli.Symlink("/dangle", "/bar/bar")
+	require.Error(t, err)
 
 	// opening a dangling link without O_CREATE should fail with os.IsNotExist == true
 	_, err = p.cli.OpenFile("/bar", os.O_RDONLY)
 	require.True(t, os.IsNotExist(err))
 
-	// overwriting links is not allowed.
-	err = p.cli.Symlink("/foo2", "/bar")
+	// overwriting a symlink is not allowed.
+	err = p.cli.Symlink("/dangle", "/bar")
 	require.Error(t, err)
 
 	// double symlink
 	err = p.cli.Symlink("/bar", "/baz")
 	require.NoError(t, err)
 
-	// opening a dangling link with O_CREATE should not fail, and make the file.
-	file, err := p.cli.OpenFile("/baz", os.O_RDWR|os.O_CREATE)
-	require.NoError(t, err)
-	n, err := file.Write([]byte("hello"))
-	require.NoError(t, err)
-	require.Equal(t, 5, n)
-	file.Close()
-
-	// dangling link creation should be reflected in target file itself.
-	file, err = p.cli.OpenFile("/foo", os.O_RDONLY)
+	// opening a dangling link with O_CREATE should work.
+	_, err = putTestFile(p.cli, "/baz", "hello")
 	require.NoError(t, err)
 
-	content := make([]byte, 5)
-	n, err = file.Read(content)
+	// dangling link creation should create the target file itself.
+	content, err := getTestFile(p.cli, "/foo")
 	require.NoError(t, err)
-	require.Equal(t, 5, n)
-	file.Close()
-
 	assert.Equal(t, []byte("hello"), content)
+
+	// creating a symlink under a non-directory file should fail.
+	err = p.cli.Symlink("/dangle", "/foo/bar")
+	assert.Error(t, err)
 
 	checkRequestServerAllocator(t, p)
 }
