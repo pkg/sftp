@@ -87,7 +87,7 @@ func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
 		return nil, err
 	}
 
-	if !dir.isdir {
+	if !dir.IsDir() {
 		return nil, syscall.ENOTDIR
 	}
 
@@ -130,8 +130,10 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+
 	switch r.Method {
 	case "Setstat":
 		file, err := fs.fetch(r.Filepath)
@@ -167,25 +169,12 @@ func (fs *root) Filecmd(r *Request) error {
 				}
 			}
 		}
-	case "Rmdir", "Remove":
-		file, err := fs.fetch(path.Dir(r.Filepath))
-		if err != nil {
-			return err
-		}
 
-		if file.IsDir() {
-			for path := range fs.files {
-				if strings.HasPrefix(path, r.Filepath+"/") {
-					return &os.PathError{
-						Op:   "remove",
-						Path: r.Filepath + "/",
-						Err:  fmt.Errorf("directory is not empty"),
-					}
-				}
-			}
-		}
+	case "Rmdir":
+		return fs.rmdir(r.Filepath)
 
-		delete(fs.files, r.Filepath)
+	case "Remove":
+		return fs.remove(r.Filepath)
 
 	case "Mkdir":
 		dir, err := fs.newfile(r.Filepath, false)
@@ -220,6 +209,52 @@ func (fs *root) Filecmd(r *Request) error {
 
 		link.symlink = r.Filepath
 	}
+	return nil
+}
+
+func (fs *root) rmdir(pathname string) error {
+	// does not follow symlinks!
+	file, err := fs.lfetch(pathname)
+	if err != nil {
+		return err
+	}
+
+	if !file.IsDir() {
+		return syscall.ENOTDIR
+	}
+
+	// use the file‘s internal name not the pathname we passed in.
+	pathname = file.name
+
+	for name := range fs.files {
+		if path.Dir(name) == pathname {
+			return &os.PathError{
+				Op:   "rmdir",
+				Path: pathname + "/",
+				Err:  errors.New("directory is not empty"),
+			}
+		}
+	}
+
+	delete(fs.files, pathname)
+
+	return nil
+}
+
+func (fs *root) remove(pathname string) error {
+	// does not follow symlinks!
+	file, err := fs.lfetch(pathname)
+	if err != nil {
+		return err
+	}
+
+	if file.IsDir() {
+		return os.ErrInvalid
+	}
+
+	// use the file‘s internal name not the pathname we passed in.
+	delete(fs.files, file.name)
+
 	return nil
 }
 
