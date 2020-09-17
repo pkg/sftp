@@ -5,7 +5,7 @@ package sftp
 // works as a very simple filesystem with simple flat key-value lookup system.
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -280,9 +280,10 @@ type memFile struct {
 	modtime       time.Time
 	symlink       string
 	isdir         bool
-	content       []byte
 	transferError error
-	contentLock   sync.RWMutex
+
+	mu      sync.RWMutex
+	content []byte
 }
 
 // factory to make sure modtime is set
@@ -294,18 +295,26 @@ func newMemFile(name string, isdir bool) *memFile {
 	}
 }
 
+// These are helper functions, they must be called while holding the memFile.mu mutex
+func (f *memFile) size() int64  { return int64(len(f.content)) }
+func (f *memFile) grow(n int64) { f.content = append(f.content, make([]byte, n)...) }
+
 // Have memFile fulfill os.FileInfo interface
 func (f *memFile) Name() string { return path.Base(f.name) }
-func (f *memFile) Size() int64  { return int64(len(f.content)) }
+func (f *memFile) Size() int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.size()
+}
 func (f *memFile) Mode() os.FileMode {
-	ret := os.FileMode(0644)
 	if f.isdir {
-		ret = os.FileMode(0755) | os.ModeDir
+		return os.FileMode(0755) | os.ModeDir
 	}
 	if f.symlink != "" {
-		ret = os.FileMode(0777) | os.ModeSymlink
+		return os.FileMode(0777) | os.ModeSymlink
 	}
-	return ret
+	return os.FileMode(0644)
 }
 func (f *memFile) ModTime() time.Time { return f.modtime }
 func (f *memFile) IsDir() bool        { return f.isdir }
@@ -318,47 +327,63 @@ func (f *memFile) ReaderAt() (io.ReaderAt, error) {
 	if f.isdir {
 		return nil, os.ErrInvalid
 	}
-	return bytes.NewReader(f.content), nil
+
+	return f, nil
+}
+func (f *memFile) ReadAt(b []byte, off int64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if off < 0 {
+		return 0, errors.New("memFile.ReadAt: negative offset")
+	}
+
+	if off >= f.size() {
+		return 0, io.EOF
+	}
+
+	n := copy(b, f.content[off:])
+	if n < len(b) {
+		return n, io.EOF
+	}
+
+	return n, nil
 }
 
 func (f *memFile) WriterAt() (io.WriterAt, error) {
 	if f.isdir {
 		return nil, os.ErrInvalid
 	}
+
 	return f, nil
 }
-func (f *memFile) WriteAt(p []byte, off int64) (int, error) {
+func (f *memFile) WriteAt(b []byte, off int64) (int, error) {
 	// fmt.Println(string(p), off)
 	// mimic write delays, should be optional
-	time.Sleep(time.Microsecond * time.Duration(len(p)))
-	f.contentLock.Lock()
-	defer f.contentLock.Unlock()
-	plen := len(p) + int(off)
-	if plen >= len(f.content) {
-		nc := make([]byte, plen)
-		copy(nc, f.content)
-		f.content = nc
-	}
-	copy(f.content[off:], p)
-	return len(p), nil
-}
+	time.Sleep(time.Microsecond * time.Duration(len(b)))
 
-func (f *memFile) ReadAt(p []byte, off int64) (int, error) {
-	f.contentLock.Lock()
-	defer f.contentLock.Unlock()
-	reader := bytes.NewReader(f.content)
-	return reader.ReadAt(p, off)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	grow := int64(len(b)) + off - f.size()
+	if grow > 0 {
+		f.grow(grow)
+	}
+
+	return copy(f.content[off:], b), nil
 }
 
 func (f *memFile) Truncate(size int64) error {
-	f.contentLock.Lock()
-	defer f.contentLock.Unlock()
-	grow := size - int64(len(f.content))
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	grow := size - f.size()
 	if grow <= 0 {
 		f.content = f.content[:size]
 	} else {
-		f.content = append(f.content, make([]byte, grow)...)
+		f.grow(grow)
 	}
+
 	return nil
 }
 
