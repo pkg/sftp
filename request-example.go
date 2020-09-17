@@ -74,23 +74,30 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 	pflags := newFileOpenFlags(flags)
 
-	file, err := fs.fetch(pathname)
+	file, err := fs.fetchMaybeExclusive(pathname, pflags.Creat && pflags.Excl)
 
 	if err == os.ErrNotExist {
 		if !pflags.Creat {
 			return nil, os.ErrNotExist
 		}
 
-		dir, err := fs.fetch(path.Dir(pathname))
+		dir, err := fs.fetchMaybeExclusive(path.Dir(pathname), pflags.Excl)
 		if err != nil {
 			return nil, err
 		}
+
 		if !dir.isdir {
 			return nil, syscall.ENOTDIR
 		}
 
 		file = newMemFile(pathname, false)
 		fs.files[pathname] = file
+
+		return file, nil
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	if pflags.Creat && pflags.Excl {
@@ -355,12 +362,20 @@ func (fs *root) lfetch(path string) (*memFile, error) {
 }
 
 func (fs *root) fetch(path string) (*memFile, error) {
+	return fs.fetchMaybeExclusive(path, false)
+}
+
+func (fs *root) fetchMaybeExclusive(path string, exclusive bool) (*memFile, error) {
 	file, err := fs.lfetch(path)
 	if err != nil {
 		return nil, err
 	}
 
 	for file.symlink != "" {
+		if exclusive {
+			return nil, os.ErrInvalid
+		}
+
 		file, err = fs.lfetch(file.symlink)
 		if err != nil {
 			return nil, err

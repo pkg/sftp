@@ -231,22 +231,53 @@ func TestRequestCreate(t *testing.T) {
 func TestRequestReadAndWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	file, err := p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE)
 	require.NoError(t, err)
-
 	defer file.Close()
 
 	n, err := file.Write([]byte("hello"))
 	require.NoError(t, err)
 	assert.Equal(t, 5, n)
+
 	buf := make([]byte, 4)
 	n, err = file.ReadAt(buf, 1)
 	require.NoError(t, err)
 	assert.Equal(t, 4, n)
 	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
 
+	checkRequestServerAllocator(t, p)
+}
+
+func TestOpenFileExclusive(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	// first open should work
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.NoError(t, err)
+	file.Close()
+
+	// second open should return error
 	_, err = p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	assert.Error(t, err)
+
+	// make a directory
+	err = p.cli.Mkdir("/bar")
+	require.NoError(t, err)
+
+	// make a symlink to that directory
+	err = p.cli.Symlink("/bar", "/bar2")
+	require.NoError(t, err)
+
+	// with O_EXCL, we must not follow any symlinks
+	file, err = p.cli.OpenFile("/bar2/baz", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.Error(t, err)
+
+	// we should not have created the file above; so we can now make it now without symlinks
+	file, err = p.cli.OpenFile("/bar/baz", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.NoError(t, err)
+	file.Close()
 
 	checkRequestServerAllocator(t, p)
 }
