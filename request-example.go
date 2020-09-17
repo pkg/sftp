@@ -177,10 +177,92 @@ func (f listerat) ListAt(ls []os.FileInfo, offset int64) (int, error) {
 }
 
 func (fs *root) Filelist(r *Request) (ListerAt, error) {
+	switch r.Method {
+	case "List":
+		return fs.ReadDir(r)
+	case "Stat":
+		return fs.Stat(r)
+	case "Readlink":
+		return fs.ReadLink(r)
+	}
+	return nil, nil
+}
+
+func (fs *root) readdir(pathname string) ([]os.FileInfo, error) {
+	file, err := fs.fetch(pathname)
+	if err != nil {
+		return nil, err
+	}
+
+	if !file.IsDir() {
+		return nil, syscall.ENOTDIR
+	}
+
+	var files []os.FileInfo
+
+	for name, file := range fs.files {
+		if path.Dir(name) == pathname {
+			files = append(files, file)
+		}
+	}
+
+	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
+
+	return files, nil
+}
+
+func (fs *root) ReadDir(r *Request) (ListerAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
+
+	files, err := fs.readdir(r.Filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	return listerat(files), nil
+}
+
+func (fs *root) ReadLink(r *Request) (ListerAt, error) {
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.filesLock.Lock()
+	defer fs.filesLock.Unlock()
+
+	file, err := fs.lfetch(r.Filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	symlink := file.symlink
+
+	if symlink == "" {
+		return nil, os.ErrInvalid
+	}
+
+	file, err = fs.lfetch(symlink)
+	if err != nil {
+		// technically, we should return the symlink name regardless.
+		return nil, err
+	}
+
+	return listerat([]os.FileInfo{file}), nil
+}
+
+func (fs *root) Stat(r *Request) (ListerAt, error) {
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 
@@ -188,30 +270,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	switch r.Method {
-	case "List":
-		if !file.IsDir() {
-			return nil, syscall.ENOTDIR
-		}
-		orderedNames := []string{}
-		for fn := range fs.files {
-			if path.Dir(fn) == r.Filepath {
-				orderedNames = append(orderedNames, fn)
-			}
-		}
-		sort.Strings(orderedNames)
-		list := make([]os.FileInfo, len(orderedNames))
-		for i, fn := range orderedNames {
-			list[i] = fs.files[fn]
-		}
-		return listerat(list), nil
-	case "Stat":
-		return listerat([]os.FileInfo{file}), nil
-	case "Readlink":
-		return listerat([]os.FileInfo{file}), nil
-	}
-	return nil, nil
+	return listerat([]os.FileInfo{file}), nil
 }
 
 // implements LstatFileLister interface
@@ -220,6 +279,7 @@ func (fs *root) Lstat(r *Request) (ListerAt, error) {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 
