@@ -32,8 +32,10 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+
 	file, err := fs.fetch(r.Filepath)
 	if err != nil {
 		return nil, err
@@ -41,30 +43,16 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	return file.ReaderAt()
 }
 
-func (fs *root) getFileForWrite(r *Request) (*memFile, error) {
+func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
 	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	file, err := fs.fetch(r.Filepath)
-	if err == os.ErrNotExist {
-		dir, err := fs.fetch(path.Dir(r.Filepath))
-		if err != nil {
-			return nil, err
-		}
-		if !dir.isdir {
-			return nil, os.ErrInvalid
-		}
-		file = newMemFile(r.Filepath, false)
-		fs.files[r.Filepath] = file
-	}
-	return file, nil
-}
 
-func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
-	file, err := fs.getFileForWrite(r)
+	file, err := fs.openfile(r.Filepath, r.Flags)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +60,40 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 }
 
 func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
-	return fs.getFileForWrite(r)
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.openfile(r.Filepath, r.Flags)
+}
+
+func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
+	pflags := newFileOpenFlags(flags)
+
+	file, err := fs.fetch(pathname)
+
+	if err == os.ErrNotExist {
+		if !pflags.Creat {
+			return nil, os.ErrNotExist
+		}
+
+		dir, err := fs.fetch(path.Dir(pathname))
+		if err != nil {
+			return nil, err
+		}
+		if !dir.isdir {
+			return nil, syscall.ENOTDIR
+		}
+
+		file = newMemFile(pathname, false)
+		fs.files[pathname] = file
+	}
+
+	return file, nil
 }
 
 func (fs *root) Filecmd(r *Request) error {

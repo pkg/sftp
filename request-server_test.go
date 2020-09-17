@@ -231,7 +231,7 @@ func TestRequestCreate(t *testing.T) {
 func TestRequestReadAndWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
-	file, err := p.cli.OpenFile("/foo", os.O_RDWR)
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE)
 	require.NoError(t, err)
 
 	defer file.Close()
