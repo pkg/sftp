@@ -38,12 +38,6 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if file.symlink != "" {
-		file, err = fs.fetch(file.symlink)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return file.ReaderAt()
 }
 
@@ -213,20 +207,8 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		}
 		return listerat(list), nil
 	case "Stat":
-		if file.symlink != "" {
-			file, err = fs.fetch(file.symlink)
-			if err != nil {
-				return nil, err
-			}
-		}
 		return listerat([]os.FileInfo{file}), nil
 	case "Readlink":
-		if file.symlink != "" {
-			file, err = fs.fetch(file.symlink)
-			if err != nil {
-				return nil, err
-			}
-		}
 		return listerat([]os.FileInfo{file}), nil
 	}
 	return nil, nil
@@ -241,7 +223,7 @@ func (fs *root) Lstat(r *Request) (ListerAt, error) {
 	fs.filesLock.Lock()
 	defer fs.filesLock.Unlock()
 
-	file, err := fs.fetch(r.Filepath)
+	file, err := fs.lfetch(r.Filepath)
 	if err != nil {
 		return nil, err
 	}
@@ -262,14 +244,37 @@ func (fs *root) returnErr(err error) {
 	fs.mockErr = err
 }
 
-func (fs *root) fetch(path string) (*memFile, error) {
+func (fs *root) lfetch(path string) (*memFile, error) {
 	if path == "/" {
 		return fs.memFile, nil
 	}
-	if file, ok := fs.files[path]; ok {
-		return file, nil
+
+	file, ok := fs.files[path]
+	if file == nil {
+		if ok {
+			delete(fs.files, path)
+		}
+
+		return nil, os.ErrNotExist
 	}
-	return nil, os.ErrNotExist
+
+	return file, nil
+}
+
+func (fs *root) fetch(path string) (*memFile, error) {
+	file, err := fs.lfetch(path)
+	if err != nil {
+		return nil, err
+	}
+
+	for file.symlink != "" {
+		file, err = fs.lfetch(file.symlink)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return file, nil
 }
 
 // Implements os.FileInfo, Reader and Writer interfaces.

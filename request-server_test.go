@@ -456,11 +456,11 @@ func TestRequestSymlink(t *testing.T) {
 
 	r := p.testHandler()
 
-	fi, err := r.fetch("/bar")
+	fi, err := r.lfetch("/bar")
 	assert.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
 
-	fi, err = r.fetch("/baz")
+	fi, err = r.lfetch("/baz")
 	assert.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
 
