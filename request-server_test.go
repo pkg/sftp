@@ -262,8 +262,15 @@ func TestOpenFileExclusive(t *testing.T) {
 	_, err = p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	assert.Error(t, err)
 
+	checkRequestServerAllocator(t, p)
+}
+
+func TestOpenFileExclusiveNoSymlinkFollowing(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
 	// make a directory
-	err = p.cli.Mkdir("/bar")
+	err := p.cli.Mkdir("/bar")
 	require.NoError(t, err)
 
 	// make a symlink to that directory
@@ -271,7 +278,7 @@ func TestOpenFileExclusive(t *testing.T) {
 	require.NoError(t, err)
 
 	// with O_EXCL, we must not follow any symlinks
-	file, err = p.cli.OpenFile("/bar2/baz", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	file, err := p.cli.OpenFile("/bar2/baz", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	require.Error(t, err)
 
 	// we should not have created the file above; so we can now make it now without symlinks
@@ -518,13 +525,37 @@ func TestRequestSymlinkFail(t *testing.T) {
 	err := p.cli.Symlink("/foo", "/bar")
 	require.NoError(t, err)
 
-	// overwriting links is not.
-	err = p.cli.Symlink("/foo2", "/bar")
-	assert.Error(t, err)
-
-	// opening a dangling link should fail with os.IsNotExist == true
+	// opening a dangling link without O_CREATE should fail with os.IsNotExist == true
 	_, err = p.cli.OpenFile("/bar", os.O_RDONLY)
-	assert.True(t, os.IsNotExist(err))
+	require.True(t, os.IsNotExist(err))
+
+	// overwriting links is not allowed.
+	err = p.cli.Symlink("/foo2", "/bar")
+	require.Error(t, err)
+
+	// double symlink
+	err = p.cli.Symlink("/bar", "/baz")
+	require.NoError(t, err)
+
+	// opening a dangling link with O_CREATE should not fail, and make the file.
+	file, err := p.cli.OpenFile("/baz", os.O_RDWR|os.O_CREATE)
+	require.NoError(t, err)
+	n, err := file.Write([]byte("hello"))
+	require.NoError(t, err)
+	require.Equal(t, 5, n)
+	file.Close()
+
+	// dangling link creation should be reflected in target file itself.
+	file, err = p.cli.OpenFile("/foo", os.O_RDONLY)
+	require.NoError(t, err)
+
+	content := make([]byte, 5)
+	n, err = file.Read(content)
+	require.NoError(t, err)
+	require.Equal(t, 5, n)
+	file.Close()
+
+	assert.Equal(t, []byte("hello"), content)
 
 	checkRequestServerAllocator(t, p)
 }

@@ -81,6 +81,13 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			return nil, os.ErrNotExist
 		}
 
+		if link, err := fs.lfetch(pathname); err == nil {
+			for err == nil {
+				pathname = link.symlink
+				link, err = fs.lfetch(pathname)
+			}
+		}
+
 		dir, err := fs.fetchMaybeExclusive(path.Dir(pathname), pflags.Excl)
 		if err != nil {
 			return nil, err
