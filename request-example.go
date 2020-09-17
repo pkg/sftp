@@ -36,7 +36,7 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	file, err := fs.fetch(r.Filepath)
+	file, err := fs.openfile(r.Filepath, r.Flags)
 	if err != nil {
 		return nil, err
 	}
