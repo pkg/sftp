@@ -28,35 +28,11 @@ func InMemHandler() Handlers {
 
 // Example Handlers
 func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
-	if fs.mockErr != nil {
-		return nil, fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	file, err := fs.openfile(r.Filepath, r.Flags)
-	if err != nil {
-		return nil, err
-	}
-	return file.ReaderAt()
+	return fs.OpenFile(r)
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
-	if fs.mockErr != nil {
-		return nil, fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	file, err := fs.openfile(r.Filepath, r.Flags)
-	if err != nil {
-		return nil, err
-	}
-	return file.WriterAt()
+	return fs.OpenFile(r)
 }
 
 func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
@@ -121,6 +97,10 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 
 	if pflags.Creat && pflags.Excl {
 		return nil, os.ErrExist
+	}
+
+	if file.IsDir() {
+		return nil, os.ErrInvalid
 	}
 
 	return file, nil
@@ -463,7 +443,7 @@ func (fs *root) fetchMaybeExclusive(path string, exclusive bool) (*memFile, erro
 	return file, nil
 }
 
-// Implements os.FileInfo, Reader and Writer interfaces.
+// Implements os.FileInfo, io.ReaderAt and io.WriterAt interfaces.
 // These are the 3 interfaces necessary for the Handlers.
 // Implements the optional interface TransferError.
 type memFile struct {
@@ -504,14 +484,6 @@ func (f *memFile) Sys() interface{} {
 	return fakeFileInfoSys()
 }
 
-// Read/Write
-func (f *memFile) ReaderAt() (io.ReaderAt, error) {
-	if f.isdir {
-		return nil, os.ErrInvalid
-	}
-
-	return f, nil
-}
 func (f *memFile) ReadAt(b []byte, off int64) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -536,13 +508,6 @@ func (f *memFile) ReadAt(b []byte, off int64) (int, error) {
 	return n, nil
 }
 
-func (f *memFile) WriterAt() (io.WriterAt, error) {
-	if f.isdir {
-		return nil, os.ErrInvalid
-	}
-
-	return f, nil
-}
 func (f *memFile) WriteAt(b []byte, off int64) (int, error) {
 	// fmt.Println(string(p), off)
 	// mimic write delays, should be optional
