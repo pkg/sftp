@@ -13,13 +13,17 @@ import (
 type conn struct {
 	io.Reader
 	io.WriteCloser
+	// this is the same allocator used in packet manager
+	alloc      *allocator
 	sync.Mutex // used to serialise writes to sendPacket
 	// sendPacketTest is needed to replicate packet issues in testing
 	sendPacketTest func(w io.Writer, m encoding.BinaryMarshaler) error
 }
 
-func (c *conn) recvPacket() (uint8, []byte, error) {
-	return recvPacket(c)
+// the orderID is used in server mode if the allocator is enabled.
+// For the client mode just pass 0
+func (c *conn) recvPacket(orderID uint32) (uint8, []byte, error) {
+	return recvPacket(c, c.alloc, orderID)
 }
 
 func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
@@ -31,11 +35,28 @@ func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
 	return sendPacket(c, m)
 }
 
+func (c *conn) Close() error {
+	c.Lock()
+	defer c.Unlock()
+	return c.WriteCloser.Close()
+}
+
 type clientConn struct {
 	conn
 	wg         sync.WaitGroup
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
+
+	closed chan struct{}
+	err    error
+}
+
+// Wait blocks until the conn has shut down, and return the error
+// causing the shutdown. It can be called concurrently from multiple
+// goroutines.
+func (c *clientConn) Wait() error {
+	<-c.closed
+	return c.err
 }
 
 // Close closes the SFTP session.
@@ -56,12 +77,10 @@ func (c *clientConn) loop() {
 // appropriate channel.
 func (c *clientConn) recv() error {
 	defer func() {
-		c.conn.Lock()
 		c.conn.Close()
-		c.conn.Unlock()
 	}()
 	for {
-		typ, data, err := c.recvPacket()
+		typ, data, err := c.recvPacket(0)
 		if err != nil {
 			return err
 		}
@@ -122,6 +141,8 @@ func (c *clientConn) broadcastErr(err error) {
 	for _, ch := range listeners {
 		ch <- result{err: err}
 	}
+	c.err = err
+	close(c.closed)
 }
 
 type serverConn struct {

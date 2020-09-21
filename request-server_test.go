@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = fmt.Print
@@ -32,6 +33,8 @@ func (cs csPair) testHandler() *root {
 const sock = "/tmp/rstest.sock"
 
 func clientRequestServerPair(t *testing.T) *csPair {
+	skipIfWindows(t)
+	skipIfPlan9(t)
 	ready := make(chan bool)
 	os.Remove(sock) // either this or signal handling
 	var server *RequestServer
@@ -45,7 +48,11 @@ func clientRequestServerPair(t *testing.T) *csPair {
 		fd, err := l.Accept()
 		assert.Nil(t, err)
 		handlers := InMemHandler()
-		server = NewRequestServer(fd, handlers)
+		var options []RequestServerOption
+		if *testAllocator {
+			options = append(options, WithRSAllocator())
+		}
+		server = NewRequestServer(fd, handlers, options...)
 		server.Serve()
 	}()
 	<-ready
@@ -59,13 +66,22 @@ func clientRequestServerPair(t *testing.T) *csPair {
 	return &csPair{client, server}
 }
 
+func checkRequestServerAllocator(t *testing.T, p *csPair) {
+	if p.svr.pktMgr.alloc == nil {
+		return
+	}
+	checkAllocatorBeforeServerClose(t, p.svr.pktMgr.alloc)
+	p.Close()
+	checkAllocatorAfterServerClose(t, p.svr.pktMgr.alloc)
+}
+
 // after adding logging, maybe check log to make sure packet handling
 // was split over more than one worker
 func TestRequestSplitWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	w, err := p.cli.Create("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	p.cli.maxPacket = 3 // force it to send in small chunks
 	contents := "one two three four five six seven eight nine ten"
 	w.Write([]byte(contents))
@@ -73,6 +89,7 @@ func TestRequestSplitWrite(t *testing.T) {
 	r := p.testHandler()
 	f, _ := r.fetch("/foo")
 	assert.Equal(t, contents, string(f.content))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestCache(t *testing.T) {
@@ -84,7 +101,7 @@ func TestRequestCache(t *testing.T) {
 	fh := p.svr.nextRequest(foo)
 	bh := p.svr.nextRequest(bar)
 	assert.Len(t, p.svr.openRequests, 2)
-	_foo, ok := p.svr.getRequest(fh, "")
+	_foo, ok := p.svr.getRequest(fh)
 	assert.Equal(t, foo.Method, _foo.Method)
 	assert.Equal(t, foo.Filepath, _foo.Filepath)
 	assert.Equal(t, foo.Target, _foo.Target)
@@ -94,12 +111,13 @@ func TestRequestCache(t *testing.T) {
 	assert.NotNil(t, _foo.ctx)
 	assert.Equal(t, _foo.Context().Err(), nil, "context is still valid")
 	assert.True(t, ok)
-	_, ok = p.svr.getRequest("zed", "")
+	_, ok = p.svr.getRequest("zed")
 	assert.False(t, ok)
 	p.svr.closeRequest(fh)
 	assert.Equal(t, _foo.Context().Err(), context.Canceled, "context is now canceled")
 	p.svr.closeRequest(bh)
 	assert.Len(t, p.svr.openRequests, 0)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestCacheState(t *testing.T) {
@@ -113,6 +131,7 @@ func TestRequestCacheState(t *testing.T) {
 	err = p.cli.Remove("/foo")
 	assert.Nil(t, err)
 	assert.Len(t, p.svr.openRequests, 0)
+	checkRequestServerAllocator(t, p)
 }
 
 func putTestFile(cli *Client, path, content string) (int, error) {
@@ -135,6 +154,7 @@ func TestRequestWrite(t *testing.T) {
 	assert.Nil(t, err)
 	assert.False(t, f.isdir)
 	assert.Equal(t, f.content, []byte("hello"))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestWriteEmpty(t *testing.T) {
@@ -147,7 +167,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	f, err := r.fetch("/foo")
 	if assert.Nil(t, err) {
 		assert.False(t, f.isdir)
-		assert.Equal(t, f.content, []byte(""))
+		assert.Len(t, f.content, 0)
 	}
 	// lets test with an error
 	r.returnErr(os.ErrInvalid)
@@ -155,6 +175,7 @@ func TestRequestWriteEmpty(t *testing.T) {
 	assert.Error(t, err)
 	r.returnErr(nil)
 	assert.Equal(t, 0, n)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestFilename(t *testing.T) {
@@ -168,9 +189,10 @@ func TestRequestFilename(t *testing.T) {
 	assert.Equal(t, f.Name(), "foo")
 	_, err = r.fetch("/bar")
 	assert.Error(t, err)
+	checkRequestServerAllocator(t, p)
 }
 
-func TestRequestRead(t *testing.T) {
+func TestRequestJustRead(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
@@ -185,26 +207,45 @@ func TestRequestRead(t *testing.T) {
 	}
 	assert.Equal(t, 5, n)
 	assert.Equal(t, "hello", string(contents[0:5]))
+	checkRequestServerAllocator(t, p)
 }
 
-func TestRequestReadFail(t *testing.T) {
+func TestRequestOpenFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	rf, err := p.cli.Open("/foo")
-	assert.Nil(t, err)
-	contents := make([]byte, 5)
-	n, err := rf.Read(contents)
-	assert.Equal(t, n, 0)
 	assert.Exactly(t, os.ErrNotExist, err)
+	assert.Nil(t, rf)
+	checkRequestServerAllocator(t, p)
 }
 
-func TestRequestOpen(t *testing.T) {
+func TestRequestCreate(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
-	fh, err := p.cli.Open("foo")
+	fh, err := p.cli.Create("foo")
 	assert.Nil(t, err)
 	err = fh.Close()
 	assert.Nil(t, err)
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestReadAndWrite(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR)
+	require.NoError(t, err)
+
+	defer file.Close()
+
+	n, err := file.Write([]byte("hello"))
+	require.NoError(t, err)
+	assert.Equal(t, 5, n)
+	buf := make([]byte, 4)
+	n, err = file.ReadAt(buf, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestMkdir(t *testing.T) {
@@ -216,6 +257,7 @@ func TestRequestMkdir(t *testing.T) {
 	f, err := r.fetch("/foo")
 	assert.Nil(t, err)
 	assert.True(t, f.isdir)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestRemove(t *testing.T) {
@@ -230,6 +272,7 @@ func TestRequestRemove(t *testing.T) {
 	assert.Nil(t, err)
 	_, err = r.fetch("/foo")
 	assert.Equal(t, err, os.ErrNotExist)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestRename(t *testing.T) {
@@ -242,10 +285,23 @@ func TestRequestRename(t *testing.T) {
 	assert.Nil(t, err)
 	err = p.cli.Rename("/foo", "/bar")
 	assert.Nil(t, err)
-	_, err = r.fetch("/bar")
-	assert.Nil(t, err)
+	f, err := r.fetch("/bar")
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+	assert.Equal(t, "bar", f.Name())
 	_, err = r.fetch("/foo")
-	assert.Equal(t, err, os.ErrNotExist)
+	assert.Equal(t, os.ErrNotExist, err)
+	err = p.cli.PosixRename("/bar", "/baz")
+	assert.Nil(t, err)
+	f, err = r.fetch("/baz")
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+	assert.Equal(t, "baz", f.Name())
+	_, err = r.fetch("/bar")
+	assert.Equal(t, os.ErrNotExist, err)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestRenameFail(t *testing.T) {
@@ -257,6 +313,7 @@ func TestRequestRenameFail(t *testing.T) {
 	assert.Nil(t, err)
 	err = p.cli.Rename("/foo", "/bar")
 	assert.IsType(t, &StatusError{}, err)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestStat(t *testing.T) {
@@ -270,6 +327,7 @@ func TestRequestStat(t *testing.T) {
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
 	assert.NoError(t, err)
+	checkRequestServerAllocator(t, p)
 }
 
 // NOTE: Setstat is a noop in the request server tests, but we want to test
@@ -288,6 +346,7 @@ func TestRequestSetstat(t *testing.T) {
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestFstat(t *testing.T) {
@@ -304,6 +363,38 @@ func TestRequestFstat(t *testing.T) {
 		assert.Equal(t, fi.Mode(), os.FileMode(0644))
 		assert.NoError(t, testOsSys(fi.Sys()))
 	}
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestFsetstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	require.NoError(t, err)
+	fp, err := p.cli.OpenFile("/foo", os.O_WRONLY)
+	require.NoError(t, err)
+	err = fp.Truncate(2)
+	fi, err := fp.Stat()
+	require.NoError(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(2))
+	err = fp.Truncate(5)
+	require.NoError(t, err)
+	fi, err = fp.Stat()
+	require.NoError(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(5))
+	err = fp.Close()
+	assert.NoError(t, err)
+	rf, err := p.cli.Open("/foo")
+	assert.NoError(t, err)
+	defer rf.Close()
+	contents := make([]byte, 20)
+	n, err := rf.Read(contents)
+	assert.EqualError(t, err, io.EOF.Error())
+	assert.Equal(t, 5, n)
+	assert.Equal(t, []byte{'h', 'e', 0, 0, 0}, contents[0:n])
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestStatFail(t *testing.T) {
@@ -312,6 +403,43 @@ func TestRequestStatFail(t *testing.T) {
 	fi, err := p.cli.Stat("/foo")
 	assert.Nil(t, fi)
 	assert.True(t, os.IsNotExist(err))
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestLstat(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	require.NoError(t, err)
+	err = p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+	fi, err := p.cli.Lstat("/bar")
+	require.NoError(t, err)
+	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestLink(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	_, err := putTestFile(p.cli, "/foo", "hello")
+	assert.Nil(t, err)
+	err = p.cli.Link("/foo", "/bar")
+	assert.Nil(t, err)
+	r := p.testHandler()
+	fi, err := r.fetch("/bar")
+	assert.Nil(t, err)
+	assert.True(t, int(fi.Size()) == len("hello"))
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestLinkFail(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+	err := p.cli.Link("/foo", "/bar")
+	t.Log(err)
+	assert.True(t, os.IsNotExist(err))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestSymlink(t *testing.T) {
@@ -325,6 +453,7 @@ func TestRequestSymlink(t *testing.T) {
 	fi, err := r.fetch("/bar")
 	assert.Nil(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestSymlinkFail(t *testing.T) {
@@ -332,6 +461,7 @@ func TestRequestSymlinkFail(t *testing.T) {
 	defer p.Close()
 	err := p.cli.Symlink("/foo", "/bar")
 	assert.True(t, os.IsNotExist(err))
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestReadlink(t *testing.T) {
@@ -344,6 +474,7 @@ func TestRequestReadlink(t *testing.T) {
 	rl, err := p.cli.ReadLink("/bar")
 	assert.Nil(t, err)
 	assert.Equal(t, "foo", rl)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestReaddir(t *testing.T) {
@@ -353,13 +484,21 @@ func TestRequestReaddir(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		fname := fmt.Sprintf("/foo_%02d", i)
 		_, err := putTestFile(p.cli, fname, fname)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatal("expected no error, got:", err)
+		}
 	}
+	_, err := p.cli.ReadDir("/foo_01")
+	assert.Equal(t, &StatusError{Code: sshFxFailure,
+		msg: " /foo_01: not a directory"}, err)
+	_, err = p.cli.ReadDir("/does_not_exist")
+	assert.Equal(t, os.ErrNotExist, err)
 	di, err := p.cli.ReadDir("/")
 	assert.Nil(t, err)
 	assert.Len(t, di, 100)
 	names := []string{di[18].Name(), di[81].Name()}
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
+	checkRequestServerAllocator(t, p)
 }
 
 func TestCleanPath(t *testing.T) {
@@ -385,4 +524,5 @@ func TestCleanPath(t *testing.T) {
 	assert.Equal(t, "/a", cleanPath("a"+bslash))
 	assert.Equal(t, "/a/b/c",
 		cleanPath(bslash+"a"+bslash+bslash+"b"+bslash+bslash+"c"+bslash))
+	assert.Equal(t, "/C:/a", cleanPath("C:"+bslash+"a"))
 }

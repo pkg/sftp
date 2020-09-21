@@ -22,23 +22,66 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/kr/fs"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ssh"
 )
 
-var testSftpClientBin = flag.String("sftp_client", "/usr/bin/sftp", "location of the sftp client binary")
+func TestMain(m *testing.M) {
+	sftpClientLocation, _ := exec.LookPath("sftp")
+	testSftpClientBin = flag.String("sftp_client", sftpClientLocation, "location of the sftp client binary")
+
+	lookSFTPServer := []string{
+		"/usr/libexec/sftp-server",
+		"/usr/lib/openssh/sftp-server",
+		"/usr/lib/ssh/sftp-server",
+	}
+	sftpServer, _ := exec.LookPath("sftp-server")
+	if len(sftpServer) == 0 {
+		for _, location := range lookSFTPServer {
+			if _, err := os.Stat(location); err == nil {
+				sftpServer = location
+				break
+			}
+		}
+	}
+	testSftp = flag.String("sftp", sftpServer, "location of the sftp server binary")
+	flag.Parse()
+
+	os.Exit(m.Run())
+}
+
+func skipIfWindows(t testing.TB) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping test on windows")
+	}
+}
+
+func skipIfPlan9(t testing.TB) {
+	if runtime.GOOS == "plan9" {
+		t.Skip("skipping test on plan9")
+	}
+}
+
+var testServerImpl = flag.Bool("testserver", false, "perform integration tests against sftp package server instance")
+var testIntegration = flag.Bool("integration", false, "perform integration tests against sftp server process")
+var testAllocator = flag.Bool("allocator", false, "perform tests using the allocator")
+var testSftp *string
+
+var testSftpClientBin *string
 var sshServerDebugStream = ioutil.Discard
 var sftpServerDebugStream = ioutil.Discard
 var sftpClientDebugStream = ioutil.Discard
 
 const (
-	GOLANG_SFTP  = true
-	OPENSSH_SFTP = false
+	GolangSFTP  = true
+	OpenSSHSFTP = false
 )
 
 var (
@@ -419,19 +462,55 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 	}
 	cmd := exec.Command(*testSftpClientBin, args...)
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdin = bytes.NewBufferString(script)
 	cmd.Stdout = &stdout
-	cmd.Stderr = sftpClientDebugStream
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 	err = cmd.Wait()
+	if err != nil {
+		err = fmt.Errorf("%v: %s", err, stderr.String())
+	}
 	return stdout.String(), err
 }
 
+// assert.Eventually seems to have a data rate on macOS with go 1.14 so replace it with this simpler function
+func waitForCondition(t *testing.T, condition func() bool) {
+	start := time.Now()
+	tick := 10 * time.Millisecond
+	waitFor := 100 * time.Millisecond
+	for !condition() {
+		time.Sleep(tick)
+		if time.Since(start) > waitFor {
+			break
+		}
+	}
+	assert.True(t, condition())
+}
+
+func checkAllocatorBeforeServerClose(t *testing.T, alloc *allocator) {
+	if alloc != nil {
+		// before closing the server we are, generally, waiting for new packets in recvPacket and we have a page allocated.
+		// Sometime the sendPacket returns some milliseconds after the client receives the response, and so we have 2
+		// allocated pages here, so wait some milliseconds. To avoid crashes we must be sure to not release the pages
+		// too soon.
+		waitForCondition(t, func() bool { return alloc.countUsedPages() <= 1 })
+	}
+}
+
+func checkAllocatorAfterServerClose(t *testing.T, alloc *allocator) {
+	if alloc != nil {
+		// wait for the server cleanup
+		waitForCondition(t, func() bool { return alloc.countUsedPages() == 0 })
+		waitForCondition(t, func() bool { return alloc.countAvailablePages() == 0 })
+	}
+}
+
 func TestServerCompareSubsystems(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
-	listenerOp, hostOp, portOp := testServer(t, OPENSSH_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
+	listenerOp, hostOp, portOp := testServer(t, OpenSSHSFTP, READONLY)
 	defer listenerGo.Close()
 	defer listenerOp.Close()
 
@@ -505,7 +584,7 @@ func randName() string {
 }
 
 func TestServerMkdirRmdir(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
 
 	tmpDir := "/tmp/" + randName()
@@ -531,8 +610,38 @@ func TestServerMkdirRmdir(t *testing.T) {
 	}
 }
 
+func TestServerLink(t *testing.T) {
+	skipIfWindows(t) // No hard links on windows.
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpFileLocalData := randData(999)
+
+	linkdest := "/tmp/" + randName()
+	defer os.RemoveAll(linkdest)
+	if err := ioutil.WriteFile(linkdest, tmpFileLocalData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	link := "/tmp/" + randName()
+	defer os.RemoveAll(link)
+
+	// now create a hard link within the new directory
+	if output, err := runSftpClient(t, fmt.Sprintf("ln %s %s", linkdest, link), "/", hostGo, portGo); err != nil {
+		t.Fatalf("failed: %v %v", err, string(output))
+	}
+
+	// file should now exist and be the same size as linkdest
+	if stat, err := os.Lstat(link); err != nil {
+		t.Fatal(err)
+	} else if int(stat.Size()) != len(tmpFileLocalData) {
+		t.Fatalf("wrong size: %v", len(tmpFileLocalData))
+	}
+}
+
 func TestServerSymlink(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	skipIfWindows(t) // No symlinks on windows.
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
 
 	link := "/tmp/" + randName()
@@ -552,7 +661,7 @@ func TestServerSymlink(t *testing.T) {
 }
 
 func TestServerPut(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
 
 	tmpFileLocal := "/tmp/" + randName()
@@ -581,8 +690,55 @@ func TestServerPut(t *testing.T) {
 	}
 }
 
+func TestServerResume(t *testing.T) {
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
+	defer listenerGo.Close()
+
+	tmpFileLocal := "/tmp/" + randName()
+	tmpFileRemote := "/tmp/" + randName()
+	defer os.RemoveAll(tmpFileLocal)
+	defer os.RemoveAll(tmpFileRemote)
+
+	t.Logf("put: local %v remote %v", tmpFileLocal, tmpFileRemote)
+
+	// create a local file with random contents to be pushed to the server
+	tmpFileLocalData := randData(2 * 1024 * 1024)
+	// only write half the data to simulate a split upload
+	half := 1024 * 1024
+	err := ioutil.WriteFile(tmpFileLocal, tmpFileLocalData[:half], 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// sftp the first half of the file to the server
+	output, err := runSftpClient(t, "put "+tmpFileLocal+" "+tmpFileRemote,
+		"/", hostGo, portGo)
+	if err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// write the full file out
+	err = ioutil.WriteFile(tmpFileLocal, tmpFileLocalData, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// re-sftp the full file with the append flag set
+	output, err = runSftpClient(t, "put -a "+tmpFileLocal+" "+tmpFileRemote,
+		"/", hostGo, portGo)
+	if err != nil {
+		t.Fatalf("runSftpClient failed: %v, output\n%v\n", err, output)
+	}
+
+	// tmpFileRemote should now exist, with the same contents
+	if tmpFileRemoteData, err := ioutil.ReadFile(tmpFileRemote); err != nil {
+		t.Fatal(err)
+	} else if string(tmpFileLocalData) != string(tmpFileRemoteData) {
+		t.Fatal("contents of file incorrect after put")
+	}
+}
+
 func TestServerGet(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
 
 	tmpFileLocal := "/tmp/" + randName()
@@ -678,7 +834,7 @@ func compareDirectoriesRecursive(t *testing.T, aroot, broot string) {
 }
 
 func TestServerPutRecursive(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
 
 	dirLocal, err := os.Getwd()
@@ -699,7 +855,7 @@ func TestServerPutRecursive(t *testing.T) {
 }
 
 func TestServerGetRecursive(t *testing.T) {
-	listenerGo, hostGo, portGo := testServer(t, GOLANG_SFTP, READONLY)
+	listenerGo, hostGo, portGo := testServer(t, GolangSFTP, READONLY)
 	defer listenerGo.Close()
 
 	dirRemote, err := os.Getwd()

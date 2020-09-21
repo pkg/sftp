@@ -21,7 +21,14 @@ func (s _testSender) sendPacket(p encoding.BinaryMarshaler) error {
 	return nil
 }
 
-type fakepacket uint32
+type fakepacket struct {
+	reqid uint32
+	oid   uint32
+}
+
+func fake(rid, order uint32) fakepacket {
+	return fakepacket{reqid: rid, oid: order}
+}
 
 func (fakepacket) MarshalBinary() ([]byte, error) {
 	return []byte{}, nil
@@ -32,40 +39,51 @@ func (fakepacket) UnmarshalBinary([]byte) error {
 }
 
 func (f fakepacket) id() uint32 {
-	return uint32(f)
+	return f.reqid
 }
 
 type pair struct {
-	in  fakepacket
-	out fakepacket
+	in, out fakepacket
+}
+
+type orderedPair struct {
+	in  orderedRequest
+	out orderedResponse
 }
 
 // basic test
 var ttable1 = []pair{
-	pair{fakepacket(0), fakepacket(0)},
-	pair{fakepacket(1), fakepacket(1)},
-	pair{fakepacket(2), fakepacket(2)},
-	pair{fakepacket(3), fakepacket(3)},
+	{fake(0, 0), fake(0, 0)},
+	{fake(1, 1), fake(1, 1)},
+	{fake(2, 2), fake(2, 2)},
+	{fake(3, 3), fake(3, 3)},
 }
 
 // outgoing packets out of order
 var ttable2 = []pair{
-	pair{fakepacket(0), fakepacket(0)},
-	pair{fakepacket(1), fakepacket(4)},
-	pair{fakepacket(2), fakepacket(1)},
-	pair{fakepacket(3), fakepacket(3)},
-	pair{fakepacket(4), fakepacket(2)},
+	{fake(10, 0), fake(12, 2)},
+	{fake(11, 1), fake(11, 1)},
+	{fake(12, 2), fake(13, 3)},
+	{fake(13, 3), fake(10, 0)},
 }
 
-// incoming packets out of order
+// request ids are not incremental
 var ttable3 = []pair{
-	pair{fakepacket(2), fakepacket(0)},
-	pair{fakepacket(1), fakepacket(1)},
-	pair{fakepacket(3), fakepacket(2)},
-	pair{fakepacket(0), fakepacket(3)},
+	{fake(7, 0), fake(7, 0)},
+	{fake(1, 1), fake(1, 1)},
+	{fake(9, 2), fake(3, 3)},
+	{fake(3, 3), fake(9, 2)},
 }
 
-var tables = [][]pair{ttable1, ttable2, ttable3}
+// request ids are all the same
+var ttable4 = []pair{
+	{fake(1, 0), fake(1, 0)},
+	{fake(1, 1), fake(1, 1)},
+	{fake(1, 2), fake(1, 3)},
+	{fake(1, 3), fake(1, 2)},
+}
+
+var tables = [][]pair{ttable1, ttable2, ttable3, ttable4}
 
 func TestPacketManager(t *testing.T) {
 	sender := newTestSender()
@@ -73,30 +91,37 @@ func TestPacketManager(t *testing.T) {
 
 	for i := range tables {
 		table := tables[i]
+		orderedPairs := make([]orderedPair, 0, len(table))
 		for _, p := range table {
+			orderedPairs = append(orderedPairs, orderedPair{
+				in:  orderedRequest{p.in, p.in.oid},
+				out: orderedResponse{p.out, p.out.oid},
+			})
+		}
+		for _, p := range orderedPairs {
 			s.incomingPacket(p.in)
 		}
-		for _, p := range table {
+		for _, p := range orderedPairs {
 			s.readyPacket(p.out)
 		}
-		for i := 0; i < len(table); i++ {
+		for _, p := range table {
 			pkt := <-sender.sent
-			id := pkt.(fakepacket).id()
-			assert.Equal(t, id, uint32(i))
+			id := pkt.(orderedResponse).id()
+			assert.Equal(t, id, p.in.id())
 		}
 	}
 	s.close()
 }
 
 func (p sshFxpRemovePacket) String() string {
-	return fmt.Sprintf("RmPct:%d", p.ID)
+	return fmt.Sprintf("RmPkt:%d", p.ID)
 }
 func (p sshFxpOpenPacket) String() string {
-	return fmt.Sprintf("OpPct:%d", p.ID)
+	return fmt.Sprintf("OpPkt:%d", p.ID)
 }
 func (p sshFxpWritePacket) String() string {
-	return fmt.Sprintf("WrPct:%d", p.ID)
+	return fmt.Sprintf("WrPkt:%d", p.ID)
 }
 func (p sshFxpClosePacket) String() string {
-	return fmt.Sprintf("ClPct:%d", p.ID)
+	return fmt.Sprintf("ClPkt:%d", p.ID)
 }

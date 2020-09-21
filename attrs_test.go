@@ -20,17 +20,17 @@ var unmarshalAttrsTests = []struct {
 	{marshal(nil, struct {
 		Flags uint32
 		Size  uint64
-	}{ssh_FILEXFER_ATTR_SIZE, 20}), &fileInfo{size: 20, mtime: time.Unix(int64(0), 0)}, nil},
+	}{sshFileXferAttrSize, 20}), &fileInfo{size: 20, mtime: time.Unix(int64(0), 0)}, nil},
 	{marshal(nil, struct {
 		Flags       uint32
 		Size        uint64
 		Permissions uint32
-	}{ssh_FILEXFER_ATTR_SIZE | ssh_FILEXFER_ATTR_PERMISSIONS, 20, 0644}), &fileInfo{size: 20, mode: os.FileMode(0644), mtime: time.Unix(int64(0), 0)}, nil},
+	}{sshFileXferAttrSize | sshFileXferAttrPermissions, 20, 0644}), &fileInfo{size: 20, mode: os.FileMode(0644), mtime: time.Unix(int64(0), 0)}, nil},
 	{marshal(nil, struct {
 		Flags                 uint32
 		Size                  uint64
 		UID, GID, Permissions uint32
-	}{ssh_FILEXFER_ATTR_SIZE | ssh_FILEXFER_ATTR_UIDGID | ssh_FILEXFER_ATTR_UIDGID | ssh_FILEXFER_ATTR_PERMISSIONS, 20, 1000, 1000, 0644}), &fileInfo{size: 20, mode: os.FileMode(0644), mtime: time.Unix(int64(0), 0)}, nil},
+	}{sshFileXferAttrSize | sshFileXferAttrUIDGID | sshFileXferAttrUIDGID | sshFileXferAttrPermissions, 20, 1000, 1000, 0644}), &fileInfo{size: 20, mode: os.FileMode(0644), mtime: time.Unix(int64(0), 0)}, nil},
 }
 
 func TestUnmarshalAttrs(t *testing.T) {

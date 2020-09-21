@@ -22,6 +22,7 @@ func (t *testHandler) Fileread(r *Request) (io.ReaderAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	return bytes.NewReader(t.filecontents), nil
 }
 
@@ -29,10 +30,12 @@ func (t *testHandler) Filewrite(r *Request) (io.WriterAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	return io.WriterAt(t.output), nil
 }
 
 func (t *testHandler) Filecmd(r *Request) error {
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	return t.err
 }
 
@@ -40,6 +43,7 @@ func (t *testHandler) Filelist(r *Request) (ListerAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 	f, err := os.Open(r.Filepath)
 	if err != nil {
 		return nil, err
@@ -56,11 +60,20 @@ type fakefile [10]byte
 
 var filecontents = []byte("file-data.")
 
+// XXX need new for creating test requests that supports Open-ing
 func testRequest(method string) *Request {
+	var flags uint32
+	switch method {
+	case "Get":
+		flags = flags | sshFxfRead
+	case "Put":
+		flags = flags | sshFxfWrite
+	}
 	request := &Request{
 		Filepath: "./request_test.go",
 		Method:   method,
 		Attrs:    []byte("foo"),
+		Flags:    flags,
 		Target:   "foo",
 		state:    state{RWMutex: new(sync.RWMutex)},
 	}
@@ -110,7 +123,7 @@ func getStatusMsg(p interface{}) string {
 }
 func checkOkStatus(t *testing.T, p interface{}) {
 	pkt := p.(sshFxpStatusPacket)
-	assert.Equal(t, pkt.StatusError.Code, uint32(ssh_FX_OK),
+	assert.Equal(t, pkt.StatusError.Code, uint32(sshFxOk),
 		"sshFxpStatusPacket not OK\n", pkt.StatusError.msg)
 }
 
@@ -129,13 +142,17 @@ func (f fakePacket) getHandle() string {
 }
 func (fakePacket) UnmarshalBinary(d []byte) error { return nil }
 
+// XXX can't just set method to Get, need to use Open to setup Get/Put
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
+	pkt := fakePacket{myid: 1}
+	request.open(handlers, pkt)
 	// req.length is 5, so we test reads in 5 byte chunks
 	for i, txt := range []string{"file-", "data."} {
-		pkt := &sshFxpReadPacket{uint32(i), "a", uint64(i * 5), 5}
-		rpkt := request.call(handlers, pkt)
+		pkt := &sshFxpReadPacket{ID: uint32(i), Handle: "a",
+			Offset: uint64(i * 5), Len: 5}
+		rpkt := request.call(handlers, pkt, nil, 0)
 		dpkt := rpkt.(*sshFxpDataPacket)
 		assert.Equal(t, dpkt.id(), uint32(i))
 		assert.Equal(t, string(dpkt.Data), txt)
@@ -148,18 +165,22 @@ func TestRequestCustomError(t *testing.T) {
 	pkt := fakePacket{myid: 1}
 	cmdErr := errors.New("stat not supported")
 	handlers.returnError(cmdErr)
-	rpkt := request.call(handlers, pkt)
+	rpkt := request.call(handlers, pkt, nil, 0)
 	assert.Equal(t, rpkt, statusFromError(rpkt, cmdErr))
 }
 
+// XXX can't just set method to Get, need to use Open to setup Get/Put
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
-	pkt := &sshFxpWritePacket{0, "a", 0, 5, []byte("file-")}
-	rpkt := request.call(handlers, pkt)
+	request.state.writerAt, _ = handlers.FilePut.Filewrite(request)
+	pkt := &sshFxpWritePacket{ID: 0, Handle: "a", Offset: 0, Length: 5,
+		Data: []byte("file-")}
+	rpkt := request.call(handlers, pkt, nil, 0)
 	checkOkStatus(t, rpkt)
-	pkt = &sshFxpWritePacket{1, "a", 5, 5, []byte("data.")}
-	rpkt = request.call(handlers, pkt)
+	pkt = &sshFxpWritePacket{ID: 1, Handle: "a", Offset: 5, Length: 5,
+		Data: []byte("data.")}
+	rpkt = request.call(handlers, pkt, nil, 0)
 	checkOkStatus(t, rpkt)
 	assert.Equal(t, "file-data.", handlers.getOutString())
 }
@@ -168,33 +189,64 @@ func TestRequestCmdr(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Mkdir")
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt)
+	rpkt := request.call(handlers, pkt, nil, 0)
 	checkOkStatus(t, rpkt)
 
 	handlers.returnError(errTest)
-	rpkt = request.call(handlers, pkt)
+	rpkt = request.call(handlers, pkt, nil, 0)
 	assert.Equal(t, rpkt, statusFromError(rpkt, errTest))
 }
 
-func TestRequestInfoList(t *testing.T)     { testInfoMethod(t, "List") }
-func TestRequestInfoReadlink(t *testing.T) { testInfoMethod(t, "Readlink") }
 func TestRequestInfoStat(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt)
+	rpkt := request.call(handlers, pkt, nil, 0)
 	spkt, ok := rpkt.(*sshFxpStatResponse)
 	assert.True(t, ok)
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
 }
 
-func testInfoMethod(t *testing.T, method string) {
+func TestRequestInfoList(t *testing.T) {
 	handlers := newTestHandlers()
-	request := testRequest(method)
+	request := testRequest("List")
+	request.handle = "1"
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt)
+	rpkt := request.opendir(handlers, pkt)
+	hpkt, ok := rpkt.(*sshFxpHandlePacket)
+	if assert.True(t, ok) {
+		assert.Equal(t, hpkt.Handle, "1")
+	}
+	pkt = fakePacket{myid: 2}
+	request.call(handlers, pkt, nil, 0)
+}
+func TestRequestInfoReadlink(t *testing.T) {
+	handlers := newTestHandlers()
+	request := testRequest("Readlink")
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt, nil, 0)
 	npkt, ok := rpkt.(*sshFxpNamePacket)
-	assert.True(t, ok)
-	assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
-	assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
+	if assert.True(t, ok) {
+		assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
+		assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
+	}
+}
+
+func TestOpendirHandleReuse(t *testing.T) {
+	handlers := newTestHandlers()
+	request := testRequest("Stat")
+	request.handle = "1"
+	pkt := fakePacket{myid: 1}
+	rpkt := request.call(handlers, pkt, nil, 0)
+	assert.IsType(t, &sshFxpStatResponse{}, rpkt)
+
+	request.Method = "List"
+	pkt = fakePacket{myid: 2}
+	rpkt = request.opendir(handlers, pkt)
+	if assert.IsType(t, &sshFxpHandlePacket{}, rpkt) {
+		hpkt := rpkt.(*sshFxpHandlePacket)
+		assert.Equal(t, hpkt.Handle, "1")
+	}
+	rpkt = request.call(handlers, pkt, nil, 0)
+	assert.IsType(t, &sshFxpNamePacket{}, rpkt)
 }

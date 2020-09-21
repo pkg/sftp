@@ -3,7 +3,9 @@ package sftp
 import (
 	"io"
 	"os"
+	"path"
 	"regexp"
+	"runtime"
 	"sync"
 	"syscall"
 	"testing"
@@ -161,10 +163,14 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 func clientServerPair(t *testing.T) (*Client, *Server) {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
+	var options []ServerOption
+	if *testAllocator {
+		options = append(options, WithAllocator())
+	}
 	server, err := NewServer(struct {
 		io.Reader
 		io.WriteCloser
-	}{sr, sw})
+	}{sr, sw}, options...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,11 +196,20 @@ func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
 		len(p.Data)
 
 	b := make([]byte, 0, l)
-	b = append(b, ssh_FXP_EXTENDED)
+	b = append(b, sshFxpExtended)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Extension)
 	b = marshalString(b, p.Data)
 	return b, nil
+}
+
+func checkServerAllocator(t *testing.T, server *Server) {
+	if server.pktMgr.alloc == nil {
+		return
+	}
+	checkAllocatorBeforeServerClose(t, server.pktMgr.alloc)
+	server.Close()
+	checkAllocatorAfterServerClose(t, server.pktMgr.alloc)
 }
 
 // test that errors are sent back when we request an invalid extended packet operation
@@ -209,7 +224,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
 	}
-	if typ != ssh_FXP_STATUS {
+	if typ != sshFxpStatus {
 		t.Fatalf("received non-FPX_STATUS packet: %v", typ)
 	}
 
@@ -218,13 +233,19 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if !ok {
 		t.Fatal("failed to convert error from unmarshalStatus to *StatusError")
 	}
-	if statusErr.Code != ssh_FX_OP_UNSUPPORTED {
-		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, ssh_FX_OP_UNSUPPORTED)
+	if statusErr.Code != sshFxOPUnsupported {
+		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, sshFxOPUnsupported)
 	}
+	checkServerAllocator(t, server)
 }
 
 // test that server handles concurrent requests correctly
 func TestConcurrentRequests(t *testing.T) {
+	skipIfWindows(t)
+	filename := "/etc/passwd"
+	if runtime.GOOS == "plan9" {
+		filename = "/lib/ndb/local"
+	}
 	client, server := clientServerPair(t)
 	defer client.Close()
 	defer server.Close()
@@ -238,9 +259,10 @@ func TestConcurrentRequests(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < 1024; j++ {
-				f, err := client.Open("/etc/passwd")
+				f, err := client.Open(filename)
 				if err != nil {
 					t.Errorf("failed to open file: %v", err)
+					continue
 				}
 				if err := f.Close(); err != nil {
 					t.Errorf("failed t close file: %v", err)
@@ -249,6 +271,7 @@ func TestConcurrentRequests(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	checkServerAllocator(t, server)
 }
 
 // Test error conversion
@@ -263,18 +286,82 @@ func TestStatusFromError(t *testing.T) {
 			StatusError: StatusError{Code: code},
 		}
 	}
-	test_cases := []test{
-		test{syscall.ENOENT, tpkt(1, ssh_FX_NO_SUCH_FILE)},
-		test{&os.PathError{Err: syscall.ENOENT},
-			tpkt(2, ssh_FX_NO_SUCH_FILE)},
-		test{&os.PathError{Err: errors.New("foo")}, tpkt(3, ssh_FX_FAILURE)},
-		test{ErrSshFxEof, tpkt(4, ssh_FX_EOF)},
-		test{ErrSshFxOpUnsupported, tpkt(5, ssh_FX_OP_UNSUPPORTED)},
-		test{io.EOF, tpkt(6, ssh_FX_EOF)},
-		test{os.ErrNotExist, tpkt(7, ssh_FX_NO_SUCH_FILE)},
+	testCases := []test{
+		{syscall.ENOENT, tpkt(1, sshFxNoSuchFile)},
+		{&os.PathError{Err: syscall.ENOENT},
+			tpkt(2, sshFxNoSuchFile)},
+		{&os.PathError{Err: errors.New("foo")}, tpkt(3, sshFxFailure)},
+		{ErrSSHFxEOF, tpkt(4, sshFxEOF)},
+		{ErrSSHFxOpUnsupported, tpkt(5, sshFxOPUnsupported)},
+		{io.EOF, tpkt(6, sshFxEOF)},
+		{os.ErrNotExist, tpkt(7, sshFxNoSuchFile)},
 	}
-	for _, tc := range test_cases {
+	for _, tc := range testCases {
 		tc.pkt.StatusError.msg = tc.err.Error()
 		assert.Equal(t, tc.pkt, statusFromError(tc.pkt, tc.err))
+	}
+}
+
+// This was written to test a race b/w open immediately followed by a stat.
+// Previous to this the Open would trigger the use of a worker pool, then the
+// stat packet would come in an hit the pool and return faster than the open
+// (returning a file-not-found error).
+// The below by itself wouldn't trigger the race however, I needed to add a
+// small sleep in the openpacket code to trigger the issue. I wanted to add a
+// way to inject that in the code but right now there is no good place for it.
+// I'm thinking after I convert the server into a request-server backend I
+// might be able to do something with the runWorker method passed into the
+// packet manager. But with the 2 implementations fo the server it just doesn't
+// fit well right now.
+func TestOpenStatRace(t *testing.T) {
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	// openpacket finishes to fast to trigger race in tests
+	// need to add a small sleep on server to openpackets somehow
+	tmppath := path.Join(os.TempDir(), "stat_race")
+	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
+	ch := make(chan result, 3)
+	id1 := client.nextID()
+	client.dispatchRequest(ch, sshFxpOpenPacket{
+		ID:     id1,
+		Path:   tmppath,
+		Pflags: pflags,
+	})
+	id2 := client.nextID()
+	client.dispatchRequest(ch, sshFxpLstatPacket{
+		ID:   id2,
+		Path: tmppath,
+	})
+	testreply := func(id uint32, ch chan result) {
+		r := <-ch
+		switch r.typ {
+		case sshFxpAttrs, sshFxpHandle: // ignore
+		case sshFxpStatus:
+			err := normaliseError(unmarshalStatus(id, r.data))
+			assert.NoError(t, err, "race hit, stat before open")
+		default:
+			assert.Fail(t, "Unexpected type")
+		}
+	}
+	testreply(id1, ch)
+	testreply(id2, ch)
+	os.Remove(tmppath)
+	checkServerAllocator(t, server)
+}
+
+// Ensure that proper error codes are returned for non existent files, such
+// that they are mapped back to a 'not exists' error on the client side.
+func TestStatNonExistent(t *testing.T) {
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	for _, file := range []string{"/doesnotexist", "/doesnotexist/a/b"} {
+		_, err := client.Stat(file)
+		if !os.IsNotExist(err) {
+			t.Errorf("expected 'does not exist' err for file %q.  got: %v", file, err)
+		}
 	}
 }
