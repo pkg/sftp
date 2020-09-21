@@ -135,7 +135,7 @@ func WithAllocator() ServerOption {
 // Files will not be served outside this directory.
 func RootDirectory(root string) ServerOption {
 	return func(s *Server) error {
-		s.systemRoot = filepath.Abs(root)
+		s.systemRoot, _ = filepath.Abs(root)
 		return nil
 	}
 }
@@ -151,7 +151,7 @@ func (svr *Server) sftpServerWorker(pktChan chan orderedRequest) error {
 		// permission checks
 		permiss := true
 		if stat, err := os.Stat(svr.systemRoot); err == nil && stat.IsDir() {
-			switch pkt := pkt.(type) {
+			switch pkt := pkt.requestPacket.(type) {
 			case *sshFxpRenamePacket:
 				old, e := filepath.Abs(pkt.Oldpath)
 				new, e2 := filepath.Abs(pkt.Newpath)
