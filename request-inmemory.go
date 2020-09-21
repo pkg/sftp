@@ -177,24 +177,10 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.remove(r.Filepath)
 
 	case "Mkdir":
-		dir, err := fs.newfile(r.Filepath, false)
-		if err != nil {
-			return err
-		}
-
-		dir.isdir = true
+		return fs.mkdir(r.Filepath)
 
 	case "Link":
-		file, err := fs.fetch(r.Filepath)
-		if err != nil {
-			return err
-		}
-
-		if file.IsDir() {
-			return fmt.Errorf("hard link not allowed for directory")
-		}
-
-		fs.files[r.Target] = file
+		return fs.link(r.Filepath, r.Target)
 
 	case "Symlink":
 		_, err := fs.lfetch(r.Target)
@@ -209,6 +195,17 @@ func (fs *root) Filecmd(r *Request) error {
 
 		link.symlink = r.Filepath
 	}
+	return nil
+}
+
+func (fs *root) mkdir(pathname string) error {
+	dir, err := fs.newfile(pathname, false)
+	if err != nil {
+		return err
+	}
+
+	dir.isdir = true
+
 	return nil
 }
 
@@ -237,6 +234,21 @@ func (fs *root) rmdir(pathname string) error {
 	}
 
 	delete(fs.files, pathname)
+
+	return nil
+}
+
+func (fs *root) link(oldpath, newpath string) error {
+	file, err := fs.fetch(oldpath)
+	if err != nil {
+		return err
+	}
+
+	if file.IsDir() {
+		return errors.New("hard link not allowed for directory")
+	}
+
+	fs.files[newpath] = file
 
 	return nil
 }
