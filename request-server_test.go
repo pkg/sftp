@@ -88,7 +88,8 @@ func TestRequestSplitWrite(t *testing.T) {
 	w.Write([]byte(contents))
 	w.Close()
 	r := p.testHandler()
-	f, _ := r.fetch("/foo")
+	f, err := r.fetch("/foo")
+	require.NoError(t, err)
 	assert.Equal(t, contents, string(f.content))
 	checkRequestServerAllocator(t, p)
 }
@@ -307,8 +308,8 @@ func TestRequestMkdir(t *testing.T) {
 	require.NoError(t, err)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
-	assert.NoError(t, err)
-	assert.True(t, f.isdir)
+	require.NoError(t, err)
+	assert.True(t, f.IsDir())
 	checkRequestServerAllocator(t, p)
 }
 
@@ -374,11 +375,11 @@ func TestRequestStat(t *testing.T) {
 	_, err := putTestFile(p.cli, "/foo", "hello")
 	require.NoError(t, err)
 	fi, err := p.cli.Stat("/foo")
+	require.NoError(t, err)
 	assert.Equal(t, fi.Name(), "foo")
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
-	assert.NoError(t, err)
 	checkRequestServerAllocator(t, p)
 }
 
@@ -473,14 +474,17 @@ func TestRequestLstat(t *testing.T) {
 func TestRequestLink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	_, err := putTestFile(p.cli, "/foo", "hello")
 	require.NoError(t, err)
+
 	err = p.cli.Link("/foo", "/bar")
 	require.NoError(t, err)
-	r := p.testHandler()
-	fi, err := r.fetch("/bar")
-	require.NoError(t, err)
-	assert.True(t, int(fi.Size()) == len("hello"))
+
+	content, err := getTestFile(p.cli, "/bar")
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("hello"), content)
+
 	checkRequestServerAllocator(t, p)
 }
 
@@ -508,11 +512,11 @@ func TestRequestSymlink(t *testing.T) {
 	r := p.testHandler()
 
 	fi, err := r.lfetch("/bar")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
 
 	fi, err = r.lfetch("/baz")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
 
 	content, err := getTestFile(p.cli, "/baz")
@@ -624,8 +628,8 @@ func TestRequestReaddir(t *testing.T) {
 	_, err = p.cli.ReadDir("/does_not_exist")
 	assert.Equal(t, os.ErrNotExist, err)
 	di, err := p.cli.ReadDir("/")
-	assert.NoError(t, err)
-	assert.Len(t, di, 100)
+	require.NoError(t, err)
+	require.Len(t, di, 100)
 	names := []string{di[18].Name(), di[81].Name()}
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
 	checkRequestServerAllocator(t, p)
