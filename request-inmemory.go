@@ -20,9 +20,9 @@ import (
 // InMemHandler returns a Hanlders object with the test handlers.
 func InMemHandler() Handlers {
 	root := &root{
-		files: make(map[string]*memFile),
+		rootFile: &memFile{name: "/", isdir: true},
+		files:    make(map[string]*memFile),
 	}
-	root.memFile = newMemFile("/", true)
 	return Handlers{root, root, root, root}
 }
 
@@ -396,8 +396,8 @@ func (fs *root) Lstat(r *Request) (ListerAt, error) {
 
 // In memory file-system-y thing that the Hanlders live on
 type root struct {
-	*memFile
-	mockErr error
+	rootFile *memFile
+	mockErr  error
 
 	mu    sync.Mutex
 	files map[string]*memFile
@@ -411,7 +411,7 @@ func (fs *root) returnErr(err error) {
 
 func (fs *root) lfetch(path string) (*memFile, error) {
 	if path == "/" {
-		return fs.memFile, nil
+		return fs.rootFile, nil
 	}
 
 	file, ok := fs.files[path]
