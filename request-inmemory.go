@@ -28,10 +28,22 @@ func InMemHandler() Handlers {
 
 // Example Handlers
 func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
+	flags := r.Pflags()
+	if !flags.Read {
+		// sanity check
+		return nil, os.ErrInvalid
+	}
+
 	return fs.OpenFile(r)
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
+	flags := r.Pflags()
+	if !flags.Write {
+		// sanity check
+		return nil, os.ErrInvalid
+	}
+
 	return fs.OpenFile(r)
 }
 
