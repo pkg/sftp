@@ -20,7 +20,7 @@ import (
 // InMemHandler returns a Hanlders object with the test handlers.
 func InMemHandler() Handlers {
 	root := &root{
-		rootFile: &memFile{name: "/", isdir: true},
+		rootFile: &memFile{name: "/", modtime: time.Now(), isdir: true},
 		files:    make(map[string]*memFile),
 	}
 	return Handlers{root, root, root, root}
@@ -94,7 +94,8 @@ func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
 	pathname = path.Join(dir.name, filename)
 
 	file := &memFile{
-		name: pathname,
+		name:    pathname,
+		modtime: time.Now(),
 	}
 	fs.files[pathname] = file
 
@@ -474,15 +475,6 @@ type memFile struct {
 	mu      sync.RWMutex
 	content []byte
 	err     error
-}
-
-// factory to make sure modtime is set
-func newMemFile(name string, isdir bool) *memFile {
-	return &memFile{
-		name:    name,
-		modtime: time.Now(),
-		isdir:   isdir,
-	}
 }
 
 // These are helper functions, they must be called while holding the memFile.mu mutex
