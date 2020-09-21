@@ -202,6 +202,18 @@ func (fs *root) mkdir(pathname string) error {
 	return nil
 }
 
+func (fs *root) Mkdir(r *Request) error {
+	if fs.mockErr != nil {
+		return fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.mkdir(r.Filepath)
+}
+
 func (fs *root) rmdir(pathname string) error {
 	// does not follow symlinks!
 	file, err := fs.lfetch(pathname)
@@ -231,6 +243,18 @@ func (fs *root) rmdir(pathname string) error {
 	return nil
 }
 
+func (fs *root) Rmdir(r *Request) error {
+	if fs.mockErr != nil {
+		return fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.rmdir(r.Filepath)
+}
+
 func (fs *root) link(oldpath, newpath string) error {
 	file, err := fs.fetch(oldpath)
 	if err != nil {
@@ -244,6 +268,18 @@ func (fs *root) link(oldpath, newpath string) error {
 	fs.files[newpath] = file
 
 	return nil
+}
+
+func (fs *root) Link(r *Request) error {
+	if fs.mockErr != nil {
+		return fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.link(r.Filepath, r.Target)
 }
 
 func (fs *root) remove(pathname string) error {
@@ -261,6 +297,18 @@ func (fs *root) remove(pathname string) error {
 	delete(fs.files, file.name)
 
 	return nil
+}
+
+func (fs *root) Remove(r *Request) error {
+	if fs.mockErr != nil {
+		return fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.remove(r.Filepath)
 }
 
 type listerat []os.FileInfo
