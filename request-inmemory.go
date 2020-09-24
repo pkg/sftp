@@ -176,17 +176,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.link(r.Filepath, r.Target)
 
 	case "Symlink":
-		_, err := fs.lfetch(r.Target)
-		if err != os.ErrNotExist {
-			return os.ErrExist
-		}
-
-		link, err := fs.newfile(r.Target, false)
-		if err != nil {
-			return err
-		}
-
-		link.symlink = r.Filepath
+		return fs.symlink(r.Filepath, r.Target)
 	}
 	return nil
 }
@@ -200,18 +190,6 @@ func (fs *root) mkdir(pathname string) error {
 	dir.isdir = true
 
 	return nil
-}
-
-func (fs *root) Mkdir(r *Request) error {
-	if fs.mockErr != nil {
-		return fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	return fs.mkdir(r.Filepath)
 }
 
 func (fs *root) rmdir(pathname string) error {
@@ -243,18 +221,6 @@ func (fs *root) rmdir(pathname string) error {
 	return nil
 }
 
-func (fs *root) Rmdir(r *Request) error {
-	if fs.mockErr != nil {
-		return fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	return fs.rmdir(r.Filepath)
-}
-
 func (fs *root) link(oldpath, newpath string) error {
 	file, err := fs.fetch(oldpath)
 	if err != nil {
@@ -270,16 +236,22 @@ func (fs *root) link(oldpath, newpath string) error {
 	return nil
 }
 
-func (fs *root) Link(r *Request) error {
-	if fs.mockErr != nil {
-		return fs.mockErr
+// symlink() creates a symbolic link named `linkpath` which contains the string `target`.
+// NOTE! This would be called with `symlink(req.Filepath, req.Target)` due to different semantics.
+func (fs *root) symlink(target, linkpath string) error {
+	_, err := fs.lfetch(linkpath)
+	if err != os.ErrNotExist {
+		return os.ErrExist
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
 
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
+	link, err := fs.newfile(linkpath, false)
+	if err != nil {
+		return err
+	}
 
-	return fs.link(r.Filepath, r.Target)
+	link.symlink = target
+
+	return nil
 }
 
 func (fs *root) remove(pathname string) error {
@@ -299,18 +271,6 @@ func (fs *root) remove(pathname string) error {
 	return nil
 }
 
-func (fs *root) Remove(r *Request) error {
-	if fs.mockErr != nil {
-		return fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	return fs.remove(r.Filepath)
-}
-
 type listerat []os.FileInfo
 
 // Modeled after strings.Reader's ReadAt() implementation
@@ -327,14 +287,47 @@ func (f listerat) ListAt(ls []os.FileInfo, offset int64) (int, error) {
 }
 
 func (fs *root) Filelist(r *Request) (ListerAt, error) {
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
 	switch r.Method {
 	case "List":
-		return fs.ReadDir(r)
+		files, err := fs.readdir(r.Filepath)
+		if err != nil {
+			return nil, err
+		}
+		return listerat(files), nil
+
 	case "Stat":
-		return fs.Stat(r)
+		file, err := fs.fetch(r.Filepath)
+		if err != nil {
+			return nil, err
+		}
+		return listerat{file}, nil
+
 	case "Readlink":
-		return fs.ReadLink(r)
+		symlink, err := fs.readlink(r.Filepath)
+		if err != nil {
+			return nil, err
+		}
+
+		file, err := fs.lfetch(symlink)
+		if err != nil {
+			// return a dummy memFile, with appropriate name.
+			return listerat{&memFile{
+				name: symlink,
+				err:  os.ErrNotExist, // prevent accidental use as a reader/writer.
+			}}, nil
+		}
+
+		return listerat{file}, nil
 	}
+
 	return nil, nil
 }
 
@@ -361,23 +354,6 @@ func (fs *root) readdir(pathname string) ([]os.FileInfo, error) {
 	return files, nil
 }
 
-func (fs *root) ReadDir(r *Request) (ListerAt, error) {
-	if fs.mockErr != nil {
-		return nil, fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	files, err := fs.readdir(r.Filepath)
-	if err != nil {
-		return nil, err
-	}
-
-	return listerat(files), nil
-}
-
 func (fs *root) readlink(pathname string) (string, error) {
 	file, err := fs.lfetch(pathname)
 	if err != nil {
@@ -389,45 +365,6 @@ func (fs *root) readlink(pathname string) (string, error) {
 	}
 
 	return file.symlink, nil
-}
-
-func (fs *root) ReadLink(r *Request) (ListerAt, error) {
-	if fs.mockErr != nil {
-		return nil, fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	symlink, err := fs.readlink(r.Filepath)
-
-	file, err := fs.lfetch(symlink)
-	if err != nil {
-		// return a dummy memFile, with appropriate name.
-		return listerat{&memFile{
-			name: symlink,
-			err:  os.ErrNotExist, // prevent accidental use as a reader/writer.
-		}}, nil
-	}
-
-	return listerat{file}, nil
-}
-
-func (fs *root) Stat(r *Request) (ListerAt, error) {
-	if fs.mockErr != nil {
-		return nil, fs.mockErr
-	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
-
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	file, err := fs.fetch(r.Filepath)
-	if err != nil {
-		return nil, err
-	}
-	return listerat{file}, nil
 }
 
 // implements LstatFileLister interface
