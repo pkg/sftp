@@ -57,6 +57,8 @@ func requestFromPacket(ctx context.Context, pkt hasPath) *Request {
 	case *sshFxpRenamePacket:
 		request.Target = cleanPath(p.Newpath)
 	case *sshFxpSymlinkPacket:
+		// NOTE: given a POSIX compliant signature: symlink(target, linkpath string)
+		// this makes Request.Target the linkpath, and Request.Filepath the target.
 		request.Target = cleanPath(p.Linkpath)
 	case *sshFxpExtendedPacketHardlink:
 		request.Target = cleanPath(p.Newpath)

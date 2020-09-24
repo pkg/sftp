@@ -159,6 +159,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.link(r.Filepath, r.Target)
 
 	case "Symlink":
+		// NOTE: r.Filepath is the target, and r.Target is the linkpath.
 		return fs.symlink(r.Filepath, r.Target)
 	}
 
