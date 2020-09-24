@@ -6,12 +6,10 @@ package sftp
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
 	"sort"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -141,27 +139,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return nil
 
 	case "Rename":
-		file, err := fs.fetch(r.Filepath)
-		if err != nil {
-			return err
-		}
-		if _, ok := fs.files[r.Target]; ok {
-			return &os.LinkError{Op: "rename", Old: r.Filepath, New: r.Target,
-				Err: fmt.Errorf("dest file exists")}
-		}
-		file.name = r.Target
-		fs.files[r.Target] = file
-		delete(fs.files, r.Filepath)
-
-		if file.IsDir() {
-			for path, file := range fs.files {
-				if strings.HasPrefix(path, r.Filepath+"/") {
-					file.name = r.Target + path[len(r.Filepath):]
-					fs.files[r.Target+path[len(r.Filepath):]] = file
-					delete(fs.files, path)
-				}
-			}
-		}
+		return fs.rename(r.Filepath, r.Target)
 
 	case "Rmdir":
 		return fs.rmdir(r.Filepath)
@@ -178,6 +156,55 @@ func (fs *root) Filecmd(r *Request) error {
 	case "Symlink":
 		return fs.symlink(r.Filepath, r.Target)
 	}
+
+	return nil
+}
+
+func (fs *root) rename(oldpath, newpath string) error {
+	file, err := fs.lfetch(oldpath)
+	if err != nil {
+		return err
+	}
+
+	dirname, filename := path.Dir(newpath), path.Base(newpath)
+
+	dir, err := fs.fetchMaybeExclusive(dirname, false)
+	if err != nil {
+		return err
+	}
+
+	if !dir.IsDir() {
+		return syscall.ENOTDIR
+	}
+
+	newpath = path.Join(dir.name, filename)
+
+	// SSH SPEC: "It is an error if there already exists a file with the name specified by newpath."
+	// This varies from the POSIX specification, that says it should replace the new file.
+	if _, err = fs.lfetch(newpath); err != os.ErrNotExist {
+		return &os.LinkError{
+			Op:  "rename",
+			Old: oldpath,
+			New: newpath,
+			Err: os.ErrExist,
+		}
+	}
+
+	file.name = newpath
+	fs.files[newpath] = file
+
+	if file.IsDir() {
+		for name, file := range fs.files {
+			if path.Dir(name) == oldpath {
+				file.name = path.Join(newpath, path.Base(name))
+				fs.files[file.name] = file
+				delete(fs.files, name)
+			}
+		}
+	}
+
+	delete(fs.files, oldpath)
+
 	return nil
 }
 
