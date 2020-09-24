@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -58,26 +59,31 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 }
 
 func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
-	if link, err := fs.lfetch(pathname); err == nil {
-		// get the true name of the end-point of any symlinks.
-		for err == nil {
-			pathname = link.symlink
-			link, err = fs.lfetch(pathname)
+	link, err := fs.lfetch(pathname)
+	for err == nil && link.symlink != "" {
+		if exclusive {
+			return nil, os.ErrInvalid
 		}
+
+		pathname = link.symlink
+		link, err = fs.lfetch(pathname)
 	}
 
-	dirname, filename := path.Dir(pathname), path.Base(pathname)
+	pathname, symlinked, err := fs.canonName(pathname)
 
-	dir, err := fs.fetchMaybeExclusive(dirname, exclusive)
+	if exclusive && symlinked {
+		return nil, os.ErrInvalid
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
-	if !dir.IsDir() {
-		return nil, syscall.ENOTDIR
+	switch pathname {
+	case "", "/":
+		// sanity check protection.
+		return nil, os.ErrInvalid
 	}
-
-	pathname = path.Join(dir.name, filename)
 
 	file := &memFile{
 		name:    pathname,
@@ -91,8 +97,7 @@ func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
 func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 	pflags := newFileOpenFlags(flags)
 
-	file, err := fs.fetchMaybeExclusive(pathname, pflags.Creat && pflags.Excl)
-
+	file, err := fs.fetch(pathname)
 	if err == os.ErrNotExist {
 		if !pflags.Creat {
 			return nil, os.ErrNotExist
@@ -166,18 +171,10 @@ func (fs *root) rename(oldpath, newpath string) error {
 		return err
 	}
 
-	dirname, filename := path.Dir(newpath), path.Base(newpath)
-
-	dir, err := fs.fetchMaybeExclusive(dirname, false)
+	newpath, _, err = fs.canonName(newpath)
 	if err != nil {
 		return err
 	}
-
-	if !dir.IsDir() {
-		return syscall.ENOTDIR
-	}
-
-	newpath = path.Join(dir.name, filename)
 
 	// SSH SPEC: "It is an error if there already exists a file with the name specified by newpath."
 	// This varies from the POSIX specification, that says it should replace the new file.
@@ -190,19 +187,23 @@ func (fs *root) rename(oldpath, newpath string) error {
 		}
 	}
 
-	file.name = newpath
 	fs.files[newpath] = file
 
 	if file.IsDir() {
+		dirname := file.name + "/"
+
 		for name, file := range fs.files {
-			if path.Dir(name) == oldpath {
-				file.name = path.Join(newpath, path.Base(name))
-				fs.files[file.name] = file
+			if strings.HasPrefix(name, dirname) {
+				newname := path.Join(newpath, strings.TrimPrefix(name, dirname))
+
+				fs.files[newname] = file
+				file.name = newname
 				delete(fs.files, name)
 			}
 		}
 	}
 
+	file.name = newpath
 	delete(fs.files, oldpath)
 
 	return nil
@@ -249,7 +250,7 @@ func (fs *root) rmdir(pathname string) error {
 }
 
 func (fs *root) link(oldpath, newpath string) error {
-	file, err := fs.fetch(oldpath)
+	file, err := fs.lfetch(oldpath)
 	if err != nil {
 		return err
 	}
@@ -359,19 +360,19 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 }
 
 func (fs *root) readdir(pathname string) ([]os.FileInfo, error) {
-	file, err := fs.fetch(pathname)
+	dir, err := fs.fetch(pathname)
 	if err != nil {
 		return nil, err
 	}
 
-	if !file.IsDir() {
+	if !dir.IsDir() {
 		return nil, syscall.ENOTDIR
 	}
 
 	var files []os.FileInfo
 
 	for name, file := range fs.files {
-		if path.Dir(name) == pathname {
+		if path.Dir(name) == dir.name {
 			files = append(files, file)
 		}
 	}
@@ -443,21 +444,42 @@ func (fs *root) lfetch(path string) (*memFile, error) {
 	return file, nil
 }
 
-func (fs *root) fetch(path string) (*memFile, error) {
-	return fs.fetchMaybeExclusive(path, false)
+// canonName returns the “canonical” name of a file, that is:
+// if the directory of the pathname is a symlink, it follows that symlink to the valid directory name.
+// this is relatively easy, since `dir.name` will be the only valid canonical path for a directory.
+func (fs *root) canonName(pathname string) (string, bool, error) {
+	dirname, filename := path.Dir(pathname), path.Base(pathname)
+
+	dir, err := fs.lfetch(dirname)
+	if err != nil {
+		return "", false, err
+	}
+
+	var symlinked bool
+
+	for dir.symlink != "" {
+		symlinked = true
+
+		dir, err = fs.lfetch(dir.symlink)
+		if err != nil {
+			return "", symlinked, err
+		}
+	}
+
+	if !dir.IsDir() {
+		return "", symlinked, syscall.ENOTDIR
+	}
+
+	return path.Join(dir.name, filename), symlinked, nil
 }
 
-func (fs *root) fetchMaybeExclusive(path string, exclusive bool) (*memFile, error) {
+func (fs *root) fetch(path string) (*memFile, error) {
 	file, err := fs.lfetch(path)
 	if err != nil {
 		return nil, err
 	}
 
 	for file.symlink != "" {
-		if exclusive {
-			return nil, os.ErrInvalid
-		}
-
 		file, err = fs.lfetch(file.symlink)
 		if err != nil {
 			return nil, err
