@@ -157,7 +157,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.symlink(r.Filepath, r.Target)
 	}
 
-	return nil
+	return errors.New("unsupported")
 }
 
 func (fs *root) rename(oldpath, newpath string) error {
@@ -355,7 +355,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		return listerat{file}, nil
 	}
 
-	return nil, nil
+	return nil, errors.New("unsupported")
 }
 
 func (fs *root) readdir(pathname string) ([]os.FileInfo, error) {
