@@ -189,12 +189,12 @@ func (fs *root) rename(oldpath, newpath string) error {
 
 	fs.files[newpath] = file
 
-	if file.IsDir() {
-		dirname := file.name + "/"
+	if dir := file; dir.IsDir() {
+		dirprefix := dir.name + "/"
 
 		for name, file := range fs.files {
-			if strings.HasPrefix(name, dirname) {
-				newname := path.Join(newpath, strings.TrimPrefix(name, dirname))
+			if strings.HasPrefix(name, dirprefix) {
+				newname := path.Join(newpath, strings.TrimPrefix(name, dirprefix))
 
 				fs.files[newname] = file
 				file.name = newname
@@ -222,17 +222,18 @@ func (fs *root) mkdir(pathname string) error {
 
 func (fs *root) rmdir(pathname string) error {
 	// does not follow symlinks!
-	file, err := fs.lfetch(pathname)
+	dir, err := fs.lfetch(pathname)
 	if err != nil {
 		return err
 	}
 
-	if !file.IsDir() {
+	if !dir.IsDir() {
 		return syscall.ENOTDIR
 	}
 
-	// use the file‘s internal name not the pathname we passed in.
-	pathname = file.name
+	// use the dir‘s internal name not the pathname we passed in.
+	// the dir.name is always the canonical name of a directory.
+	pathname = dir.name
 
 	for name := range fs.files {
 		if path.Dir(name) == pathname {
@@ -293,8 +294,9 @@ func (fs *root) remove(pathname string) error {
 		return os.ErrInvalid
 	}
 
-	// use the file‘s internal name not the pathname we passed in.
-	delete(fs.files, file.name)
+	// DO NOT use the file’s internal name.
+	// because of hard-links files cannot have a single canonical name.
+	delete(fs.files, pathname)
 
 	return nil
 }
@@ -344,16 +346,14 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 			return nil, err
 		}
 
-		file, err := fs.lfetch(symlink)
-		if err != nil {
-			// return a dummy memFile, with appropriate name.
-			return listerat{&memFile{
+		// SSH SPEC: The server will respond with a SSH_FXP_NAME packet containing only
+		// one name and a dummy attributes value.
+		return listerat{
+			&memFile{
 				name: symlink,
 				err:  os.ErrNotExist, // prevent accidental use as a reader/writer.
-			}}, nil
-		}
-
-		return listerat{file}, nil
+			},
+		}, nil
 	}
 
 	return nil, errors.New("unsupported")
