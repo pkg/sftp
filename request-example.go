@@ -59,30 +59,23 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 }
 
 func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
-	link, err := fs.lfetch(pathname)
-	for err == nil && link.symlink != "" {
-		if exclusive {
-			return nil, os.ErrInvalid
-		}
-
-		pathname = link.symlink
-		link, err = fs.lfetch(pathname)
-	}
-
 	pathname, symlinked, err := fs.canonName(pathname)
+	if err != nil {
+		return nil, err
+	}
 
 	if exclusive && symlinked {
 		return nil, os.ErrInvalid
-	}
-
-	if err != nil {
-		return nil, err
 	}
 
 	switch pathname {
 	case "", "/":
 		// sanity check protection.
 		return nil, os.ErrInvalid
+	}
+
+	if fs.files[pathname] != nil {
+		return nil, os.ErrExist
 	}
 
 	file := &memFile{
@@ -101,6 +94,17 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 	if err == os.ErrNotExist {
 		if !pflags.Creat {
 			return nil, os.ErrNotExist
+		}
+
+		// You can create files through symlinks.
+		link, err := fs.lfetch(pathname)
+		for err == nil && link.symlink != "" {
+			if pflags.Excl {
+				return nil, os.ErrInvalid
+			}
+
+			pathname = link.symlink
+			link, err = fs.lfetch(pathname)
 		}
 
 		return fs.newfile(pathname, pflags.Excl)
