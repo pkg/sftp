@@ -144,6 +144,17 @@ func (fs *root) Filecmd(r *Request) error {
 		return nil
 
 	case "Rename":
+		// SSH SPEC: "It is an error if there already exists a file with the name specified by newpath."
+		// This varies from the POSIX specification, that says it should replace the new file.
+		if fs.exists(r.Target) {
+			return &os.LinkError{
+				Op:  "rename",
+				Old: r.Filepath,
+				New: r.Target,
+				Err: os.ErrExist,
+			}
+		}
+
 		return fs.rename(r.Filepath, r.Target)
 
 	case "Rmdir":
@@ -177,17 +188,6 @@ func (fs *root) rename(oldpath, newpath string) error {
 		return err
 	}
 
-	// SSH SPEC: "It is an error if there already exists a file with the name specified by newpath."
-	// This varies from the POSIX specification, that says it should replace the new file.
-	if _, err = fs.lfetch(newpath); err != os.ErrNotExist {
-		return &os.LinkError{
-			Op:  "rename",
-			Old: oldpath,
-			New: newpath,
-			Err: os.ErrExist,
-		}
-	}
-
 	fs.files[newpath] = file
 
 	if dir := file; dir.IsDir() {
@@ -208,6 +208,18 @@ func (fs *root) rename(oldpath, newpath string) error {
 	delete(fs.files, oldpath)
 
 	return nil
+}
+
+func (fs *root) PosixRename(r *Request) error {
+	if fs.mockErr != nil {
+		return fs.mockErr
+	}
+	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.rename(r.Filepath, r.Target)
 }
 
 func (fs *root) mkdir(pathname string) error {
@@ -472,6 +484,17 @@ func (fs *root) canonName(pathname string) (string, bool, error) {
 	}
 
 	return path.Join(dir.name, filename), symlinked, nil
+}
+
+func (fs *root) exists(path string) bool {
+	path, _, err := fs.canonName(path)
+	if err != nil {
+		return false
+	}
+
+	_, err = fs.lfetch(path)
+
+	return err != os.ErrNotExist
 }
 
 func (fs *root) fetch(path string) (*memFile, error) {
