@@ -289,14 +289,23 @@ func TestOpenFileExclusiveNoSymlinkFollowing(t *testing.T) {
 	err = p.cli.Symlink("/foo", "/foo2")
 	require.NoError(t, err)
 
-	// with O_EXCL, we must not follow any symlinks
+	// with O_EXCL, we can follow directory symlinks
 	file, err := p.cli.OpenFile("/foo2/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.NoError(t, err)
+	err = file.Close()
+	require.NoError(t, err)
+
+	// we should have created the file above; and this create should fail.
+	_, err = p.cli.OpenFile("/foo/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
 	require.Error(t, err)
 
-	// we should not have created the file above; so we can now make it now without symlinks
-	file, err = p.cli.OpenFile("/foo/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	// create a dangling symlink
+	err = p.cli.Symlink("/notexist", "/bar")
 	require.NoError(t, err)
-	file.Close()
+
+	// opening a dangling symlink with O_CREATE and O_EXCL should fail, regardless of target not existing.
+	_, err = p.cli.OpenFile("/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.Error(t, err)
 
 	checkRequestServerAllocator(t, p)
 }

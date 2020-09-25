@@ -58,14 +58,10 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	return fs.openfile(r.Filepath, r.Flags)
 }
 
-func (fs *root) newfile(pathname string, exclusive bool) (*memFile, error) {
-	pathname, symlinked, err := fs.canonName(pathname)
+func (fs *root) newfile(pathname string) (*memFile, error) {
+	pathname, err := fs.canonName(pathname)
 	if err != nil {
 		return nil, err
-	}
-
-	if exclusive && symlinked {
-		return nil, os.ErrInvalid
 	}
 
 	switch pathname {
@@ -96,7 +92,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			return nil, os.ErrNotExist
 		}
 
-		// You can create files through symlinks.
+		// You can create files through dangling symlinks.
 		link, err := fs.lfetch(pathname)
 		for err == nil && link.symlink != "" {
 			if pflags.Excl {
@@ -107,7 +103,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			link, err = fs.lfetch(pathname)
 		}
 
-		return fs.newfile(pathname, pflags.Excl)
+		return fs.newfile(pathname)
 	}
 
 	if err != nil {
@@ -120,6 +116,12 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 
 	if file.IsDir() {
 		return nil, os.ErrInvalid
+	}
+
+	if pflags.Trunc {
+		if err := file.Truncate(0); err != nil {
+			return nil, err
+		}
 	}
 
 	return file, nil
@@ -136,7 +138,7 @@ func (fs *root) Filecmd(r *Request) error {
 
 	switch r.Method {
 	case "Setstat":
-		file, err := fs.fetch(r.Filepath)
+		file, err := fs.openfile(r.Filepath, sshFxfWrite)
 		if err != nil {
 			return err
 		}
@@ -187,7 +189,7 @@ func (fs *root) rename(oldpath, newpath string) error {
 		return err
 	}
 
-	newpath, _, err = fs.canonName(newpath)
+	newpath, err = fs.canonName(newpath)
 	if err != nil {
 		return err
 	}
@@ -227,7 +229,7 @@ func (fs *root) PosixRename(r *Request) error {
 }
 
 func (fs *root) mkdir(pathname string) error {
-	dir, err := fs.newfile(pathname, false)
+	dir, err := fs.newfile(pathname)
 	if err != nil {
 		return err
 	}
@@ -290,7 +292,7 @@ func (fs *root) symlink(target, linkpath string) error {
 		return os.ErrExist
 	}
 
-	link, err := fs.newfile(linkpath, false)
+	link, err := fs.newfile(linkpath)
 	if err != nil {
 		return err
 	}
@@ -464,34 +466,30 @@ func (fs *root) lfetch(path string) (*memFile, error) {
 // canonName returns the “canonical” name of a file, that is:
 // if the directory of the pathname is a symlink, it follows that symlink to the valid directory name.
 // this is relatively easy, since `dir.name` will be the only valid canonical path for a directory.
-func (fs *root) canonName(pathname string) (string, bool, error) {
+func (fs *root) canonName(pathname string) (string, error) {
 	dirname, filename := path.Dir(pathname), path.Base(pathname)
 
 	dir, err := fs.lfetch(dirname)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
-	var symlinked bool
-
 	for dir.symlink != "" {
-		symlinked = true
-
 		dir, err = fs.lfetch(dir.symlink)
 		if err != nil {
-			return "", symlinked, err
+			return "", err
 		}
 	}
 
 	if !dir.IsDir() {
-		return "", symlinked, syscall.ENOTDIR
+		return "", syscall.ENOTDIR
 	}
 
-	return path.Join(dir.name, filename), symlinked, nil
+	return path.Join(dir.name, filename), nil
 }
 
 func (fs *root) exists(path string) bool {
-	path, _, err := fs.canonName(path)
+	path, err := fs.canonName(path)
 	if err != nil {
 		return false
 	}
