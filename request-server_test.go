@@ -340,29 +340,56 @@ func TestRequestRemove(t *testing.T) {
 func TestRequestRename(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	_, err := putTestFile(p.cli, "/foo", "hello")
 	require.NoError(t, err)
-	r := p.testHandler()
-	_, err = r.fetch("/foo")
+	content, err := getTestFile(p.cli, "/foo")
 	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+
 	err = p.cli.Rename("/foo", "/bar")
 	require.NoError(t, err)
-	f, err := r.fetch("/bar")
-	if err != nil {
-		t.Fatal("unexpected error:", err)
-	}
-	assert.Equal(t, "bar", f.Name())
-	_, err = r.fetch("/foo")
-	assert.Equal(t, os.ErrNotExist, err)
+
+	// file contents are now at /bar
+	content, err = getTestFile(p.cli, "/bar")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+
+	// /foo no longer exists
+	_, err = getTestFile(p.cli, "/foo")
+	require.Error(t, err)
+
+	_, err = putTestFile(p.cli, "/baz", "goodbye")
+	require.NoError(t, err)
+	content, err = getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	require.Equal(t, []byte("goodbye"), content)
+
+	// SFTP-v2: SSH_FXP_RENAME may not overwrite existing files.
+	err = p.cli.Rename("/bar", "/baz")
+	require.Error(t, err)
+
+	// /bar and /baz are unchanged
+	content, err = getTestFile(p.cli, "/bar")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+	content, err = getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	require.Equal(t, []byte("goodbye"), content)
+
+	// posix-rename@openssh.com extension allows overwriting existing files.
 	err = p.cli.PosixRename("/bar", "/baz")
 	require.NoError(t, err)
-	f, err = r.fetch("/baz")
-	if err != nil {
-		t.Fatal("unexpected error:", err)
-	}
-	assert.Equal(t, "baz", f.Name())
-	_, err = r.fetch("/bar")
-	assert.Equal(t, os.ErrNotExist, err)
+
+	// /baz now has the contents of /bar
+	content, err = getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+
+	// /bar no longer exists
+	_, err = getTestFile(p.cli, "/bar")
+	require.Error(t, err)
+
 	checkRequestServerAllocator(t, p)
 }
 
