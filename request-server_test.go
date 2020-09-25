@@ -582,8 +582,12 @@ func TestRequestSymlinkDanglingDirectories(t *testing.T) {
 	_, err = p.cli.ReadDir("/bar")
 	require.True(t, os.IsNotExist(err))
 
-	// making a directory on a dangling symlink should work.
+	// making a directory on a dangling symlink SHOULD NOT work.
 	err = p.cli.Mkdir("/bar")
+	require.Error(t, err)
+
+	// ok, now make directory, so we can test make files through the symlink.
+	err = p.cli.Mkdir("/foo")
 	require.NoError(t, err)
 
 	// should be able to make a file in that symlinked directory.
