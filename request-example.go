@@ -58,29 +58,24 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	return fs.openfile(r.Filepath, r.Flags)
 }
 
-func (fs *root) newfile(pathname string) (*memFile, error) {
+func (fs *root) putfile(pathname string, file *memFile) error {
 	pathname, err := fs.canonName(pathname)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	switch pathname {
-	case "", "/":
-		// sanity check protection.
-		return nil, os.ErrInvalid
+	if !strings.HasPrefix(pathname, "/") {
+		return os.ErrInvalid
 	}
 
-	if fs.files[pathname] != nil {
-		return nil, os.ErrExist
+	if _, err := fs.lfetch(pathname); err != os.ErrNotExist {
+		return os.ErrExist
 	}
 
-	file := &memFile{
-		name:    pathname,
-		modtime: time.Now(),
-	}
+	file.name = pathname
 	fs.files[pathname] = file
 
-	return file, nil
+	return nil
 }
 
 func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
@@ -96,6 +91,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 		link, err := fs.lfetch(pathname)
 		for err == nil && link.symlink != "" {
 			if pflags.Excl {
+				// unless you also passed in O_EXCL
 				return nil, os.ErrInvalid
 			}
 
@@ -103,7 +99,15 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			link, err = fs.lfetch(pathname)
 		}
 
-		return fs.newfile(pathname)
+		file := &memFile{
+			modtime: time.Now(),
+		}
+
+		if err := fs.putfile(pathname, file); err != nil {
+			return nil, err
+		}
+
+		return file, nil
 	}
 
 	if err != nil {
@@ -150,15 +154,10 @@ func (fs *root) Filecmd(r *Request) error {
 		return nil
 
 	case "Rename":
-		// SSH SPEC: "It is an error if there already exists a file with the name specified by newpath."
-		// This varies from the POSIX specification, that says it should replace the new file.
+		// SFTP-v2: "It is an error if there already exists a file with the name specified by newpath."
+		// This varies from the POSIX specification, which allows limited replacement of target files.
 		if fs.exists(r.Target) {
-			return &os.LinkError{
-				Op:  "rename",
-				Old: r.Filepath,
-				New: r.Target,
-				Err: os.ErrExist,
-			}
+			return os.ErrExist
 		}
 
 		return fs.rename(r.Filepath, r.Target)
@@ -167,7 +166,9 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.rmdir(r.Filepath)
 
 	case "Remove":
-		return fs.remove(r.Filepath)
+		// IEEE 1003.1 remove explicitly can unlink files and remove empty directories.
+		// We use instead here the semantics of unlink, which is allowed to be restricted against directories.
+		return fs.unlink(r.Filepath)
 
 	case "Mkdir":
 		return fs.mkdir(r.Filepath)
@@ -194,10 +195,38 @@ func (fs *root) rename(oldpath, newpath string) error {
 		return err
 	}
 
+	if !strings.HasPrefix(newpath, "/") {
+		return os.ErrInvalid
+	}
+
+	target, err := fs.lfetch(newpath)
+	if err != os.ErrNotExist {
+		if target == file {
+			// IEEE 1003.1: if oldpath and newpath are the same directory entry,
+			// then return no error, and perform no further action.
+			return nil
+		}
+
+		switch {
+		case file.IsDir():
+			// IEEE 1003.1: if oldpath is a directory, and newpath exists,
+			// then newpath must be a directory, and empty.
+			// It is to be removed prior to rename.
+			if err := fs.rmdir(newpath); err != nil {
+				return err
+			}
+
+		case target.IsDir():
+			// IEEE 1003.1: if oldpath is not a directory, and newpath exists,
+			// then newpath may not be a directory.
+			return syscall.EISDIR
+		}
+	}
+
 	fs.files[newpath] = file
 
-	if dir := file; dir.IsDir() {
-		dirprefix := dir.name + "/"
+	if file.IsDir() {
+		dirprefix := file.name + "/"
 
 		for name, file := range fs.files {
 			if strings.HasPrefix(name, dirprefix) {
@@ -229,18 +258,16 @@ func (fs *root) PosixRename(r *Request) error {
 }
 
 func (fs *root) mkdir(pathname string) error {
-	dir, err := fs.newfile(pathname)
-	if err != nil {
-		return err
+	dir := &memFile{
+		modtime: time.Now(),
+		isdir:   true,
 	}
 
-	dir.isdir = true
-
-	return nil
+	return fs.putfile(pathname, dir)
 }
 
 func (fs *root) rmdir(pathname string) error {
-	// does not follow symlinks!
+	// IEEE 1003.1: If pathname is a symlink, then rmdir should fail with ENOTDIR.
 	dir, err := fs.lfetch(pathname)
 	if err != nil {
 		return err
@@ -256,11 +283,7 @@ func (fs *root) rmdir(pathname string) error {
 
 	for name := range fs.files {
 		if path.Dir(name) == pathname {
-			return &os.PathError{
-				Op:   "rmdir",
-				Path: pathname + "/",
-				Err:  errors.New("directory is not empty"),
-			}
+			return errors.New("directory not empty")
 		}
 	}
 
@@ -279,30 +302,21 @@ func (fs *root) link(oldpath, newpath string) error {
 		return errors.New("hard link not allowed for directory")
 	}
 
-	fs.files[newpath] = file
-
-	return nil
+	return fs.putfile(newpath, file)
 }
 
 // symlink() creates a symbolic link named `linkpath` which contains the string `target`.
 // NOTE! This would be called with `symlink(req.Filepath, req.Target)` due to different semantics.
 func (fs *root) symlink(target, linkpath string) error {
-	_, err := fs.lfetch(linkpath)
-	if err != os.ErrNotExist {
-		return os.ErrExist
+	link := &memFile{
+		modtime: time.Now(),
+		symlink: target,
 	}
 
-	link, err := fs.newfile(linkpath)
-	if err != nil {
-		return err
-	}
-
-	link.symlink = target
-
-	return nil
+	return fs.putfile(linkpath, link)
 }
 
-func (fs *root) remove(pathname string) error {
+func (fs *root) unlink(pathname string) error {
 	// does not follow symlinks!
 	file, err := fs.lfetch(pathname)
 	if err != nil {
@@ -310,6 +324,8 @@ func (fs *root) remove(pathname string) error {
 	}
 
 	if file.IsDir() {
+		// IEEE 1003.1: implementations may opt out of allowing the unlinking of directories.
+		// SFTP-v2: SSH_FXP_REMOVE may not remove directories.
 		return os.ErrInvalid
 	}
 
@@ -365,7 +381,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 			return nil, err
 		}
 
-		// SSH SPEC: The server will respond with a SSH_FXP_NAME packet containing only
+		// SFTP-v2: The server will respond with a SSH_FXP_NAME packet containing only
 		// one name and a dummy attributes value.
 		return listerat{
 			&memFile{
