@@ -212,7 +212,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 		return fileput(handlers.FilePut, r, pkt, alloc, orderID)
 	case "Open":
 		return fileputget(handlers.FilePut, r, pkt, alloc, orderID)
-	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove":
+	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove", "PosixRename":
 		return filecmd(handlers.FileCmd, r, pkt)
 	case "List":
 		return filelist(handlers.FileList, r, pkt)
@@ -353,12 +353,24 @@ func packetData(p requestPacket, alloc *allocator, orderID uint32) (data []byte,
 
 // wrap FileCmder handler
 func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
-
 	switch p := pkt.(type) {
 	case *sshFxpFsetstatPacket:
 		r.Flags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
 	}
+
+	if r.Method == "PosixRename" {
+		if posixRenamer, ok := h.(PosixRenameFileCmder); ok {
+			err := posixRenamer.PosixRename(r)
+			return statusFromError(pkt, err)
+		}
+
+		// PosixRenameFileCmder not implemented handle this request as a Rename
+		r.Method = "Rename"
+		err := h.Filecmd(r)
+		return statusFromError(pkt, err)
+	}
+
 	err := h.Filecmd(r)
 	return statusFromError(pkt, err)
 }
