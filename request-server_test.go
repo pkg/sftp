@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -558,6 +559,44 @@ func TestRequestSymlink(t *testing.T) {
 	content, err := getTestFile(p.cli, "/baz")
 	require.NoError(t, err)
 	assert.Equal(t, []byte("hello"), content)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestSymlinkLoop(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	err := p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+	err = p.cli.Symlink("/bar", "/baz")
+	require.NoError(t, err)
+	err = p.cli.Symlink("/baz", "/foo")
+	require.NoError(t, err)
+
+	// test should fail if we reach this point
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
+
+	var content []byte
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		content, err = getTestFile(p.cli, "/bar")
+	}()
+
+	select {
+	case <-timer.C:
+		t.Fatal("symlink loop following timed out")
+		return // just to let the compiler be absolutely sure
+
+	case <-done:
+	}
+
+	assert.Error(t, err)
+	assert.Len(t, content, 0)
 
 	checkRequestServerAllocator(t, p)
 }

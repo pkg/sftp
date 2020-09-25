@@ -16,6 +16,10 @@ import (
 	"time"
 )
 
+const maxSymlinkFollows = 5
+
+var errTooManySymlinks = errors.New("too many symbolic links")
+
 // InMemHandler returns a Hanlders object with the test handlers.
 func InMemHandler() Handlers {
 	root := &root{
@@ -87,12 +91,17 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			return nil, os.ErrNotExist
 		}
 
+		var count int
 		// You can create files through dangling symlinks.
 		link, err := fs.lfetch(pathname)
 		for err == nil && link.symlink != "" {
 			if pflags.Excl {
 				// unless you also passed in O_EXCL
 				return nil, os.ErrInvalid
+			}
+
+			if count++; count > maxSymlinkFollows {
+				return nil, errTooManySymlinks
 			}
 
 			pathname = link.symlink
@@ -485,16 +494,9 @@ func (fs *root) lfetch(path string) (*memFile, error) {
 func (fs *root) canonName(pathname string) (string, error) {
 	dirname, filename := path.Dir(pathname), path.Base(pathname)
 
-	dir, err := fs.lfetch(dirname)
+	dir, err := fs.fetch(dirname)
 	if err != nil {
 		return "", err
-	}
-
-	for dir.symlink != "" {
-		dir, err = fs.lfetch(dir.symlink)
-		if err != nil {
-			return "", err
-		}
 	}
 
 	if !dir.IsDir() {
@@ -521,7 +523,12 @@ func (fs *root) fetch(path string) (*memFile, error) {
 		return nil, err
 	}
 
+	var count int
 	for file.symlink != "" {
+		if count++; count > maxSymlinkFollows {
+			return nil, errTooManySymlinks
+		}
+
 		file, err = fs.lfetch(file.symlink)
 		if err != nil {
 			return nil, err
