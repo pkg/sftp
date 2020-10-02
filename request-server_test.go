@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +48,7 @@ func clientRequestServerPair(t *testing.T) *csPair {
 		}
 		ready <- true
 		fd, err := l.Accept()
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		handlers := InMemHandler()
 		var options []RequestServerOption
 		if *testAllocator {
@@ -58,7 +60,7 @@ func clientRequestServerPair(t *testing.T) *csPair {
 	<-ready
 	defer os.Remove(sock)
 	c, err := net.Dial("unix", sock)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	client, err := NewClientPipe(c, c)
 	if err != nil {
 		t.Fatalf("%+v\n", err)
@@ -87,7 +89,8 @@ func TestRequestSplitWrite(t *testing.T) {
 	w.Write([]byte(contents))
 	w.Close()
 	r := p.testHandler()
-	f, _ := r.fetch("/foo")
+	f, err := r.fetch("/foo")
+	require.NoError(t, err)
 	assert.Equal(t, contents, string(f.content))
 	checkRequestServerAllocator(t, p)
 }
@@ -125,11 +128,11 @@ func TestRequestCacheState(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Len(t, p.svr.openRequests, 0)
 	// test operation that doesn't open/close
 	err = p.cli.Remove("/foo")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Len(t, p.svr.openRequests, 0)
 	checkRequestServerAllocator(t, p)
 }
@@ -143,15 +146,25 @@ func putTestFile(cli *Client, path, content string) (int, error) {
 	return 0, err
 }
 
+func getTestFile(cli *Client, path string) ([]byte, error) {
+	r, err := cli.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	return ioutil.ReadAll(r)
+}
+
 func TestRequestWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	n, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 5, n)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.False(t, f.isdir)
 	assert.Equal(t, f.content, []byte("hello"))
 	checkRequestServerAllocator(t, p)
@@ -161,18 +174,17 @@ func TestRequestWriteEmpty(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	n, err := putTestFile(p.cli, "/foo", "")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 0, n)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
-	if assert.Nil(t, err) {
-		assert.False(t, f.isdir)
-		assert.Len(t, f.content, 0)
-	}
+	require.NoError(t, err)
+	assert.False(t, f.isdir)
+	assert.Len(t, f.content, 0)
 	// lets test with an error
 	r.returnErr(os.ErrInvalid)
 	n, err = putTestFile(p.cli, "/bar", "")
-	assert.Error(t, err)
+	require.Error(t, err)
 	r.returnErr(nil)
 	assert.Equal(t, 0, n)
 	checkRequestServerAllocator(t, p)
@@ -182,10 +194,10 @@ func TestRequestFilename(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, f.Name(), "foo")
 	_, err = r.fetch("/bar")
 	assert.Error(t, err)
@@ -196,9 +208,9 @@ func TestRequestJustRead(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	rf, err := p.cli.Open("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	defer rf.Close()
 	contents := make([]byte, 5)
 	n, err := rf.Read(contents)
@@ -223,28 +235,79 @@ func TestRequestCreate(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	fh, err := p.cli.Create("foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = fh.Close()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	checkRequestServerAllocator(t, p)
 }
 
 func TestRequestReadAndWrite(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
-	file, err := p.cli.OpenFile("/foo", os.O_RDWR)
-	require.NoError(t, err)
 
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE)
+	require.NoError(t, err)
 	defer file.Close()
 
 	n, err := file.Write([]byte("hello"))
 	require.NoError(t, err)
 	assert.Equal(t, 5, n)
+
 	buf := make([]byte, 4)
 	n, err = file.ReadAt(buf, 1)
 	require.NoError(t, err)
 	assert.Equal(t, 4, n)
 	assert.Equal(t, []byte{'e', 'l', 'l', 'o'}, buf)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestOpenFileExclusive(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	// first open should work
+	file, err := p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.NoError(t, err)
+	file.Close()
+
+	// second open should return error
+	_, err = p.cli.OpenFile("/foo", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	assert.Error(t, err)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestOpenFileExclusiveNoSymlinkFollowing(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	// make a directory
+	err := p.cli.Mkdir("/foo")
+	require.NoError(t, err)
+
+	// make a symlink to that directory
+	err = p.cli.Symlink("/foo", "/foo2")
+	require.NoError(t, err)
+
+	// with O_EXCL, we can follow directory symlinks
+	file, err := p.cli.OpenFile("/foo2/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.NoError(t, err)
+	err = file.Close()
+	require.NoError(t, err)
+
+	// we should have created the file above; and this create should fail.
+	_, err = p.cli.OpenFile("/foo/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.Error(t, err)
+
+	// create a dangling symlink
+	err = p.cli.Symlink("/notexist", "/bar")
+	require.NoError(t, err)
+
+	// opening a dangling symlink with O_CREATE and O_EXCL should fail, regardless of target not existing.
+	_, err = p.cli.OpenFile("/bar", os.O_RDWR|os.O_CREATE|os.O_EXCL)
+	require.Error(t, err)
+
 	checkRequestServerAllocator(t, p)
 }
 
@@ -252,11 +315,11 @@ func TestRequestMkdir(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	err := p.cli.Mkdir("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	r := p.testHandler()
 	f, err := r.fetch("/foo")
-	assert.Nil(t, err)
-	assert.True(t, f.isdir)
+	require.NoError(t, err)
+	assert.True(t, f.IsDir())
 	checkRequestServerAllocator(t, p)
 }
 
@@ -264,12 +327,12 @@ func TestRequestRemove(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	r := p.testHandler()
 	_, err = r.fetch("/foo")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	err = p.cli.Remove("/foo")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	_, err = r.fetch("/foo")
 	assert.Equal(t, err, os.ErrNotExist)
 	checkRequestServerAllocator(t, p)
@@ -278,29 +341,56 @@ func TestRequestRemove(t *testing.T) {
 func TestRequestRename(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
-	r := p.testHandler()
-	_, err = r.fetch("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
+	content, err := getTestFile(p.cli, "/foo")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+
 	err = p.cli.Rename("/foo", "/bar")
-	assert.Nil(t, err)
-	f, err := r.fetch("/bar")
-	if err != nil {
-		t.Fatal("unexpected error:", err)
-	}
-	assert.Equal(t, "bar", f.Name())
-	_, err = r.fetch("/foo")
-	assert.Equal(t, os.ErrNotExist, err)
+	require.NoError(t, err)
+
+	// file contents are now at /bar
+	content, err = getTestFile(p.cli, "/bar")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+
+	// /foo no longer exists
+	_, err = getTestFile(p.cli, "/foo")
+	require.Error(t, err)
+
+	_, err = putTestFile(p.cli, "/baz", "goodbye")
+	require.NoError(t, err)
+	content, err = getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	require.Equal(t, []byte("goodbye"), content)
+
+	// SFTP-v2: SSH_FXP_RENAME may not overwrite existing files.
+	err = p.cli.Rename("/bar", "/baz")
+	require.Error(t, err)
+
+	// /bar and /baz are unchanged
+	content, err = getTestFile(p.cli, "/bar")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+	content, err = getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	require.Equal(t, []byte("goodbye"), content)
+
+	// posix-rename@openssh.com extension allows overwriting existing files.
 	err = p.cli.PosixRename("/bar", "/baz")
-	assert.Nil(t, err)
-	f, err = r.fetch("/baz")
-	if err != nil {
-		t.Fatal("unexpected error:", err)
-	}
-	assert.Equal(t, "baz", f.Name())
-	_, err = r.fetch("/bar")
-	assert.Equal(t, os.ErrNotExist, err)
+	require.NoError(t, err)
+
+	// /baz now has the contents of /bar
+	content, err = getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), content)
+
+	// /bar no longer exists
+	_, err = getTestFile(p.cli, "/bar")
+	require.Error(t, err)
+
 	checkRequestServerAllocator(t, p)
 }
 
@@ -308,9 +398,9 @@ func TestRequestRenameFail(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, err = putTestFile(p.cli, "/bar", "goodbye")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = p.cli.Rename("/foo", "/bar")
 	assert.IsType(t, &StatusError{}, err)
 	checkRequestServerAllocator(t, p)
@@ -320,13 +410,13 @@ func TestRequestStat(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	fi, err := p.cli.Stat("/foo")
+	require.NoError(t, err)
 	assert.Equal(t, fi.Name(), "foo")
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
 	assert.NoError(t, testOsSys(fi.Sys()))
-	assert.NoError(t, err)
 	checkRequestServerAllocator(t, p)
 }
 
@@ -336,12 +426,12 @@ func TestRequestSetstat(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	mode := os.FileMode(0644)
 	err = p.cli.Chmod("/foo", mode)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	fi, err := p.cli.Stat("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, fi.Name(), "foo")
 	assert.Equal(t, fi.Size(), int64(5))
 	assert.Equal(t, fi.Mode(), os.FileMode(0644))
@@ -353,16 +443,15 @@ func TestRequestFstat(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	fp, err := p.cli.Open("/foo")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	fi, err := fp.Stat()
-	if assert.NoError(t, err) {
-		assert.Equal(t, fi.Name(), "foo")
-		assert.Equal(t, fi.Size(), int64(5))
-		assert.Equal(t, fi.Mode(), os.FileMode(0644))
-		assert.NoError(t, testOsSys(fi.Sys()))
-	}
+	require.NoError(t, err)
+	assert.Equal(t, fi.Name(), "foo")
+	assert.Equal(t, fi.Size(), int64(5))
+	assert.Equal(t, fi.Mode(), os.FileMode(0644))
+	assert.NoError(t, testOsSys(fi.Sys()))
 	checkRequestServerAllocator(t, p)
 }
 
@@ -422,14 +511,17 @@ func TestRequestLstat(t *testing.T) {
 func TestRequestLink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
+
 	err = p.cli.Link("/foo", "/bar")
-	assert.Nil(t, err)
-	r := p.testHandler()
-	fi, err := r.fetch("/bar")
-	assert.Nil(t, err)
-	assert.True(t, int(fi.Size()) == len("hello"))
+	require.NoError(t, err)
+
+	content, err := getTestFile(p.cli, "/bar")
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("hello"), content)
+
 	checkRequestServerAllocator(t, p)
 }
 
@@ -445,22 +537,143 @@ func TestRequestLinkFail(t *testing.T) {
 func TestRequestSymlink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
+
 	err = p.cli.Symlink("/foo", "/bar")
-	assert.Nil(t, err)
+	require.NoError(t, err)
+	err = p.cli.Symlink("/bar", "/baz")
+	require.NoError(t, err)
+
 	r := p.testHandler()
-	fi, err := r.fetch("/bar")
-	assert.Nil(t, err)
+
+	fi, err := r.lfetch("/bar")
+	require.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+
+	fi, err = r.lfetch("/baz")
+	require.NoError(t, err)
+	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+
+	content, err := getTestFile(p.cli, "/baz")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("hello"), content)
+
 	checkRequestServerAllocator(t, p)
 }
 
-func TestRequestSymlinkFail(t *testing.T) {
+func TestRequestSymlinkLoop(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
+
 	err := p.cli.Symlink("/foo", "/bar")
-	assert.True(t, os.IsNotExist(err))
+	require.NoError(t, err)
+	err = p.cli.Symlink("/bar", "/baz")
+	require.NoError(t, err)
+	err = p.cli.Symlink("/baz", "/foo")
+	require.NoError(t, err)
+
+	// test should fail if we reach this point
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
+
+	var content []byte
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		content, err = getTestFile(p.cli, "/bar")
+	}()
+
+	select {
+	case <-timer.C:
+		t.Fatal("symlink loop following timed out")
+		return // just to let the compiler be absolutely sure
+
+	case <-done:
+	}
+
+	assert.Error(t, err)
+	assert.Len(t, content, 0)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestSymlinkDanglingFiles(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	// dangling links are ok. We will use "/foo" later.
+	err := p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+
+	// creating a symlink in a non-existant directory should fail.
+	err = p.cli.Symlink("/dangle", "/foo/bar")
+	require.Error(t, err)
+
+	// creating a symlink under a dangling symlink should fail.
+	err = p.cli.Symlink("/dangle", "/bar/bar")
+	require.Error(t, err)
+
+	// opening a dangling link without O_CREATE should fail with os.IsNotExist == true
+	_, err = p.cli.OpenFile("/bar", os.O_RDONLY)
+	require.True(t, os.IsNotExist(err))
+
+	// overwriting a symlink is not allowed.
+	err = p.cli.Symlink("/dangle", "/bar")
+	require.Error(t, err)
+
+	// double symlink
+	err = p.cli.Symlink("/bar", "/baz")
+	require.NoError(t, err)
+
+	// opening a dangling link with O_CREATE should work.
+	_, err = putTestFile(p.cli, "/baz", "hello")
+	require.NoError(t, err)
+
+	// dangling link creation should create the target file itself.
+	content, err := getTestFile(p.cli, "/foo")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("hello"), content)
+
+	// creating a symlink under a non-directory file should fail.
+	err = p.cli.Symlink("/dangle", "/foo/bar")
+	assert.Error(t, err)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestSymlinkDanglingDirectories(t *testing.T) {
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	// dangling links are ok. We will use "/foo" later.
+	err := p.cli.Symlink("/foo", "/bar")
+	require.NoError(t, err)
+
+	// reading from a dangling symlink should fail.
+	_, err = p.cli.ReadDir("/bar")
+	require.True(t, os.IsNotExist(err))
+
+	// making a directory on a dangling symlink SHOULD NOT work.
+	err = p.cli.Mkdir("/bar")
+	require.Error(t, err)
+
+	// ok, now make directory, so we can test make files through the symlink.
+	err = p.cli.Mkdir("/foo")
+	require.NoError(t, err)
+
+	// should be able to make a file in that symlinked directory.
+	_, err = putTestFile(p.cli, "/bar/baz", "hello")
+	require.NoError(t, err)
+
+	// dangling directory creation should create the target directory itself.
+	content, err := getTestFile(p.cli, "/foo/baz")
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("hello"), content)
+
 	checkRequestServerAllocator(t, p)
 }
 
@@ -468,11 +681,11 @@ func TestRequestReadlink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 	_, err := putTestFile(p.cli, "/foo", "hello")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = p.cli.Symlink("/foo", "/bar")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	rl, err := p.cli.ReadLink("/bar")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "foo", rl)
 	checkRequestServerAllocator(t, p)
 }
@@ -494,8 +707,8 @@ func TestRequestReaddir(t *testing.T) {
 	_, err = p.cli.ReadDir("/does_not_exist")
 	assert.Equal(t, os.ErrNotExist, err)
 	di, err := p.cli.ReadDir("/")
-	assert.Nil(t, err)
-	assert.Len(t, di, 100)
+	require.NoError(t, err)
+	require.Len(t, di, 100)
 	names := []string{di[18].Name(), di[81].Name()}
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
 	checkRequestServerAllocator(t, p)

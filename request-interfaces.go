@@ -39,8 +39,7 @@ type FileWriter interface {
 	Filewrite(*Request) (io.WriterAt, error)
 }
 
-// OpenFileWriter is a FileWriter that implements the generic OpenFile
-// method.
+// OpenFileWriter is a FileWriter that implements the generic OpenFile method.
 // You need to implement this optional interface if you want to be able
 // to read and write from/to the same handle.
 // Called for Methods: Open
@@ -56,6 +55,14 @@ type FileCmder interface {
 	Filecmd(*Request) error
 }
 
+// PosixRenameFileCmder is a FileCmder that implements the Lstat method.
+// If this interface is implemented PosixRename requests will call it
+// otherwise they will be handled in the same way as Rename
+type PosixRenameFileCmder interface {
+	FileCmder
+	PosixRename(*Request) error
+}
+
 // FileLister should return an object that fulfils the ListerAt interface
 // Note in cases of an error, the error text will be sent to the client.
 // Called for Methods: List, Stat, Readlink
@@ -67,6 +74,7 @@ type FileLister interface {
 // If this interface is implemented Lstat requests will call it
 // otherwise they will be handled in the same way as Stat
 type LstatFileLister interface {
+	FileLister
 	Lstat(*Request) (ListerAt, error)
 }
 

@@ -223,7 +223,7 @@ func (rs *RequestServer) packetWorker(
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
 		case *sshFxpExtendedPacketPosixRename:
-			request := NewRequest("Rename", pkt.Oldpath)
+			request := NewRequest("PosixRename", pkt.Oldpath)
 			request.Target = pkt.Newpath
 			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 		case hasHandle:
