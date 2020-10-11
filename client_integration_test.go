@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/kr/fs"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -1432,6 +1434,49 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 
 	// this locked (before the fix)
 	badfunc(r)
+}
+
+func TestClientSyncGo(t *testing.T) {
+	if !*testServerImpl {
+		t.Skipf("skipping without -testserver")
+	}
+	err := testClientSync(t)
+
+	// Since Server does not support the fsync extension, we can only
+	// check that we get the right error.
+	require.NotNil(t, err)
+
+	switch err := err.(type) {
+	case *StatusError:
+		assert.Equal(t, ErrSSHFxOpUnsupported, err.FxCode())
+	default:
+		t.Error(err)
+	}
+}
+
+func TestClientSyncSFTP(t *testing.T) {
+	if *testServerImpl {
+		t.Skipf("skipping with -testserver")
+	}
+	err := testClientSync(t)
+	assert.Nil(t, err)
+}
+
+func testClientSync(t *testing.T) error {
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest.sync")
+	require.Nil(t, err)
+	defer os.RemoveAll(d)
+
+	f := path.Join(d, "syncTest")
+	w, err := sftp.Create(f)
+	require.Nil(t, err)
+	defer w.Close()
+
+	return w.Sync()
 }
 
 // taken from github.com/kr/fs/walk_test.go
