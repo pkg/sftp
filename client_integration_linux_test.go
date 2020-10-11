@@ -3,6 +3,8 @@ package sftp
 import (
 	"syscall"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestClientStatVFS(t *testing.T) {
@@ -12,6 +14,9 @@ func TestClientStatVFS(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
+
+	_, ok := sftp.HasExtension("statvfs@openssh.com")
+	require.True(t, ok, "server doesn't list statvfs extension")
 
 	vfs, err := sftp.StatVFS("/")
 	if err != nil {

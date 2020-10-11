@@ -155,6 +155,9 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 			inflight: make(map[uint32]chan<- result),
 			closed:   make(chan struct{}),
 		},
+
+		ext: make(map[string]string),
+
 		maxPacket:             1 << 15,
 		maxConcurrentRequests: 64,
 	}
@@ -182,6 +185,8 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 // Client implements the github.com/kr/fs.FileSystem interface.
 type Client struct {
 	clientConn
+
+	ext map[string]string // Extensions (name -> data).
 
 	maxPacket             int // max packet size read or written.
 	maxConcurrentRequests int
@@ -223,12 +228,30 @@ func (c *Client) recvVersion() error {
 		return &unexpectedPacketErr{sshFxpVersion, typ}
 	}
 
-	version, _ := unmarshalUint32(data)
+	version, data := unmarshalUint32(data)
 	if version != sftpProtocolVersion {
 		return &unexpectedVersionErr{sftpProtocolVersion, version}
 	}
 
+	for len(data) > 0 {
+		var ext extensionPair
+		ext, data, err = unmarshalExtensionPair(data)
+		if err != nil {
+			return err
+		}
+		c.ext[ext.Name] = ext.Data
+	}
+
 	return nil
+}
+
+// HasExtension checks whether the server supports a named extension.
+//
+// The first return value is the extension data reported by the server
+// (typically a version number).
+func (c *Client) HasExtension(name string) (string, bool) {
+	data, ok := c.ext[name]
+	return data, ok
 }
 
 // Walk returns a new Walker rooted at root.
