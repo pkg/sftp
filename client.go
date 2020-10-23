@@ -1294,6 +1294,26 @@ func (f *File) Chmod(mode os.FileMode) error {
 	return f.c.Chmod(f.path, mode)
 }
 
+// Sync requests a flush of the contents of a File to stable storage.
+//
+// Sync requires the server to support the fsync@openssh.com extension.
+func (f *File) Sync() error {
+	id := f.c.nextID()
+	typ, data, err := f.c.sendPacket(sshFxpFsyncPacket{
+		ID:     id,
+		Handle: f.handle,
+	})
+
+	switch {
+	case err != nil:
+		return err
+	case typ == sshFxpStatus:
+		return normaliseError(unmarshalStatus(id, data))
+	default:
+		return &unexpectedPacketErr{want: sshFxpStatus, got: typ}
+	}
+}
+
 // Truncate sets the size of the current file. Although it may be safely assumed
 // that if the size is less than its current size it will be truncated to fit,
 // the SFTP protocol does not specify what behavior the server should do when setting

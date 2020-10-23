@@ -917,6 +917,26 @@ func (p *StatVFS) MarshalBinary() ([]byte, error) {
 	return buf.Bytes(), err
 }
 
+type sshFxpFsyncPacket struct {
+	ID     uint32
+	Handle string
+}
+
+func (p sshFxpFsyncPacket) id() uint32 { return p.ID }
+
+func (p sshFxpFsyncPacket) MarshalBinary() ([]byte, error) {
+	l := 1 + 4 + // type (byte) + ID (uint32)
+		4 + len("fsync@openssh.com") +
+		4 + len(p.Handle)
+
+	b := make([]byte, 0, l)
+	b = append(b, sshFxpExtended)
+	b = marshalUint32(b, p.ID)
+	b = marshalString(b, "fsync@openssh.com")
+	b = marshalString(b, p.Handle)
+	return b, nil
+}
+
 type sshFxpExtendedPacket struct {
 	ID              uint32
 	ExtendedRequest string
