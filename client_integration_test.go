@@ -149,11 +149,11 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 	return client, exec.Command("true")
 }
 
-// testClient returns a *Client connected to a localy running sftp-server
+// testClient returns a *Client connected to a locally running sftp-server
 // the *exec.Cmd returned must be defer Wait'd.
 func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exec.Cmd) {
 	if !*testIntegration {
-		t.Skip("skipping intergration test")
+		t.Skip("skipping integration test")
 	}
 
 	if *testServerImpl {
