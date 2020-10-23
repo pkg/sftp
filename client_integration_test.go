@@ -835,14 +835,14 @@ func TestClientChown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	chownto, err := user.Lookup("daemon") // seems common-ish...
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	if usr.Uid != "0" {
 		t.Log("must be root to run chown tests")
 		t.Skip()
+	}
+
+	chownto, err := user.Lookup("daemon") // seems common-ish...
+	if err != nil {
+		t.Fatal(err)
 	}
 	toUID, err := strconv.Atoi(chownto.Uid)
 	if err != nil {
@@ -896,14 +896,14 @@ func TestClientChownReadonly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	chownto, err := user.Lookup("daemon") // seems common-ish...
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	if usr.Uid != "0" {
 		t.Log("must be root to run chown tests")
 		t.Skip()
+	}
+
+	chownto, err := user.Lookup("daemon") // seems common-ish...
+	if err != nil {
+		t.Fatal(err)
 	}
 	toUID, err := strconv.Atoi(chownto.Uid)
 	if err != nil {
