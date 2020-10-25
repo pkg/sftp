@@ -1743,9 +1743,13 @@ var matchTests = []MatchTest{
 	{"[", "a", false, ErrBadPattern},
 	{"[^", "a", false, ErrBadPattern},
 	{"[^bc", "a", false, ErrBadPattern},
-	{"a[", "a", false, nil},
 	{"a[", "ab", false, ErrBadPattern},
 	{"*x", "xxx", true, nil},
+
+	// The following test behaves differently on Go 1.15.3 and Go tip as
+	// https://github.com/golang/go/commit/b5ddc42b465dd5b9532ee336d98343d81a6d35b2
+	// (pre-Go 1.16). TODO: reevaluate when Go 1.16 is released.
+	//{"a[", "a", false, nil},
 }
 
 func errp(e error) string {
