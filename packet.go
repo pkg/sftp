@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -25,6 +26,14 @@ const (
 	debugDumpTxPacketBytes = false
 	debugDumpRxPacketBytes = false
 )
+
+type marshalerWithPayload interface {
+	// marshalWithPayload returns the marshaled representation of its
+	// receiver, with a variable-length payload field omitted and returned
+	// separately. The length of that payload should still be marshaled in
+	// the packet.
+	marshalWithPayload() (packet, payload []byte)
+}
 
 func marshalUint32(b []byte, v uint32) []byte {
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
@@ -116,27 +125,49 @@ func unmarshalStringSafe(b []byte) (string, []byte, error) {
 	return string(b[:n]), b[n:], nil
 }
 
+var lenBufPool = sync.Pool{New: func() interface{} { return new([4]byte) }}
+
 // sendPacket marshals p according to RFC 4234.
 func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
-	bb, err := m.MarshalBinary()
-	if err != nil {
-		return errors.Errorf("binary marshaller failed: %v", err)
-	}
-	if debugDumpTxPacketBytes {
-		debug("send packet: %s %d bytes %x", fxp(bb[0]), len(bb), bb[1:])
-	} else if debugDumpTxPacket {
-		debug("send packet: %s %d bytes", fxp(bb[0]), len(bb))
-	}
-	// Slide packet down 4 bytes to make room for length header.
-	packet := append(bb, make([]byte, 4)...) // optimistically assume bb has capacity
-	copy(packet[4:], bb)
-	binary.BigEndian.PutUint32(packet[:4], uint32(len(bb)))
+	var (
+		packet, payload []byte
+		err             error
+		separatePayload bool
+	)
 
-	_, err = w.Write(packet)
+	if mp, ok := m.(marshalerWithPayload); ok {
+		packet, payload = mp.marshalWithPayload()
+		separatePayload = true
+	} else {
+		packet, err = m.MarshalBinary()
+		if err != nil {
+			return errors.Errorf("binary marshaller failed: %v", err)
+		}
+	}
+
+	if debugDumpTxPacketBytes {
+		debug("send packet: %s %d bytes %x",
+			fxp(packet[0]), len(packet), append(packet[1:], payload...))
+	} else if debugDumpTxPacket {
+		debug("send packet: %s %d bytes", fxp(packet[0]), len(packet)+len(payload))
+	}
+
+	lenBuf := lenBufPool.Get().(*[4]byte)
+	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(packet)+len(payload)))
+
+	_, err = w.Write(lenBuf[:])
+	if err == nil {
+		_, err = w.Write(packet)
+	}
+	if separatePayload && err == nil {
+		_, err = w.Write(payload)
+	}
+
+	lenBufPool.Put(lenBuf)
 	if err != nil {
 		return errors.Errorf("failed to send packet: %v", err)
 	}
-	return nil
+	return err
 }
 
 func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, error) {
@@ -670,11 +701,10 @@ type sshFxpWritePacket struct {
 
 func (p sshFxpWritePacket) id() uint32 { return p.ID }
 
-func (p sshFxpWritePacket) MarshalBinary() ([]byte, error) {
+func (p sshFxpWritePacket) marshalWithPayload() (packet, payload []byte) {
 	l := 1 + 4 + // type(byte) + uint32
 		4 + len(p.Handle) +
-		8 + 4 + // uint64 + uint32
-		len(p.Data)
+		8 + 4 // uint64 + uint32
 
 	b := make([]byte, 0, l)
 	b = append(b, sshFxpWrite)
@@ -682,8 +712,12 @@ func (p sshFxpWritePacket) MarshalBinary() ([]byte, error) {
 	b = marshalString(b, p.Handle)
 	b = marshalUint64(b, p.Offset)
 	b = marshalUint32(b, p.Length)
-	b = append(b, p.Data...)
-	return b, nil
+	return b, p.Data
+}
+
+func (p sshFxpWritePacket) MarshalBinary() ([]byte, error) {
+	b, _ := p.marshalWithPayload()
+	return append(b, p.Data...), nil
 }
 
 func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
@@ -838,15 +872,19 @@ type sshFxpDataPacket struct {
 	Data   []byte
 }
 
-// MarshalBinary encodes the receiver into a binary form and returns the result.
-// To avoid a new allocation the Data slice must have a capacity >= Length + 9
+func (p sshFxpDataPacket) marshalWithPayload() (packet, payload []byte) {
+	l := 1 + 4 + 4 // type(byte) + uint32 + uint32
+
+	b := make([]byte, 0, l)
+	b = append(b, sshFxpData)
+	b = marshalUint32(b, p.ID)
+	b = marshalUint32(b, p.Length)
+	return b, p.Data
+}
+
 func (p sshFxpDataPacket) MarshalBinary() ([]byte, error) {
-	b := append(p.Data, make([]byte, 9)...)
-	copy(b[9:], p.Data[:p.Length])
-	b[0] = sshFxpData
-	binary.BigEndian.PutUint32(b[1:5], p.ID)
-	binary.BigEndian.PutUint32(b[5:9], p.Length)
-	return b, nil
+	b, _ := p.marshalWithPayload()
+	return append(b, p.Data...), nil
 }
 
 func (p *sshFxpDataPacket) UnmarshalBinary(b []byte) error {
