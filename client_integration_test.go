@@ -2033,7 +2033,7 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 	// open sftp client
 	sftp, cmd := testClient(b, false, delay)
 	defer cmd.Wait()
-	// defer sftp.Close()
+	defer sftp.Close()
 
 	data := make([]byte, size)
 
