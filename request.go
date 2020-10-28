@@ -314,9 +314,9 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 	if writerReader == nil {
 		return statusFromError(pkt, errors.New("unexpected write and read packet"))
 	}
-	switch pkt.(type) {
+	switch p := pkt.(type) {
 	case *sshFxpReadPacket:
-		data, offset, _ := packetData(pkt, alloc, orderID)
+		data, offset := p.getDataSlice(alloc, orderID), int64(p.Offset)
 		n, err := writerReader.ReadAt(data, offset)
 		// only return EOF error if no data left to read
 		if err != nil && (err != io.EOF || n == 0) {
@@ -328,7 +328,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 			Data:   data[:n],
 		}
 	case *sshFxpWritePacket:
-		data, offset, _ := packetData(pkt, alloc, orderID)
+		data, offset := p.Data, int64(p.Offset)
 		_, err := writerReader.WriteAt(data, offset)
 		return statusFromError(pkt, err)
 	default:
@@ -340,13 +340,9 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 func packetData(p requestPacket, alloc *allocator, orderID uint32) (data []byte, offset int64, length uint32) {
 	switch p := p.(type) {
 	case *sshFxpReadPacket:
-		length = p.Len
-		offset = int64(p.Offset)
-		data = p.getDataSlice(alloc, orderID)
+		return p.getDataSlice(alloc, orderID), int64(p.Offset), p.Len
 	case *sshFxpWritePacket:
-		data = p.Data
-		length = p.Length
-		offset = int64(p.Offset)
+		return p.Data, int64(p.Offset), p.Length
 	}
 	return
 }
