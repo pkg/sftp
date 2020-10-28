@@ -2024,7 +2024,7 @@ func benchmarkRead(b *testing.B, bufsize int, delay time.Duration) {
 	// open sftp client
 	sftp, cmd := testClient(b, READONLY, delay)
 	defer cmd.Wait()
-	// defer sftp.Close()
+	defer sftp.Close()
 
 	buf := make([]byte, bufsize)
 
@@ -2102,7 +2102,7 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 	// open sftp client
 	sftp, cmd := testClient(b, false, delay)
 	defer cmd.Wait()
-	// defer sftp.Close()
+	defer sftp.Close()
 
 	data := make([]byte, size)
 
@@ -2198,7 +2198,7 @@ func benchmarkReadFrom(b *testing.B, bufsize int, delay time.Duration) {
 	// open sftp client
 	sftp, cmd := testClient(b, false, delay)
 	defer cmd.Wait()
-	// defer sftp.Close()
+	defer sftp.Close()
 
 	data := make([]byte, size)
 
@@ -2300,7 +2300,7 @@ func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
 
 	sftp, cmd := testClient(b, READONLY, delay)
 	defer cmd.Wait()
-	// defer sftp.Close()
+	defer sftp.Close()
 	b.ResetTimer()
 	b.SetBytes(fileSize)
 
@@ -2374,7 +2374,7 @@ func benchmarkCopyUp(b *testing.B, fileSize int64, delay time.Duration) {
 
 	sftp, cmd := testClient(b, false, delay)
 	defer cmd.Wait()
-	// defer sftp.Close()
+	defer sftp.Close()
 
 	b.ResetTimer()
 	b.SetBytes(fileSize)
