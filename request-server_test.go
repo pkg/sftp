@@ -69,7 +69,7 @@ func clientRequestServerPair(t *testing.T) *csPair {
 	require.NoError(t, err)
 	client, err := NewClientPipe(c, c)
 	if err != nil {
-		t.Fatalf("%+v\n", err)
+		t.Fatalf("unexpected error: %+v", err)
 	}
 	pair.svr = server
 	pair.cli = client
