@@ -344,7 +344,7 @@ func TestOpenStatRace(t *testing.T) {
 			err := normaliseError(unmarshalStatus(id, r.data))
 			assert.NoError(t, err, "race hit, stat before open")
 		default:
-			assert.Fail(t, "Unexpected type")
+			t.Fatal("unexpected type:", r.typ)
 		}
 	}
 	testreply(id1, ch)
