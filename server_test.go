@@ -337,7 +337,7 @@ func TestOpenStatRace(t *testing.T) {
 		ID:   id2,
 		Path: tmppath,
 	})
-	testreply := func(id uint32, ch chan result) {
+	testreply := func(id uint32) {
 		r := <-ch
 		switch r.typ {
 		case sshFxpAttrs, sshFxpHandle: // ignore
@@ -348,8 +348,8 @@ func TestOpenStatRace(t *testing.T) {
 			t.Fatal("unexpected type:", r.typ)
 		}
 	}
-	testreply(id1, ch)
-	testreply(id2, ch)
+	testreply(id1)
+	testreply(id2)
 	os.Remove(tmppath)
 	checkServerAllocator(t, server)
 }
