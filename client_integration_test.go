@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"sync"
 	"testing"
 	"testing/quick"
 	"time"
@@ -51,13 +52,20 @@ type delayedWriter struct {
 	w      io.WriteCloser
 	ch     chan delayedWrite
 	closed chan struct{}
+
+	mu      sync.Mutex
+	closing chan struct{}
 }
 
 func newDelayedWriter(w io.WriteCloser, delay time.Duration) io.WriteCloser {
-	ch := make(chan delayedWrite, 128)
-	closed := make(chan struct{})
+	dw := &delayedWriter{
+		ch:      make(chan delayedWrite, 128),
+		closed:  make(chan struct{}),
+		closing: make(chan struct{}),
+	}
+
 	go func() {
-		for writeMsg := range ch {
+		for writeMsg := range dw.ch {
 			time.Sleep(time.Until(writeMsg.t.Add(delay)))
 			n, err := w.Write(writeMsg.b)
 			if err != nil {
@@ -68,21 +76,28 @@ func newDelayedWriter(w io.WriteCloser, delay time.Duration) io.WriteCloser {
 			}
 		}
 		w.Close()
-		close(closed)
+		close(dw.closed)
 	}()
-	return delayedWriter{w: w, ch: ch, closed: closed}
+
+	return dw
 }
 
-func (w delayedWriter) Write(b []byte) (int, error) {
-	bcopy := make([]byte, len(b))
-	copy(bcopy, b)
-	w.ch <- delayedWrite{t: time.Now(), b: bcopy}
+func (dw *delayedWriter) Write(b []byte) (int, error) {
+	dw.ch <- delayedWrite{t: time.Now(), b: append([]byte(nil), b...)}
 	return len(b), nil
 }
 
-func (w delayedWriter) Close() error {
-	close(w.ch)
-	<-w.closed
+func (dw *delayedWriter) Close() error {
+	dw.mu.Lock()
+	select {
+	case <-dw.closing:
+	default:
+		close(dw.ch)
+		close(dw.closing)
+	}
+	dw.mu.Unlock()
+
+	<-dw.closed
 	return nil
 }
 
