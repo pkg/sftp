@@ -223,7 +223,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	defer server.Close()
 
 	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
-	typ, data, err := client.clientConn.sendPacket(badPacket)
+	typ, data, err := client.clientConn.sendPacket(nil, badPacket)
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
 	}
