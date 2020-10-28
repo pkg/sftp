@@ -147,11 +147,12 @@ func TestRequestCacheState(t *testing.T) {
 
 func putTestFile(cli *Client, path, content string) (int, error) {
 	w, err := cli.Create(path)
-	if err == nil {
-		defer w.Close()
-		return w.Write([]byte(content))
+	if err != nil {
+		return 0, err
 	}
-	return 0, err
+	defer w.Close()
+
+	return w.Write([]byte(content))
 }
 
 func getTestFile(cli *Client, path string) ([]byte, error) {
