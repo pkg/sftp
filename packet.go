@@ -57,12 +57,12 @@ func marshal(b []byte, v interface{}) []byte {
 		switch d := reflect.ValueOf(v); d.Kind() {
 		case reflect.Struct:
 			for i, n := 0, d.NumField(); i < n; i++ {
-				b = append(marshal(b, d.Field(i).Interface()))
+				b = marshal(b, d.Field(i).Interface())
 			}
 			return b
 		case reflect.Slice:
 			for i, n := 0, d.Len(); i < n; i++ {
-				b = append(marshal(b, d.Index(i).Interface()))
+				b = marshal(b, d.Index(i).Interface())
 			}
 			return b
 		default:
