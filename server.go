@@ -382,11 +382,22 @@ type sshFxpStatResponse struct {
 	info os.FileInfo
 }
 
-func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
-	b := []byte{sshFxpAttrs}
+func (p sshFxpStatResponse) marshalPacket() ([]byte, []byte, error) {
+	l := 4 + 1 + 4 // uint32(length) + byte(type) + uint32(id)
+
+	b := make([]byte, 4, l)
+	b = append(b, sshFxpAttrs)
 	b = marshalUint32(b, p.ID)
-	b = marshalFileInfo(b, p.info)
-	return b, nil
+
+	var payload []byte
+	payload = marshalFileInfo(payload, p.info)
+
+	return b, payload, nil
+}
+
+func (p sshFxpStatResponse) MarshalBinary() ([]byte, error) {
+	header, payload, err := p.marshalPacket()
+	return append(header, payload...), err
 }
 
 var emptyFileStat = []interface{}{uint32(0)}

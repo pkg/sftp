@@ -193,15 +193,16 @@ type sshFxpTestBadExtendedPacket struct {
 func (p sshFxpTestBadExtendedPacket) id() uint32 { return p.ID }
 
 func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
-	l := 1 + 4 + 4 + // type(byte) + uint32 + uint32
-		len(p.Extension) +
-		len(p.Data)
+	l := 4 + 1 + 4 + // uint32(length) + byte(type) + uint32(id)
+		4 + len(p.Extension) +
+		4 + len(p.Data)
 
-	b := make([]byte, 0, l)
+	b := make([]byte, 4, l)
 	b = append(b, sshFxpExtended)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Extension)
 	b = marshalString(b, p.Data)
+
 	return b, nil
 }
 
