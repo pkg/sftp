@@ -896,99 +896,146 @@ func (f *File) Read(b []byte) (int, error) {
 	return r, err
 }
 
+// readChunkAt attempts to read the whole entire length of the buffer from the file starting at the offset.
+// It will continue progressively reading into the buffer until it fills the whole buffer, or an error occurs.
+func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err error) {
+	for err == nil && n < len(b) {
+		id := f.c.nextID()
+		typ, data, err := f.c.sendPacket(ch, sshFxpReadPacket{
+			ID:     id,
+			Handle: f.handle,
+			Offset: uint64(off) + uint64(n),
+			Len:    uint32(len(b) - n),
+		})
+		if err != nil {
+			return n, err
+		}
+
+		switch typ {
+		case sshFxpStatus:
+			return n, normaliseError(unmarshalStatus(id, data))
+
+		case sshFxpData:
+			sid, data := unmarshalUint32(data)
+			if id != sid {
+				return n, &unexpectedIDErr{id, sid}
+			}
+
+			l, data := unmarshalUint32(data)
+			n += copy(b[n:], data[:l])
+
+		default:
+			return n, unimplementedPacketErr(typ)
+		}
+	}
+
+	return
+}
+
 // ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns
 // the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics,
 // so the file offset is not altered during the read.
-func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
-	// Split the read into multiple maxPacket sized concurrent reads
-	// bounded by maxConcurrentRequests. This allows reads with a suitably
+func (f *File) ReadAt(b []byte, off int64) (int, error) {
+	if len(b) <= f.c.maxPacket {
+		return f.readChunkAt(make(chan result, 1), b, off)
+	}
+
+	// Split the read into multiple maxPacket sized concurrent writes
+	// bounded by maxConcurrentRequests. This allows writes with a suitably
 	// large buffer to transfer data at a much faster rate due to
 	// overlapping round trip times.
-	inFlight := 0
-	desiredInFlight := 1
-	offset := uint64(off)
-	// maxConcurrentRequests buffer to deal with broadcastErr() floods
-	// also must have a buffer of max value of (desiredInFlight - inFlight)
-	ch := make(chan result, f.c.maxConcurrentRequests+1)
-	type inflightRead struct {
-		b      []byte
-		offset uint64
-	}
-	reqs := map[uint32]inflightRead{}
-	type offsetErr struct {
-		offset uint64
-		err    error
-	}
-	var firstErr offsetErr
 
-	sendReq := func(b []byte, offset uint64) {
-		reqID := f.c.nextID()
-		f.c.dispatchRequest(ch, sshFxpReadPacket{
-			ID:     reqID,
-			Handle: f.handle,
-			Offset: offset,
-			Len:    uint32(len(b)),
-		})
-		inFlight++
-		reqs[reqID] = inflightRead{b: b, offset: offset}
+	type work struct {
+		b   []byte
+		off int64
 	}
 
-	var read int
-	for len(b) > 0 || inFlight > 0 {
-		for inFlight < desiredInFlight && len(b) > 0 && firstErr.err == nil {
-			l := min(len(b), f.c.maxPacket)
-			rb := b[:l]
-			sendReq(rb, offset)
-			offset += uint64(l)
-			b = b[l:]
-		}
+	cancel := make(chan struct{})
+	workCh := make(chan work)
 
-		if inFlight == 0 {
-			break
+	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
+	go func() {
+		defer close(workCh)
+
+		b := b
+		offset := int64(f.offset)
+
+		for len(b) > 0 {
+			rb := b
+			if len(rb) > f.c.maxPacket {
+				rb = rb[:f.c.maxPacket]
+			}
+
+			select {
+			case workCh <- work{rb, offset}:
+			case <-cancel:
+				return
+			}
+
+			offset += int64(len(rb))
+			b = b[len(rb):]
 		}
-		res := <-ch
-		inFlight--
-		if res.err != nil {
-			firstErr = offsetErr{offset: 0, err: res.err}
-			continue
-		}
-		reqID, data := unmarshalUint32(res.data)
-		req, ok := reqs[reqID]
-		if !ok {
-			firstErr = offsetErr{offset: 0, err: errors.Errorf("sid: %v not found", reqID)}
-			continue
-		}
-		delete(reqs, reqID)
-		switch res.typ {
-		case sshFxpStatus:
-			if firstErr.err == nil || req.offset < firstErr.offset {
-				firstErr = offsetErr{
-					offset: req.offset,
-					err:    normaliseError(unmarshalStatus(reqID, res.data)),
+	}()
+
+	type readErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan readErr)
+
+	concurrency := len(b)/f.c.maxPacket + 1
+	if concurrency > f.c.maxConcurrentRequests {
+		concurrency = f.c.maxConcurrentRequests
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		// Map_i: each worker gets work, and does the Read into each buffer from its respective offset.
+		go func() {
+			defer wg.Done()
+
+			ch := make(chan result, 1) // reuse channel per mapper.
+
+			for packet := range workCh {
+				n, err := f.readChunkAt(ch, packet.b, packet.off)
+				if err != nil {
+					// return the offset as the start + how much we read before the error.
+					errCh <- readErr{packet.off + int64(n), err}
+					return
 				}
 			}
-		case sshFxpData:
-			l, data := unmarshalUint32(data)
-			n := copy(req.b, data[:l])
-			read += n
-			if n < len(req.b) {
-				sendReq(req.b[l:], req.offset+uint64(l))
-			}
-			if desiredInFlight < f.c.maxConcurrentRequests {
-				desiredInFlight++
-			}
+		}()
+	}
+
+	// Wait for long tail, before closing results.
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	// collect all the results into a relevant return: the earliest offset to return an error.
+	firstErr := readErr{-1, nil}
+	for readErr := range errCh {
+		if firstErr.off < 0 || readErr.off < firstErr.off {
+			firstErr = readErr
+		}
+
+		select {
+		case <-cancel:
 		default:
-			firstErr = offsetErr{offset: 0, err: unimplementedPacketErr(res.typ)}
+			// stop any more work from being distributed. (Just in case.)
+			close(cancel)
 		}
 	}
-	// If the error is anything other than EOF, then there
-	// may be gaps in the data copied to the buffer so it's
-	// best to return 0 so the caller can't make any
-	// incorrect assumptions about the state of the buffer.
-	if firstErr.err != nil && firstErr.err != io.EOF {
-		read = 0
+
+	if firstErr.err != nil {
+		// firstErr.err != nil if and only if firstErr.off > our starting offset.
+		return int(firstErr.off - off), firstErr.err
 	}
-	return read, firstErr.err
+
+	// As per spec for io.ReaderAt, we return nil error if and only if we read everything.
+	return len(b), nil
 }
 
 // WriteTo writes the file to w. The return value is the number of bytes
@@ -1023,8 +1070,8 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 		b      []byte
 		offset uint64
 	}
-	reqs := map[uint32]inflightRead{}
-	pendingWrites := map[uint64][]byte{}
+	reqs := make(map[uint32]inflightRead)
+	pendingWrites := make(map[uint64][]byte)
 	type offsetErr struct {
 		offset uint64
 		err    error
@@ -1158,65 +1205,144 @@ func (f *File) Stat() (os.FileInfo, error) {
 // than calling Write multiple times. io.Copy will do this
 // automatically.
 func (f *File) Write(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	r, err := f.WriteAt(b, int64(f.offset))
+	f.offset += uint64(r)
+	return r, err
+}
+
+func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
+	typ, data, err := f.c.sendPacket(ch, sshFxpWritePacket{
+		ID:     f.c.nextID(),
+		Handle: f.handle,
+		Offset: uint64(off),
+		Length: uint32(len(b)),
+		Data:   b,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	switch typ {
+	case sshFxpStatus:
+		id, _ := unmarshalUint32(data)
+		err := normaliseError(unmarshalStatus(id, data))
+		if err != nil {
+			return 0, err
+		}
+
+	default:
+		return 0, unimplementedPacketErr(typ)
+	}
+
+	return len(b), nil
+}
+
+// WriteAt writess up to len(b) byte to the File at a given offset `off`. It returns
+// the number of bytes written and an error, if any. WriteAt follows io.WriterAt semantics,
+// so the file offset is not altered during the write.
+func (f *File) WriteAt(b []byte, off int64) (int, error) {
+	if len(b) <= f.c.maxPacket {
+		return f.writeChunkAt(make(chan result, 1), b, off)
+	}
+
 	// Split the write into multiple maxPacket sized concurrent writes
 	// bounded by maxConcurrentRequests. This allows writes with a suitably
 	// large buffer to transfer data at a much faster rate due to
 	// overlapping round trip times.
-	inFlight := 0
-	desiredInFlight := 1
-	offset := f.offset
-	// see comment on same line in Read() above
-	ch := make(chan result, f.c.maxConcurrentRequests+1)
-	var firstErr error
-	written := len(b)
-	for len(b) > 0 || inFlight > 0 {
-		for inFlight < desiredInFlight && len(b) > 0 && firstErr == nil {
-			l := min(len(b), f.c.maxPacket)
-			rb := b[:l]
-			f.c.dispatchRequest(ch, sshFxpWritePacket{
-				ID:     f.c.nextID(),
-				Handle: f.handle,
-				Offset: offset,
-				Length: uint32(len(rb)),
-				Data:   rb,
-			})
-			inFlight++
-			offset += uint64(l)
-			b = b[l:]
+
+	type work struct {
+		b   []byte
+		off int64
+	}
+
+	cancel := make(chan struct{})
+	workCh := make(chan work)
+
+	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
+	go func() {
+		defer close(workCh)
+
+		b := b
+		offset := off
+
+		for len(b) > 0 {
+			rb := b
+			if len(rb) > f.c.maxPacket {
+				rb = rb[:f.c.maxPacket]
+			}
+
+			select {
+			case workCh <- work{rb, offset}:
+			case <-cancel:
+				return
+			}
+
+			offset += int64(len(rb))
+			b = b[len(rb):]
+		}
+	}()
+
+	type writeErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan writeErr)
+
+	concurrency := len(b)/f.c.maxPacket + 1
+	if concurrency > f.c.maxConcurrentRequests {
+		concurrency = f.c.maxConcurrentRequests
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		// Map_i: each worker gets work, and does the Read into each buffer from its respective offset.
+		go func() {
+			defer wg.Done()
+
+			ch := make(chan result, 1) // reuse channel per mapper.
+
+			for packet := range workCh {
+				n, err := f.writeChunkAt(ch, packet.b, packet.off)
+				if err != nil {
+					// return the offset as the start + how much we wrote before the error.
+					errCh <- writeErr{packet.off + int64(n), err}
+					return
+				}
+			}
+		}()
+	}
+
+	// Wait for long tail, before closing results.
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	// collect all the results into a relevant return: the earliest offset to return an error.
+	firstErr := writeErr{-1, nil}
+	for writeErr := range errCh {
+		if firstErr.off < 0 || writeErr.off < firstErr.off {
+			firstErr = writeErr
 		}
 
-		if inFlight == 0 {
-			break
-		}
-		res := <-ch
-		inFlight--
-		if res.err != nil {
-			firstErr = res.err
-			continue
-		}
-		switch res.typ {
-		case sshFxpStatus:
-			id, _ := unmarshalUint32(res.data)
-			err := normaliseError(unmarshalStatus(id, res.data))
-			if err != nil && firstErr == nil {
-				firstErr = err
-				break
-			}
-			if desiredInFlight < f.c.maxConcurrentRequests {
-				desiredInFlight++
-			}
+		select {
+		case <-cancel:
 		default:
-			firstErr = unimplementedPacketErr(res.typ)
+			// stop any more work from being distributed. (Just in case.)
+			close(cancel)
 		}
 	}
-	// If error is non-nil, then there may be gaps in the data written to
-	// the file so it's best to return 0 so the caller can't make any
-	// incorrect assumptions about the state of the file.
-	if firstErr != nil {
-		written = 0
+
+	if firstErr.err != nil {
+		// firstErr.err != nil if and only if firstErr.off > our starting offset.
+		return int(firstErr.off - off), firstErr.err
 	}
-	f.offset += uint64(written)
-	return written, firstErr
+
+	return len(b), nil
 }
 
 // ReadFrom reads data from r until EOF and writes it to the file. The return
