@@ -646,10 +646,10 @@ func TestClientRename(t *testing.T) {
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest-rename")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	f, err := os.Create(filepath.Join(dir, "old"))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	f.Close()
 
 	f2 := filepath.Join(dir, "new")
@@ -670,10 +670,10 @@ func TestClientPosixRename(t *testing.T) {
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest-posixrename")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	f, err := os.Create(filepath.Join(dir, "old"))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	f.Close()
 
 	f2 := filepath.Join(dir, "new")
@@ -715,10 +715,10 @@ func TestClientReadLink(t *testing.T) {
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest-readlink")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	f, err := os.Create(filepath.Join(dir, "file"))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	f.Close()
 
 	f2 := filepath.Join(dir, "symlink")
@@ -738,11 +738,11 @@ func TestClientLink(t *testing.T) {
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest-link")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
 	f, err := os.Create(filepath.Join(dir, "file"))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	data := []byte("linktest")
 	_, err = f.Write(data)
 	f.Close()
@@ -767,10 +767,10 @@ func TestClientSymlink(t *testing.T) {
 	defer sftp.Close()
 
 	dir, err := ioutil.TempDir("", "sftptest-symlink")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	f, err := os.Create(filepath.Join(dir, "file"))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	f.Close()
 
 	f2 := filepath.Join(dir, "symlink")
@@ -1479,7 +1479,7 @@ func TestClientSyncGo(t *testing.T) {
 
 	// Since Server does not support the fsync extension, we can only
 	// check that we get the right error.
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	switch err := err.(type) {
 	case *StatusError:
@@ -1494,7 +1494,7 @@ func TestClientSyncSFTP(t *testing.T) {
 		t.Skipf("skipping with -testserver")
 	}
 	err := testClientSync(t)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func testClientSync(t *testing.T) error {
@@ -1503,12 +1503,12 @@ func testClientSync(t *testing.T) error {
 	defer sftp.Close()
 
 	d, err := ioutil.TempDir("", "sftptest.sync")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(d)
 
 	f := path.Join(d, "syncTest")
 	w, err := sftp.Create(f)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer w.Close()
 
 	return w.Sync()
