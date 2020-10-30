@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -207,4 +208,23 @@ func testFstatOption(t *testing.T, o ClientOption, value bool) {
 func TestUseFstatChecked(t *testing.T) {
 	testFstatOption(t, UseFstat(true), true)
 	testFstatOption(t, UseFstat(false), false)
+}
+
+type sink struct{}
+
+func (*sink) Close() error                { return nil }
+func (*sink) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestClientZeroLengthPacket(t *testing.T) {
+	// Packet length zero (never valid). This used to crash the client.
+	packet := []byte{0, 0, 0, 0}
+
+	r := bytes.NewReader(packet)
+	c, err := NewClientPipe(r, &sink{})
+	if err == nil {
+		t.Error("expected an error, got nil")
+	}
+	if c != nil {
+		c.Close()
+	}
 }
