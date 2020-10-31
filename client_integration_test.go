@@ -790,7 +790,7 @@ func TestClientChmod(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	f, err := ioutil.TempFile("", "sftptest")
+	f, err := ioutil.TempFile("", "sftptest-chmod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -813,7 +813,7 @@ func TestClientChmodReadonly(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	f, err := ioutil.TempFile("", "sftptest")
+	f, err := ioutil.TempFile("", "sftptest-chmodreadonly")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1001,7 +1001,7 @@ func TestClientTruncateReadonly(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	f, err := ioutil.TempFile("", "sftptest")
+	f, err := ioutil.TempFile("", "sftptest-truncreadonly")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1035,7 +1035,7 @@ func TestClientReadSimple(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	d, err := ioutil.TempDir("", "sftptest")
+	d, err := ioutil.TempDir("", "sftptest-readsimple")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1165,7 +1165,7 @@ func TestClientRead(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	d, err := ioutil.TempDir("", "sftptest")
+	d, err := ioutil.TempDir("", "sftptest-read")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1249,7 +1249,7 @@ func TestClientWrite(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	d, err := ioutil.TempDir("", "sftptest")
+	d, err := ioutil.TempDir("", "sftptest-write")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1286,7 +1286,7 @@ func TestClientReadFrom(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	d, err := ioutil.TempDir("", "sftptest")
+	d, err := ioutil.TempDir("", "sftptest-readfrom")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1361,7 +1361,7 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	d, err := ioutil.TempDir("", "sftptest")
+	d, err := ioutil.TempDir("", "sftptest-writedeadlock")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1429,7 +1429,7 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	d, err := ioutil.TempDir("", "sftptest")
+	d, err := ioutil.TempDir("", "sftptest-readdeadlock")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2082,7 +2082,7 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 	for i := 0; i < b.N; i++ {
 		offset := 0
 
-		f, err := ioutil.TempFile("", "sftptest")
+		f, err := ioutil.TempFile("", "sftptest-benchwrite")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -2176,7 +2176,7 @@ func benchmarkReadFrom(b *testing.B, bufsize int, delay time.Duration) {
 	b.SetBytes(int64(size))
 
 	for i := 0; i < b.N; i++ {
-		f, err := ioutil.TempFile("", "sftptest")
+		f, err := ioutil.TempFile("", "sftptest-benchreadfrom")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -2247,7 +2247,7 @@ func BenchmarkReadFrom4MiBDelay150Msec(b *testing.B) {
 func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
 	skipIfWindows(b)
 	// Create a temp file and fill it with zero's.
-	src, err := ioutil.TempFile("", "sftptest")
+	src, err := ioutil.TempFile("", "sftptest-benchcopydown")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -2275,7 +2275,7 @@ func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
 	b.SetBytes(fileSize)
 
 	for i := 0; i < b.N; i++ {
-		dst, err := ioutil.TempFile("", "sftptest")
+		dst, err := ioutil.TempFile("", "sftptest-benchcopydown")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -2321,7 +2321,7 @@ func BenchmarkCopyDown10MiBDelay150Msec(b *testing.B) {
 func benchmarkCopyUp(b *testing.B, fileSize int64, delay time.Duration) {
 	skipIfWindows(b)
 	// Create a temp file and fill it with zero's.
-	src, err := ioutil.TempFile("", "sftptest")
+	src, err := ioutil.TempFile("", "sftptest-benchcopyup")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -2350,7 +2350,7 @@ func benchmarkCopyUp(b *testing.B, fileSize int64, delay time.Duration) {
 	b.SetBytes(fileSize)
 
 	for i := 0; i < b.N; i++ {
-		tmp, err := ioutil.TempFile("", "sftptest")
+		tmp, err := ioutil.TempFile("", "sftptest-benchcopyup")
 		if err != nil {
 			b.Fatal(err)
 		}
