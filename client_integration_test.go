@@ -1872,7 +1872,8 @@ func TestServerRoughDisconnect(t *testing.T) {
 		cmd.Process.Kill()
 	}()
 
-	io.Copy(ioutil.Discard, f)
+	_, err = io.Copy(ioutil.Discard, f)
+	assert.Error(t, err)
 }
 
 // sftp/issue/181, abrupt server hangup would result in client hangs.
@@ -1930,7 +1931,8 @@ func TestServerRoughDisconnect3(t *testing.T) {
 		cmd.Process.Kill()
 	}()
 
-	io.Copy(rf, lf)
+	_, err = io.Copy(rf, lf)
+	assert.Error(t, err)
 }
 
 // sftp/issue/234 - also affected Write
@@ -1962,11 +1964,39 @@ func TestServerRoughDisconnect4(t *testing.T) {
 	for {
 		_, err = rf.Write(b)
 		if err != nil {
+			assert.NotEqual(t, io.EOF, err)
 			break
 		}
 	}
 
-	io.Copy(rf, lf)
+	_, err = io.Copy(rf, lf)
+	assert.Error(t, err)
+}
+
+// sftp/issue/390 - server disconnect should not cause io.EOF or
+// io.ErrUnexpectedEOF in sftp.File.Read, because those confuse io.ReadFull.
+func TestServerRoughDisconnectEOF(t *testing.T) {
+	skipIfWindows(t)
+	if *testServerImpl {
+		t.Skipf("skipping with -testserver")
+	}
+	sftp, cmd := testClient(t, READONLY, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := sftp.Open("/dev/null")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cmd.Process.Kill()
+	}()
+
+	_, err = io.ReadFull(f, make([]byte, 10))
+	assert.Error(t, err)
+	assert.NotEqual(t, io.ErrUnexpectedEOF, err)
 }
 
 // sftp/issue/26 writing to a read only file caused client to loop.
@@ -1974,7 +2004,10 @@ func TestClientWriteToROFile(t *testing.T) {
 	skipIfWindows(t)
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
-	defer sftp.Close()
+	defer func() {
+		err := sftp.Close()
+		assert.NoError(t, err)
+	}()
 
 	f, err := sftp.Open("/dev/zero")
 	if err != nil {
