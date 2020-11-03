@@ -154,6 +154,10 @@ func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, e
 		debug("recv packet %d bytes too long", length)
 		return 0, nil, errLongPacket
 	}
+	if length == 0 {
+		debug("recv packet of 0 bytes too short")
+		return 0, nil, errShortPacket
+	}
 	if alloc == nil {
 		b = make([]byte, length)
 	}

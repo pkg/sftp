@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -363,5 +365,33 @@ func TestStatNonExistent(t *testing.T) {
 		if !os.IsNotExist(err) {
 			t.Errorf("expected 'does not exist' err for file %q.  got: %v", file, err)
 		}
+	}
+}
+
+func TestServerWithBrokenClient(t *testing.T) {
+	validInit := sp(sshFxInitPacket{Version: 3})
+	brokenOpen := sp(sshFxpOpenPacket{Path: "foo"})
+	brokenOpen = brokenOpen[:len(brokenOpen)-2]
+
+	for _, clientInput := range [][]byte{
+		// Packet length zero (never valid). This used to crash the server.
+		{0, 0, 0, 0},
+		append(validInit, 0, 0, 0, 0),
+
+		// Client hangs up mid-packet.
+		append(validInit, brokenOpen...),
+	} {
+		srv, err := NewServer(struct {
+			io.Reader
+			io.WriteCloser
+		}{
+			bytes.NewReader(clientInput),
+			&sink{},
+		})
+		require.NoError(t, err)
+
+		err = srv.Serve()
+		assert.Error(t, err)
+		srv.Close()
 	}
 }
