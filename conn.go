@@ -138,8 +138,9 @@ func (c *clientConn) broadcastErr(err error) {
 		listeners = append(listeners, ch)
 	}
 	c.Unlock()
+	bcastRes := result{err: errors.New("unexpected server disconnect")}
 	for _, ch := range listeners {
-		ch <- result{err: err}
+		ch <- bcastRes
 	}
 	c.err = err
 	close(c.closed)
