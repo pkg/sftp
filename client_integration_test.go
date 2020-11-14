@@ -49,11 +49,10 @@ type delayedWrite struct {
 // underlying writer will panic so this should only be used over reliable
 // connections.
 type delayedWriter struct {
-	w      io.WriteCloser
-	ch     chan delayedWrite
 	closed chan struct{}
 
 	mu      sync.Mutex
+	ch      chan delayedWrite
 	closing chan struct{}
 }
 
@@ -65,37 +64,54 @@ func newDelayedWriter(w io.WriteCloser, delay time.Duration) io.WriteCloser {
 	}
 
 	go func() {
+		defer close(dw.closed)
+		defer w.Close()
+
 		for writeMsg := range dw.ch {
 			time.Sleep(time.Until(writeMsg.t.Add(delay)))
+
 			n, err := w.Write(writeMsg.b)
 			if err != nil {
 				panic("write error")
 			}
+
 			if n < len(writeMsg.b) {
 				panic("showrt write")
 			}
 		}
-		w.Close()
-		close(dw.closed)
 	}()
 
 	return dw
 }
 
 func (dw *delayedWriter) Write(b []byte) (int, error) {
-	dw.ch <- delayedWrite{t: time.Now(), b: append([]byte(nil), b...)}
+	dw.mu.Lock()
+	defer dw.mu.Unlock()
+
+	write := delayedWrite{
+		t: time.Now(),
+		b: append([]byte(nil), b...),
+	}
+
+	select {
+	case <-dw.closing:
+		return 0, errors.New("delayedWriter is closing")
+	case dw.ch <- write:
+	}
+
 	return len(b), nil
 }
 
 func (dw *delayedWriter) Close() error {
 	dw.mu.Lock()
+	defer dw.mu.Unlock()
+
 	select {
 	case <-dw.closing:
 	default:
 		close(dw.ch)
 		close(dw.closing)
 	}
-	dw.mu.Unlock()
 
 	<-dw.closed
 	return nil
@@ -115,24 +131,37 @@ func netPipe(t testing.TB) (io.ReadWriteCloser, io.ReadWriteCloser) {
 		t.Fatal(err)
 	}
 
+	closeListener := make(chan struct{}, 1)
+	closeListener <- struct{}{}
+
 	ch := make(chan result, 1)
 	go func() {
 		conn, err := l.Accept()
 		ch <- result{conn, err}
-		err = l.Close()
-		if err != nil {
-			t.Error(err)
+
+		if _, ok := <-closeListener; ok {
+			err = l.Close()
+			if err != nil {
+				t.Error(err)
+			}
+			close(closeListener)
 		}
 	}()
+
 	c1, err := net.Dial("tcp", l.Addr().String())
 	if err != nil {
-		l.Close() // might cause another in the listening goroutine, but too bad
+		if _, ok := <-closeListener; ok {
+			l.Close()
+			close(closeListener)
+		}
 		t.Fatal(err)
 	}
+
 	r := <-ch
 	if r.error != nil {
 		t.Fatal(err)
 	}
+
 	return c1, r.Conn
 }
 
@@ -150,12 +179,12 @@ func testClientGoSvr(t testing.TB, readonly bool, delay time.Duration) (*Client,
 	}
 	go server.Serve()
 
-	var ctx io.WriteCloser = c2
+	var wr io.WriteCloser = c2
 	if delay > NODELAY {
-		ctx = newDelayedWriter(ctx, delay)
+		wr = newDelayedWriter(wr, delay)
 	}
 
-	client, err := NewClientPipe(c2, ctx)
+	client, err := NewClientPipe(c2, wr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,18 +208,23 @@ func testClient(t testing.TB, readonly bool, delay time.Duration) (*Client, *exe
 	if !readonly {
 		cmd = exec.Command(*testSftp, "-e", "-l", debuglevel) // log to stderr
 	}
+
 	cmd.Stderr = os.Stdout
+
 	pw, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if delay > NODELAY {
 		pw = newDelayedWriter(pw, delay)
 	}
+
 	pr, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := cmd.Start(); err != nil {
 		t.Skipf("could not start sftp-server process: %v", err)
 	}
@@ -495,6 +529,7 @@ func TestClientFileName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer f2.Close()
 
 	if got, want := f2.Name(), f.Name(); got != want {
 		t.Fatalf("Name: got %q want %q", want, got)
@@ -521,6 +556,7 @@ func TestClientFileStat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer f2.Close()
 
 	got, err := f2.Stat()
 	if err != nil {
@@ -1340,12 +1376,9 @@ func TestClientReadFromDeadlock(t *testing.T) {
 	clientWriteDeadlock(t, 1, func(f *File) {
 		b := make([]byte, 32768*4)
 		content := bytes.NewReader(b)
-		n, err := f.ReadFrom(content)
-		if n != 0 {
-			t.Fatal("Write should return 0", n)
-		}
+		_, err := f.ReadFrom(content)
 		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error", err)
+			t.Fatal("Didn't recieve correct error:", err)
 		}
 	})
 }
@@ -1354,12 +1387,10 @@ func TestClientReadFromDeadlock(t *testing.T) {
 func TestClientWriteDeadlock(t *testing.T) {
 	clientWriteDeadlock(t, 1, func(f *File) {
 		b := make([]byte, 32768*4)
-		n, err := f.Write(b)
-		if n != 0 {
-			t.Fatal("Write should return 0", n)
-		}
+
+		_, err := f.Write(b)
 		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error", err)
+			t.Fatal("Didn't recieve correct error:", err)
 		}
 	})
 }
@@ -1409,12 +1440,10 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 func TestClientReadDeadlock(t *testing.T) {
 	clientReadDeadlock(t, 1, func(f *File) {
 		b := make([]byte, 32768*4)
-		n, err := f.Read(b)
-		if n != 0 {
-			t.Fatal("Write should return 0", n)
-		}
+
+		_, err := f.Read(b)
 		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error", err)
+			t.Fatal("Didn't recieve correct error:", err)
 		}
 	})
 }
@@ -1422,13 +1451,12 @@ func TestClientReadDeadlock(t *testing.T) {
 func TestClientWriteToDeadlock(t *testing.T) {
 	clientReadDeadlock(t, 2, func(f *File) {
 		b := make([]byte, 32768*4)
+
 		buf := bytes.NewBuffer(b)
-		n, err := f.WriteTo(buf)
-		if n != 32768 {
-			t.Fatal("Write should return 0", n)
-		}
+
+		_, err := f.WriteTo(buf)
 		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error", err)
+			t.Fatal("Didn't recieve correct error:", err)
 		}
 	})
 }
@@ -1448,14 +1476,16 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	defer os.RemoveAll(d)
 
 	f := path.Join(d, "writeTest")
+
 	w, err := sftp.Create(f)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer w.Close()
+
 	// write the data for the read tests
 	b := make([]byte, 32768*4)
 	w.Write(b)
-	defer w.Close()
 
 	// open new copy of file for read tests
 	r, err := sftp.Open(f)
@@ -1474,6 +1504,7 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 		}
 		return sendPacket(w, m)
 	}
+
 	sftp.clientConn.conn.sendPacketTest = sendPacketTest
 	defer func() {
 		sftp.clientConn.conn.sendPacketTest = nil
@@ -1924,26 +1955,29 @@ func TestServerRoughDisconnect3(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("skipping with -testserver")
 	}
+
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	rf, err := sftp.OpenFile("/dev/null", os.O_RDWR)
+	dest, err := sftp.OpenFile("/dev/null", os.O_RDWR)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rf.Close()
-	lf, err := os.Open("/dev/zero")
+	defer dest.Close()
+
+	src, err := os.Open("/dev/zero")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lf.Close()
+	defer src.Close()
+
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		cmd.Process.Kill()
 	}()
 
-	_, err = io.Copy(rf, lf)
+	_, err = io.Copy(dest, src)
 	assert.Error(t, err)
 }
 
@@ -1957,31 +1991,34 @@ func TestServerRoughDisconnect4(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	rf, err := sftp.OpenFile("/dev/null", os.O_RDWR)
+	dest, err := sftp.OpenFile("/dev/null", os.O_RDWR)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rf.Close()
-	lf, err := os.Open("/dev/zero")
+	defer dest.Close()
+
+	src, err := os.Open("/dev/zero")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lf.Close()
+	defer src.Close()
+
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		cmd.Process.Kill()
 	}()
+
 	b := make([]byte, 32768*200)
-	lf.Read(b)
+	src.Read(b)
 	for {
-		_, err = rf.Write(b)
+		_, err = dest.Write(b)
 		if err != nil {
 			assert.NotEqual(t, io.EOF, err)
 			break
 		}
 	}
 
-	_, err = io.Copy(rf, lf)
+	_, err = io.Copy(dest, src)
 	assert.Error(t, err)
 }
 
