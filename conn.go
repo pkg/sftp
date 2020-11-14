@@ -105,7 +105,7 @@ func (c *clientConn) putChannel(ch chan<- result, sid uint32) bool {
 	select {
 	case <-c.closed:
 		// already closed with broadcastErr, return error on chan.
-		ch <- result{err: c.err}
+		ch <- result{err: errors.New("unexpected server disconnect")}
 		return false
 	default:
 	}
