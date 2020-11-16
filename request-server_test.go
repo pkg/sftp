@@ -228,6 +228,9 @@ func TestRequestOpenFail(t *testing.T) {
 	rf, err := p.cli.Open("/foo")
 	assert.Exactly(t, os.ErrNotExist, err)
 	assert.Nil(t, rf)
+	// if we return an error the sftp client will not close the handle
+	// ensure that we close it ourself
+	assert.Len(t, p.svr.openRequests, 0)
 	checkRequestServerAllocator(t, p)
 }
 
@@ -711,6 +714,7 @@ func TestRequestReaddir(t *testing.T) {
 	require.Len(t, di, 100)
 	names := []string{di[18].Name(), di[81].Name()}
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
+	assert.Len(t, p.svr.openRequests, 0)
 	checkRequestServerAllocator(t, p)
 }
 
