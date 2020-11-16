@@ -198,12 +198,20 @@ func (rs *RequestServer) packetWorker(
 			rpkt = cleanPacketPath(pkt)
 		case *sshFxpOpendirPacket:
 			request := requestFromPacket(ctx, pkt)
-			rs.nextRequest(request)
+			handle := rs.nextRequest(request)
 			rpkt = request.opendir(rs.Handlers, pkt)
+			if _, ok := rpkt.(*sshFxpHandlePacket); !ok {
+				// if we return an error we have to remove the handle from the active ones
+				rs.closeRequest(handle)
+			}
 		case *sshFxpOpenPacket:
 			request := requestFromPacket(ctx, pkt)
-			rs.nextRequest(request)
+			handle := rs.nextRequest(request)
 			rpkt = request.open(rs.Handlers, pkt)
+			if _, ok := rpkt.(*sshFxpHandlePacket); !ok {
+				// if we return an error we have to remove the handle from the active ones
+				rs.closeRequest(handle)
+			}
 		case *sshFxpFstatPacket:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
