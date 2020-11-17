@@ -1154,13 +1154,25 @@ func (f *File) Stat() (os.FileInfo, error) {
 // than calling Write multiple times. io.Copy will do this
 // automatically.
 func (f *File) Write(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	r, err := f.WriteAt(b, int64(f.offset))
+	f.offset += uint64(r)
+	return r, err
+}
+
+// WriteAt writes up to len(b) byte to the File at a given offset `off`. It returns
+// the number of bytes written and an error, if any. WriteAt follows io.WriterAt semantics,
+// so the file offset is not altered during the write.
+func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 	// Split the write into multiple maxPacket sized concurrent writes
 	// bounded by maxConcurrentRequests. This allows writes with a suitably
 	// large buffer to transfer data at a much faster rate due to
 	// overlapping round trip times.
 	inFlight := 0
 	desiredInFlight := 1
-	offset := f.offset
+	offset := uint64(off)
 	// see comment on same line in Read() above
 	ch := make(chan result, f.c.maxConcurrentRequests+1)
 	var firstErr error
@@ -1211,7 +1223,6 @@ func (f *File) Write(b []byte) (int, error) {
 	if firstErr != nil {
 		written = 0
 	}
-	f.offset += uint64(written)
 	return written, firstErr
 }
 
