@@ -41,7 +41,7 @@ func clientRequestServerPair(t *testing.T) *csPair {
 	ready := make(chan bool)
 	os.Remove(sock) // either this or signal handling
 	pair := &csPair{
-		svrResult: make(chan error),
+		svrResult: make(chan error, 1),
 	}
 	var server *RequestServer
 	go func() {
