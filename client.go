@@ -953,6 +953,12 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	cancel := make(chan struct{})
 	workCh := make(chan work)
 
+	type rwErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan rwErr)
+
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
 		defer close(workCh)
@@ -977,12 +983,6 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 		}
 	}()
 
-	type readErr struct {
-		off int64
-		err error
-	}
-	errCh := make(chan readErr)
-
 	concurrency := len(b)/f.c.maxPacket + 1
 	if concurrency > f.c.maxConcurrentRequests {
 		concurrency = f.c.maxConcurrentRequests
@@ -1001,7 +1001,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 				n, err := f.readChunkAt(ch, packet.b, packet.off)
 				if err != nil {
 					// return the offset as the start + how much we read before the error.
-					errCh <- readErr{packet.off + int64(n), err}
+					errCh <- rwErr{packet.off + int64(n), err}
 					return
 				}
 			}
@@ -1015,10 +1015,10 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	}()
 
 	// collect all the results into a relevant return: the earliest offset to return an error.
-	firstErr := readErr{-1, nil}
-	for readErr := range errCh {
-		if firstErr.off < 0 || readErr.off < firstErr.off {
-			firstErr = readErr
+	firstErr := rwErr{-1, nil}
+	for rwErr := range errCh {
+		if firstErr.off < 0 || rwErr.off < firstErr.off {
+			firstErr = rwErr
 		}
 
 		select {
@@ -1261,6 +1261,12 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 	cancel := make(chan struct{})
 	workCh := make(chan work)
 
+	type rwErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan rwErr)
+
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
 		defer close(workCh)
@@ -1285,12 +1291,6 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 		}
 	}()
 
-	type writeErr struct {
-		off int64
-		err error
-	}
-	errCh := make(chan writeErr)
-
 	concurrency := len(b)/f.c.maxPacket + 1
 	if concurrency > f.c.maxConcurrentRequests {
 		concurrency = f.c.maxConcurrentRequests
@@ -1309,8 +1309,7 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 				n, err := f.writeChunkAt(ch, packet.b, packet.off)
 				if err != nil {
 					// return the offset as the start + how much we wrote before the error.
-					errCh <- writeErr{packet.off + int64(n), err}
-					return
+					errCh <- rwErr{packet.off + int64(n), err}
 				}
 			}
 		}()
@@ -1323,10 +1322,10 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 	}()
 
 	// collect all the results into a relevant return: the earliest offset to return an error.
-	firstErr := writeErr{-1, nil}
-	for writeErr := range errCh {
-		if firstErr.off < 0 || writeErr.off < firstErr.off {
-			firstErr = writeErr
+	firstErr := rwErr{-1, nil}
+	for rwErr := range errCh {
+		if firstErr.off < 0 || rwErr.off < firstErr.off {
+			firstErr = rwErr
 		}
 
 		select {
@@ -1353,67 +1352,167 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 // maximise throughput for transferring the entire file (especially
 // over high latency links).
 func (f *File) ReadFrom(r io.Reader) (int64, error) {
-	inFlight := 0
-	desiredInFlight := 1
-	offset := f.offset
-	// see comment on same line in Read() above
-	ch := make(chan result, f.c.maxConcurrentRequests+1)
-	var firstErr error
-	read := int64(0)
-	b := make([]byte, f.c.maxPacket)
-	for inFlight > 0 || firstErr == nil {
-		for inFlight < desiredInFlight && firstErr == nil {
+	var read int64
+
+	remain := int64(1 << 62)
+	switch r := r.(type) {
+	case interface{ Len() int }:
+		remain = int64(r.Len())
+	case *io.LimitedReader:
+		remain = r.N
+	}
+
+	if remain <= 0 {
+		return 0, nil
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if remain <= int64(f.c.maxPacket) {
+		// Try and spot cases where we likely will only need to read and write once.
+		b := make([]byte, f.c.maxPacket)
+		ch := make(chan result, 1) // reuse channel
+
+		for { // Still, do this in a loop, just to be sure we read everything to io.EOF.
 			n, err := r.Read(b)
-			if err != nil {
-				firstErr = err
+			if n < 0 {
+				panic("sftp.File: reader returned negative count from Read")
 			}
-			f.c.dispatchRequest(ch, sshFxpWritePacket{
-				ID:     f.c.nextID(),
-				Handle: f.handle,
-				Offset: offset,
-				Length: uint32(n),
-				Data:   b[:n],
-			})
-			inFlight++
-			offset += uint64(n)
-			read += int64(n)
+
+			if n > 0 {
+				read += int64(n)
+
+				m, err2 := f.writeChunkAt(ch, b[:n], int64(f.offset))
+				f.offset += uint64(m)
+
+				if err == nil {
+					err = err2
+				}
+			}
+
+			if err != nil {
+				if err == io.EOF {
+					return read, nil // return nil explicitly.
+				}
+
+				return read, err
+			}
+		}
+	}
+
+	// Split the write into multiple maxPacket sized concurrent writes
+	// bounded by maxConcurrentRequests. This allows writes with a suitably
+	// large buffer to transfer data at a much faster rate due to
+	// overlapping round trip times.
+
+	type work struct {
+		b   []byte
+		n   int
+		off int64
+	}
+
+	cancel := make(chan struct{})
+	workCh := make(chan work)
+
+	type rwErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan rwErr)
+
+	pool := sync.Pool{
+		New: func() interface{} {
+			return make([]byte, f.c.maxPacket)
+		},
+	}
+
+	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
+	go func() {
+		defer close(workCh)
+
+		offset := int64(f.offset)
+
+		for {
+			b := pool.Get().([]byte)
+			n, err := r.Read(b)
+
+			if n > 0 {
+				read += int64(n)
+
+				select {
+				case workCh <- work{b, n, offset}:
+					// We need the pool.Put(b) to put the whole slice, not just trunced.
+				case <-cancel:
+					return
+				}
+
+				offset += int64(n)
+			}
+
+			if err != nil {
+				if err != io.EOF {
+					errCh <- rwErr{offset, err}
+				}
+				return
+			}
+		}
+	}()
+
+	concurrency := int(remain/int64(f.c.maxPacket) + 1) // bad guess, but better than no guess
+	if concurrency > f.c.maxConcurrentRequests {
+		concurrency = f.c.maxConcurrentRequests
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		// Map_i: each worker gets work, and does the Read into each buffer from its respective offset.
+		go func() {
+			defer wg.Done()
+
+			ch := make(chan result, 1) // reuse channel per mapper.
+
+			for packet := range workCh {
+				n, err := f.writeChunkAt(ch, packet.b[:packet.n], packet.off)
+				if err != nil {
+					// return the offset as the start + how much we wrote before the error.
+					errCh <- rwErr{packet.off + int64(n), err}
+				}
+				pool.Put(packet.b)
+			}
+		}()
+	}
+
+	// Wait for long tail, before closing results.
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	// collect all the results into a relevant return: the earliest offset to return an error.
+	firstErr := rwErr{-1, nil}
+	for rwErr := range errCh {
+		if firstErr.off < 0 || rwErr.off < firstErr.off {
+			firstErr = rwErr
 		}
 
-		if inFlight == 0 {
-			break
-		}
-		res := <-ch
-		inFlight--
-		if res.err != nil {
-			firstErr = res.err
-			continue
-		}
-		switch res.typ {
-		case sshFxpStatus:
-			id, _ := unmarshalUint32(res.data)
-			err := normaliseError(unmarshalStatus(id, res.data))
-			if err != nil && firstErr == nil {
-				firstErr = err
-				break
-			}
-			if desiredInFlight < f.c.maxConcurrentRequests {
-				desiredInFlight++
-			}
+		select {
+		case <-cancel:
 		default:
-			firstErr = unimplementedPacketErr(res.typ)
+			// stop any more work from being distributed. (Just in case.)
+			close(cancel)
 		}
 	}
-	if firstErr == io.EOF {
-		firstErr = nil
+
+	if firstErr.err != nil {
+		// firstErr.err != nil if and only if firstErr.off is the last successful written offset.
+		f.offset = uint64(firstErr.off)
+		return read, firstErr.err
 	}
-	// If error is non-nil, then there may be gaps in the data written to
-	// the file so it's best to return 0 so the caller can't make any
-	// incorrect assumptions about the state of the file.
-	if firstErr != nil {
-		read = 0
-	}
+
 	f.offset += uint64(read)
-	return read, firstErr
+	return read, nil
 }
 
 // Seek implements io.Seeker by setting the client offset for the next Read or
