@@ -453,16 +453,13 @@ func TestClientCreateFailed(t *testing.T) {
 	defer sftp.Close()
 
 	f, err := ioutil.TempFile("", "sftptest-createfailed")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	defer f.Close()
 	defer os.Remove(f.Name())
 
 	f2, err := sftp.Create(f.Name())
-	if err1, ok := err.(*StatusError); !ok || err1.Code != sshFxPermissionDenied {
-		t.Fatalf("Create: want: %v, got %#v", sshFxPermissionDenied, err)
-	}
+	require.True(t, os.IsPermission(err))
 	if err == nil {
 		f2.Close()
 	}

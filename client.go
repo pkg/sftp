@@ -655,13 +655,17 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // is not empty.
 func (c *Client) Remove(path string) error {
 	err := c.removeFile(path)
+	// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
+	// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
+	// EPERM is converted to os.ErrPermission so it is not a StatusError
 	if err, ok := err.(*StatusError); ok {
 		switch err.Code {
-		// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
-		// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
-		case sshFxPermissionDenied, sshFxFailure, sshFxFileIsADirectory:
+		case sshFxFailure, sshFxFileIsADirectory:
 			return c.RemoveDirectory(path)
 		}
+	}
+	if os.IsPermission(err) {
+		return c.RemoveDirectory(path)
 	}
 	return err
 }
@@ -1363,6 +1367,8 @@ func normaliseError(err error) error {
 			return io.EOF
 		case sshFxNoSuchFile:
 			return os.ErrNotExist
+		case sshFxPermissionDenied:
+			return os.ErrPermission
 		case sshFxOk:
 			return nil
 		default:
