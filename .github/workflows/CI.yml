@@ -11,8 +11,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go: [1.15, 1.14]
         os: [ubuntu-latest, macos-latest]
+        go: [1.15, 1.14]
+        exclude:
+          - os: macos-latest
+            go: 1.14
 
     steps:
       - uses: actions/checkout@v2
