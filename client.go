@@ -1363,6 +1363,8 @@ func normaliseError(err error) error {
 			return io.EOF
 		case sshFxNoSuchFile:
 			return os.ErrNotExist
+		case sshFxPermissionDenied:
+			return os.ErrPermission
 		case sshFxOk:
 			return nil
 		default:
