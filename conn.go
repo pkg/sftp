@@ -105,7 +105,7 @@ func (c *clientConn) putChannel(ch chan<- result, sid uint32) bool {
 	select {
 	case <-c.closed:
 		// already closed with broadcastErr, return error on chan.
-		ch <- result{err: errors.New("unexpected server disconnect")}
+		ch <- result{err: ErrSSHFxConnectionLost}
 		return false
 	default:
 	}
@@ -168,7 +168,7 @@ func (c *clientConn) broadcastErr(err error) {
 	c.Lock()
 	defer c.Unlock()
 
-	bcastRes := result{err: errors.New("unexpected server disconnect")}
+	bcastRes := result{err: ErrSSHFxConnectionLost}
 	for sid, ch := range c.inflight {
 		ch <- bcastRes
 
