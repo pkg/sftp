@@ -2326,6 +2326,87 @@ func BenchmarkReadFrom4MiBDelay150Msec(b *testing.B) {
 	benchmarkReadFrom(b, 4*1024*1024, 150*time.Millisecond)
 }
 
+func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
+	size := 10*1024*1024 + 123 // ~10MiB
+
+	// open sftp client
+	sftp, cmd := testClient(b, false, delay)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest-benchwriteto")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	data := make([]byte, size)
+
+	f.Write(data)
+	f.Close()
+
+	b.ResetTimer()
+	b.SetBytes(int64(size))
+
+	buf := new(bytes.Buffer)
+
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+
+		f2, err := sftp.Open(f.Name())
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		f2.WriteTo(buf)
+		f2.Close()
+
+		if buf.Len() != size {
+			b.Fatalf("wrote buffer size: want %d, got %d", size, buf.Len())
+		}
+	}
+}
+
+func BenchmarkWriteTo1k(b *testing.B) {
+	benchmarkWriteTo(b, 1*1024, NODELAY)
+}
+
+func BenchmarkWriteTo16k(b *testing.B) {
+	benchmarkWriteTo(b, 16*1024, NODELAY)
+}
+
+func BenchmarkWriteTo32k(b *testing.B) {
+	benchmarkWriteTo(b, 32*1024, NODELAY)
+}
+
+func BenchmarkWriteTo128k(b *testing.B) {
+	benchmarkWriteTo(b, 128*1024, NODELAY)
+}
+
+func BenchmarkWriteTo512k(b *testing.B) {
+	benchmarkWriteTo(b, 512*1024, NODELAY)
+}
+
+func BenchmarkWriteTo1MiB(b *testing.B) {
+	benchmarkWriteTo(b, 1024*1024, NODELAY)
+}
+
+func BenchmarkWriteTo4MiB(b *testing.B) {
+	benchmarkWriteTo(b, 4*1024*1024, NODELAY)
+}
+
+func BenchmarkWriteTo4MiBDelay10Msec(b *testing.B) {
+	benchmarkWriteTo(b, 4*1024*1024, 10*time.Millisecond)
+}
+
+func BenchmarkWriteTo4MiBDelay50Msec(b *testing.B) {
+	benchmarkWriteTo(b, 4*1024*1024, 50*time.Millisecond)
+}
+
+func BenchmarkWriteTo4MiBDelay150Msec(b *testing.B) {
+	benchmarkWriteTo(b, 4*1024*1024, 150*time.Millisecond)
+}
+
 func benchmarkCopyDown(b *testing.B, fileSize int64, delay time.Duration) {
 	skipIfWindows(b)
 	// Create a temp file and fill it with zero's.
