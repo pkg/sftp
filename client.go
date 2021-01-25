@@ -1274,19 +1274,19 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 		offset := off
 
 		for len(b) > 0 {
-			rb := b
-			if len(rb) > f.c.maxPacket {
-				rb = rb[:f.c.maxPacket]
+			wb := b
+			if len(wb) > f.c.maxPacket {
+				wb = wb[:f.c.maxPacket]
 			}
 
 			select {
-			case workCh <- work{rb, offset}:
+			case workCh <- work{wb, offset}:
 			case <-cancel:
 				return
 			}
 
-			offset += int64(len(rb))
-			b = b[len(rb):]
+			offset += int64(len(wb))
+			b = b[len(wb):]
 		}
 	}()
 
@@ -1298,7 +1298,7 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		// Map_i: each worker gets work, and does the Read into each buffer from its respective offset.
+		// Map_i: each worker gets work, and does the Write from each buffer to its respective offset.
 		go func() {
 			defer wg.Done()
 
@@ -1469,7 +1469,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		// Map_i: each worker gets work, and does the Read into each buffer from its respective offset.
+		// Map_i: each worker gets work, and does the Write from each buffer to its respective offset.
 		go func() {
 			defer wg.Done()
 
