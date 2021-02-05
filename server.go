@@ -73,7 +73,7 @@ func (svr *Server) closeHandle(handle string) error {
 		fileName := f.Name()
 		err := f.Close()
 		if svr.uploadNotifier != nil && !isDir {
-			go svr.uploadNotifier(fileName)
+			svr.uploadNotifier(fileName)
 		}
 		return err
 	}
