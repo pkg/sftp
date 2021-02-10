@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -723,6 +724,27 @@ func TestRequestReaddir(t *testing.T) {
 	assert.Equal(t, []string{"foo_18", "foo_81"}, names)
 	assert.Len(t, p.svr.openRequests, 0)
 	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestStatVFS(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("StatVFS is implemented on linux and darwin")
+	}
+
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	_, ok := p.cli.HasExtension("statvfs@openssh.com")
+	require.True(t, ok, "request server doesn't list statvfs extension")
+	vfs, err := p.cli.StatVFS("/")
+	require.NoError(t, err)
+	expected, err := getStatVFSForPath("/")
+	require.NoError(t, err)
+	require.NotEqual(t, 0, expected.ID)
+	// check some stats
+	require.Equal(t, expected.Bavail, vfs.Bavail)
+	require.Equal(t, expected.Bfree, vfs.Bfree)
+	require.Equal(t, expected.Blocks, vfs.Blocks)
 }
 
 func TestCleanDisconnect(t *testing.T) {

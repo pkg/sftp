@@ -55,12 +55,20 @@ type FileCmder interface {
 	Filecmd(*Request) error
 }
 
-// PosixRenameFileCmder is a FileCmder that implements the Lstat method.
+// PosixRenameFileCmder is a FileCmder that implements the PosixRename method.
 // If this interface is implemented PosixRename requests will call it
 // otherwise they will be handled in the same way as Rename
 type PosixRenameFileCmder interface {
 	FileCmder
 	PosixRename(*Request) error
+}
+
+// StatVFSFileCmder is a FileCmder that implements the StatVFS method.
+// You need to implement this interface if you want to handle statvfs requests.
+// Please also be sure that the statvfs@openssh.com extension is enabled
+type StatVFSFileCmder interface {
+	FileCmder
+	StatVFS(*Request) (*StatVFS, error)
 }
 
 // FileLister should return an object that fulfils the ListerAt interface

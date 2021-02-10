@@ -212,7 +212,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 		return fileput(handlers.FilePut, r, pkt, alloc, orderID)
 	case "Open":
 		return fileputget(handlers.FilePut, r, pkt, alloc, orderID)
-	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove", "PosixRename":
+	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove", "PosixRename", "StatVFS":
 		return filecmd(handlers.FileCmd, r, pkt)
 	case "List":
 		return filelist(handlers.FileList, r, pkt)
@@ -369,6 +369,19 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 		r.Method = "Rename"
 		err := h.Filecmd(r)
 		return statusFromError(pkt, err)
+	}
+
+	if r.Method == "StatVFS" {
+		if statVFSCmdr, ok := h.(StatVFSFileCmder); ok {
+			stat, err := statVFSCmdr.StatVFS(r)
+			if err != nil {
+				return statusFromError(pkt, err)
+			}
+			stat.ID = pkt.id()
+			return stat
+		}
+
+		return statusFromError(pkt, ErrSSHFxOpUnsupported)
 	}
 
 	err := h.Filecmd(r)

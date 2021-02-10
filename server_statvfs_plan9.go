@@ -7,3 +7,7 @@ import (
 func (p sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
 	return statusFromError(p, syscall.EPLAN9)
 }
+
+func getStatVFSForPath(name string) (*StatVFS, error) {
+	return nil, syscall.EPLAN9
+}

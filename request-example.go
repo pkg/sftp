@@ -266,6 +266,14 @@ func (fs *root) PosixRename(r *Request) error {
 	return fs.rename(r.Filepath, r.Target)
 }
 
+func (fs *root) StatVFS(r *Request) (*StatVFS, error) {
+	if fs.mockErr != nil {
+		return nil, fs.mockErr
+	}
+
+	return getStatVFSForPath(r.Filepath)
+}
+
 func (fs *root) mkdir(pathname string) error {
 	dir := &memFile{
 		modtime: time.Now(),
