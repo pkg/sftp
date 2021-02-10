@@ -638,7 +638,7 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 
 	// the resquest failed
 	case sshFxpStatus:
-		return nil, errors.New(fxp(sshFxpStatus).String())
+		return nil, normaliseError(unmarshalStatus(id, data))
 
 	default:
 		return nil, unimplementedPacketErr(typ)

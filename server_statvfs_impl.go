@@ -10,16 +10,20 @@ import (
 )
 
 func (p sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
-	stat := &syscall.Statfs_t{}
-	if err := syscall.Statfs(p.Path, stat); err != nil {
-		return statusFromError(p, err)
-	}
-
-	retPkt, err := statvfsFromStatfst(stat)
+	retPkt, err := getStatVFSForPath(p.Path)
 	if err != nil {
 		return statusFromError(p, err)
 	}
 	retPkt.ID = p.ID
 
 	return retPkt
+}
+
+func getStatVFSForPath(name string) (*StatVFS, error) {
+	stat := &syscall.Statfs_t{}
+	if err := syscall.Statfs(name, stat); err != nil {
+		return nil, err
+	}
+
+	return statvfsFromStatfst(stat)
 }
