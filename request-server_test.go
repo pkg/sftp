@@ -745,6 +745,23 @@ func TestRequestStatVFS(t *testing.T) {
 	require.Equal(t, expected.Bavail, vfs.Bavail)
 	require.Equal(t, expected.Bfree, vfs.Bfree)
 	require.Equal(t, expected.Blocks, vfs.Blocks)
+
+	checkRequestServerAllocator(t, p)
+}
+
+func TestRequestStatVFSError(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("StatVFS is implemented on linux and darwin")
+	}
+
+	p := clientRequestServerPair(t)
+	defer p.Close()
+
+	_, err := p.cli.StatVFS("a missing path")
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	checkRequestServerAllocator(t, p)
 }
 
 func TestCleanDisconnect(t *testing.T) {
