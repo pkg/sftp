@@ -53,30 +53,6 @@ func MaxPacketChecked(size int) ClientOption {
 	}
 }
 
-// UseFstat sets whether to use Fstat or Stat when File.WriteTo is called
-// (usually when copying files).
-// Some servers limit the amount of open files and calling Stat after opening
-// the file will throw an error From the server. Setting this flag will call
-// Fstat instead of Stat which is suppose to be called on an open file handle.
-//
-// It has been found that that with IBM Sterling SFTP servers which have
-// "extractability" level set to 1 which means only 1 file can be opened at
-// any given time.
-//
-// If the server you are working with still has an issue with both Stat and
-// Fstat calls you can always open a file and read it until the end.
-//
-// Another reason to read the file until its end and Fstat doesn't work is
-// that in some servers, reading a full file will automatically delete the
-// file as some of these mainframes map the file to a message in a queue.
-// Once the file has been read it will get deleted.
-func UseFstat(value bool) ClientOption {
-	return func(c *Client) error {
-		c.useFstat = value
-		return nil
-	}
-}
-
 // MaxPacketUnchecked sets the maximum size of the payload, measured in bytes.
 // It accepts sizes larger than the 32768 bytes all servers should support.
 // Only use a setting higher than 32768 if your application always connects to
@@ -121,6 +97,65 @@ func MaxConcurrentRequestsPerFile(n int) ClientOption {
 	}
 }
 
+// UseConcurrentWrites allows the Client to perform concurrent Writes.
+//
+// Using concurrency while doing writes, requires special consideration.
+// A write to a later offset in a file after an error,
+// could end up with a file length longer than what was successfully written.
+//
+// When using this option, if you receive an error during `io.Copy` or `io.WriteTo`,
+// you may need to `Truncate` the target Writer to avoid “holes” in the data written.
+func UseConcurrentWrites(value bool) ClientOption {
+	return func(c *Client) error {
+		c.useConcurrentWrites = value
+		return nil
+	}
+}
+
+// UseFstat sets whether to use Fstat or Stat when File.WriteTo is called
+// (usually when copying files).
+// Some servers limit the amount of open files and calling Stat after opening
+// the file will throw an error From the server. Setting this flag will call
+// Fstat instead of Stat which is suppose to be called on an open file handle.
+//
+// It has been found that that with IBM Sterling SFTP servers which have
+// "extractability" level set to 1 which means only 1 file can be opened at
+// any given time.
+//
+// If the server you are working with still has an issue with both Stat and
+// Fstat calls you can always open a file and read it until the end.
+//
+// Another reason to read the file until its end and Fstat doesn't work is
+// that in some servers, reading a full file will automatically delete the
+// file as some of these mainframes map the file to a message in a queue.
+// Once the file has been read it will get deleted.
+func UseFstat(value bool) ClientOption {
+	return func(c *Client) error {
+		c.useFstat = value
+		return nil
+	}
+}
+
+// Client represents an SFTP session on a *ssh.ClientConn SSH connection.
+// Multiple Clients can be active on a single SSH connection, and a Client
+// may be called concurrently from multiple Goroutines.
+//
+// Client implements the github.com/kr/fs.FileSystem interface.
+type Client struct {
+	clientConn
+
+	ext map[string]string // Extensions (name -> data).
+
+	maxPacket             int // max packet size read or written.
+	maxConcurrentRequests int
+	nextid                uint32
+
+	// write concurrency is… error prone.
+	// Default behavior should be to not use it.
+	useConcurrentWrites bool
+	useFstat            bool
+}
+
 // NewClient creates a new SFTP client on conn, using zero or more option
 // functions.
 func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
@@ -162,10 +197,14 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 		maxPacket:             1 << 15,
 		maxConcurrentRequests: 64,
 	}
-	if err := sftp.applyOptions(opts...); err != nil {
-		wr.Close()
-		return nil, err
+
+	for _, opt := range opts {
+		if err := opt(sftp); err != nil {
+			wr.Close()
+			return nil, err
+		}
 	}
+
 	if err := sftp.sendInit(); err != nil {
 		wr.Close()
 		return nil, err
@@ -174,25 +213,11 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 		wr.Close()
 		return nil, err
 	}
+
 	sftp.clientConn.wg.Add(1)
 	go sftp.loop()
+
 	return sftp, nil
-}
-
-// Client represents an SFTP session on a *ssh.ClientConn SSH connection.
-// Multiple Clients can be active on a single SSH connection, and a Client
-// may be called concurrently from multiple Goroutines.
-//
-// Client implements the github.com/kr/fs.FileSystem interface.
-type Client struct {
-	clientConn
-
-	ext map[string]string // Extensions (name -> data).
-
-	maxPacket             int // max packet size read or written.
-	maxConcurrentRequests int
-	nextid                uint32
-	useFstat              bool
 }
 
 // Create creates the named file mode 0666 (before umask), truncating it if it
@@ -847,17 +872,6 @@ func (c *Client) MkdirAll(path string) error {
 	return nil
 }
 
-// applyOptions applies options functions to the Client.
-// If an error is encountered, option processing ceases.
-func (c *Client) applyOptions(opts ...ClientOption) error {
-	for _, f := range opts {
-		if err := f(c); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // File represents a remote file.
 type File struct {
 	c      *Client
@@ -865,7 +879,7 @@ type File struct {
 	handle string
 
 	mu     sync.Mutex
-	offset uint64 // current offset within remote file
+	offset int64 // current offset within remote file
 }
 
 // Close closes the File, rendering it unusable for I/O. It returns an
@@ -892,9 +906,9 @@ func (f *File) Read(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	r, err := f.ReadAt(b, int64(f.offset))
-	f.offset += uint64(r)
-	return r, err
+	n, err := f.ReadAt(b, f.offset)
+	f.offset += int64(n)
+	return n, err
 }
 
 // readChunkAt attempts to read the whole entire length of the buffer from the file starting at the offset.
@@ -938,39 +952,35 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 // so the file offset is not altered during the read.
 func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	if len(b) <= f.c.maxPacket {
-		return f.readChunkAt(make(chan result, 1), b, off)
+		// This should be able to be serviced with 1/2 requests.
+		// So, just do it directly.
+		return f.readChunkAt(nil, b, off)
 	}
 
-	// Split the read into multiple maxPacket sized concurrent writes
-	// bounded by maxConcurrentRequests. This allows writes with a suitably
-	// large buffer to transfer data at a much faster rate due to
-	// overlapping round trip times.
+	// Split the read into multiple maxPacket-sized concurrent reads bounded by maxConcurrentRequests.
+	// This allows writes with a suitably large buffer to transfer data at a much faster rate
+	// by overlapping round trip times.
+
+	cancel := make(chan struct{})
 
 	type work struct {
 		b   []byte
 		off int64
 	}
-
-	cancel := make(chan struct{})
 	workCh := make(chan work)
-
-	type rwErr struct {
-		off int64
-		err error
-	}
-	errCh := make(chan rwErr)
 
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
 		defer close(workCh)
 
 		b := b
-		offset := int64(f.offset)
+		offset := off
+		chunkSize := f.c.maxPacket
 
 		for len(b) > 0 {
 			rb := b
-			if len(rb) > f.c.maxPacket {
-				rb = rb[:f.c.maxPacket]
+			if len(rb) > chunkSize {
+				rb = rb[:chunkSize]
 			}
 
 			select {
@@ -983,6 +993,12 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 			b = b[len(rb):]
 		}
 	}()
+
+	type rErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan rErr)
 
 	concurrency := len(b)/f.c.maxPacket + 1
 	if concurrency > f.c.maxConcurrentRequests {
@@ -1002,7 +1018,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 				n, err := f.readChunkAt(ch, packet.b, packet.off)
 				if err != nil {
 					// return the offset as the start + how much we read before the error.
-					errCh <- rwErr{packet.off + int64(n), err}
+					errCh <- rErr{packet.off + int64(n), err}
 					return
 				}
 			}
@@ -1016,10 +1032,10 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	}()
 
 	// collect all the results into a relevant return: the earliest offset to return an error.
-	firstErr := rwErr{math.MaxInt64, nil}
-	for rwErr := range errCh {
-		if rwErr.off <= firstErr.off {
-			firstErr = rwErr
+	firstErr := rErr{math.MaxInt64, nil}
+	for rErr := range errCh {
+		if rErr.off <= firstErr.off {
+			firstErr = rErr
 		}
 
 		select {
@@ -1039,19 +1055,19 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	return len(b), nil
 }
 
-// writeToSimple implements WriteTo, but works sequentially with no parallelism.
+// writeToSequential implements WriteTo, but works sequentially with no parallelism.
 func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 	b := make([]byte, f.c.maxPacket)
 	ch := make(chan result, 1) // reusable channel
 
-	for { // Still, do this in a loop, just to be sure we read everything to io.EOF.
-		n, err := f.readChunkAt(ch, b, int64(f.offset))
+	for {
+		n, err := f.readChunkAt(ch, b, f.offset)
 		if n < 0 {
 			panic("sftp.File: returned negative count from readChunkAt")
 		}
 
 		if n > 0 {
-			f.offset += uint64(n)
+			f.offset += int64(n)
 
 			m, err2 := w.Write(b[:n])
 			written += int64(m)
@@ -1071,13 +1087,18 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 	}
 }
 
-// WriteTo writes the file to w. The return value is the number of bytes
-// written. Any error encountered during the write is also returned.
+// WriteTo writes the file to the given Writer.
+// The return value is the number of bytes written.
+// Any error encountered during the write is also returned.
 //
-// This method is preferred over calling Read multiple times to
-// maximise throughput for transferring the entire file (especially
-// over high latency links).
-func (f *File) WriteTo(w io.Writer) (int64, error) {
+// This method is preferred over calling Read multiple times
+// to maximise throughput for transferring the entire file,
+// especially over high latency links.
+func (f *File) WriteTo(w io.Writer) (written int64, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// While working concurrently, we want to guess how many concurrent workers we should use.
 	var fileSize uint64
 	if f.c.useFstat {
 		fileStat, err := f.c.fstat(f.handle)
@@ -1093,95 +1114,154 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 		fileSize = uint64(fi.Size())
 	}
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if fileSize <= uint64(f.c.maxPacket) {
 		// We should be able to handle this in one Read.
 		return f.writeToSequential(w)
 	}
 
-	concurrency := int(fileSize/uint64(f.c.maxPacket) + 1) // bad guess, but better than no guess
+	concurrency := int(fileSize/uint64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
 	if concurrency > f.c.maxConcurrentRequests {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
-	// if the writing Reduce phase has ended, then all work unconditionally needs to be thrown out.
+	// If the writing Reduce phase has ended, then all work unconditionally needs to be thrown out.
 	cancel := make(chan struct{})
-	defer close(cancel)
+	var wg sync.WaitGroup
+	defer func() {
+		close(cancel)
+		// We want to wait until all outstanding goroutines with an `f` or `f.c` reference have completed.
+		// Just to be sure we don’t orphan any goroutines any hanging references.
+		wg.Wait()
+	}()
 
 	type writeWork struct {
-		b    []byte
-		n    int
+		b   []byte
+		n   int
+		off int64
+		err error
+
 		next chan writeWork
 	}
-	writeCh := make(chan writeWork, 1)
-	errCh := make(chan error, 1)
+	writeCh := make(chan writeWork)
 
-	go func() {
-		// We should be able to handle this in one Read.
-		ch := make(chan result, 1) // reusable channel
+	type readWork struct {
+		off       int64
+		cur, next chan writeWork
+	}
+	readCh := make(chan readWork)
+
+	pool := sync.Pool{
+		New: func() interface{} {
+			return make([]byte, f.c.maxPacket)
+		},
+	}
+
+	// Slice: hand out chunks of work on demand, with a `cur` and `next` channel built-in for sequencing.
+	go func(off int64, chunkSize int) {
+		// We pass in arguments, so this goroutine never has to reference `f` or `f.c`.
 
 		cur := writeCh
 
-		for { // Still, do this in a loop, just to be sure we read everything to io.EOF.
-			b := make([]byte, f.c.maxPacket)
+		for {
+			next := make(chan writeWork)
+			readWork := readWork{
+				off:  off,
+				cur:  cur,
+				next: next,
+			}
+			off += int64(chunkSize)
+			cur = next
 
-			n, err := f.readChunkAt(ch, b, int64(f.offset))
-			if n < 0 {
-				panic("sftp.File: returned negative count from readChunkAt")
+			select {
+			case <-cancel:
+				return
+			case readCh <- readWork:
 			}
 
-			if n > 0 {
-				f.offset += uint64(n)
+		}
+	}(f.offset, f.c.maxPacket)
 
-				next := make(chan writeWork, 1)
-				cur <- writeWork{
-					b:    b,
-					n:    n,
-					next: next,
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		// Map_i: each worker gets readWork, and does the Read into a buffer at the given offset.
+		go func() {
+			defer wg.Done()
+
+			ch := make(chan result, 1) // reusable channel
+
+			for {
+				var readWork readWork
+
+				select {
+				case <-cancel:
+					return
+				case readWork = <-readCh:
 				}
-				cur = next
-			}
 
-			if err != nil {
-				if err == io.EOF {
-					// Do not send io.EOF in this codepath,
-					// it could erroneously end writes early.
-					close(cur)
+				b := pool.Get().([]byte)
+
+				n, err := f.readChunkAt(ch, b, readWork.off)
+				if n < 0 {
+					panic("sftp.File: returned negative count from readChunkAt")
+				}
+
+				writeWork := writeWork{
+					b:   b,
+					n:   n,
+					off: readWork.off + int64(n),
+					err: err,
+
+					next: readWork.next,
+				}
+
+				select {
+				case readWork.cur <- writeWork:
+				case <-cancel:
 					return
 				}
 
-				// Do not close(cur) in this codepath,
-				// it could be erroneously interpreted as the EOF signal.
-				errCh <- err
-				return
+				if err != nil {
+					//close(cur)
+					return
+				}
 			}
-		}
+		}()
+	}
+
+	lastOff := f.offset
+	defer func() {
+		f.offset = lastOff
 	}()
 
-	var written int64
-
+	// Reduce: serialize the results from the reads into sequential writes.
 	cur := writeCh
 	for {
-		select {
-		case packet, ok := <-cur:
-			if !ok {
-				return written, nil
-			}
+		packet, ok := <-cur
+		if !ok {
+			return written, nil
+		}
 
+		// Because writeWork is serialized, we know we will visit these packets in order.
+		lastOff = packet.off
+
+		if packet.n > 0 {
 			n, err := w.Write(packet.b[:packet.n])
 			written += int64(n)
 			if err != nil {
-				close(cancel)
 				return written, err
 			}
-
-			cur = packet.next
-
-		case err := <-errCh:
-			return written, err
 		}
+
+		if packet.err != nil {
+			if packet.err == io.EOF {
+				return written, nil
+			}
+
+			return written, packet.err
+		}
+
+		pool.Put(packet.b)
+		cur = packet.next
 	}
 }
 
@@ -1207,9 +1287,9 @@ func (f *File) Write(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	r, err := f.WriteAt(b, int64(f.offset))
-	f.offset += uint64(r)
-	return r, err
+	n, err := f.WriteAt(b, f.offset)
+	f.offset += int64(n)
+	return n, err
 }
 
 func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
@@ -1239,56 +1319,49 @@ func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
 	return len(b), nil
 }
 
-// WriteAt writess up to len(b) byte to the File at a given offset `off`. It returns
-// the number of bytes written and an error, if any. WriteAt follows io.WriterAt semantics,
-// so the file offset is not altered during the write.
-func (f *File) WriteAt(b []byte, off int64) (int, error) {
-	if len(b) <= f.c.maxPacket {
-		return f.writeChunkAt(make(chan result, 1), b, off)
-	}
-
+// writeAtConcurrent implements WriterAt, but works concurrently rather than sequentially.
+func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 	// Split the write into multiple maxPacket sized concurrent writes
 	// bounded by maxConcurrentRequests. This allows writes with a suitably
 	// large buffer to transfer data at a much faster rate due to
 	// overlapping round trip times.
 
+	cancel := make(chan struct{})
+
 	type work struct {
 		b   []byte
 		off int64
 	}
-
-	cancel := make(chan struct{})
 	workCh := make(chan work)
-
-	type rwErr struct {
-		off int64
-		err error
-	}
-	errCh := make(chan rwErr)
 
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
 		defer close(workCh)
 
-		b := b
-		offset := off
+		var read int
+		chunkSize := f.c.maxPacket
 
-		for len(b) > 0 {
-			wb := b
-			if len(wb) > f.c.maxPacket {
-				wb = wb[:f.c.maxPacket]
+		for read < len(b) {
+			wb := b[read:]
+			if len(wb) > chunkSize {
+				wb = wb[:chunkSize]
 			}
 
 			select {
-			case workCh <- work{wb, offset}:
+			case workCh <- work{wb, off + int64(read)}:
 			case <-cancel:
 				return
 			}
 
-			offset += int64(len(wb))
-			b = b[len(wb):]
+			read += len(wb)
 		}
 	}()
+
+	type wErr struct {
+		off int64
+		err error
+	}
+	errCh := make(chan wErr)
 
 	concurrency := len(b)/f.c.maxPacket + 1
 	if concurrency > f.c.maxConcurrentRequests {
@@ -1308,7 +1381,7 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 				n, err := f.writeChunkAt(ch, packet.b, packet.off)
 				if err != nil {
 					// return the offset as the start + how much we wrote before the error.
-					errCh <- rwErr{packet.off + int64(n), err}
+					errCh <- wErr{packet.off + int64(n), err}
 				}
 			}
 		}()
@@ -1320,11 +1393,11 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 		close(errCh)
 	}()
 
-	// collect all the results into a relevant return: the earliest offset to return an error.
-	firstErr := rwErr{math.MaxInt64, nil}
-	for rwErr := range errCh {
-		if rwErr.off <= firstErr.off {
-			firstErr = rwErr
+	// Reduce: collect all the results into a relevant return: the earliest offset to return an error.
+	firstErr := wErr{math.MaxInt64, nil}
+	for wErr := range errCh {
+		if wErr.off <= firstErr.off {
+			firstErr = wErr
 		}
 
 		select {
@@ -1336,87 +1409,63 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 	}
 
 	if firstErr.err != nil {
-		// firstErr.err != nil if and only if firstErr.off > our starting offset.
+		// firstErr.err != nil if and only if firstErr.off >= our starting offset.
 		return int(firstErr.off - off), firstErr.err
 	}
 
 	return len(b), nil
 }
 
-// readFromSimple implements WriteTo, but works sequentially with no parallelism.
-func (f *File) readFromSequential(r io.Reader) (read int64, err error) {
-	b := make([]byte, f.c.maxPacket)
+// WriteAt writess up to len(b) byte to the File at a given offset `off`. It returns
+// the number of bytes written and an error, if any. WriteAt follows io.WriterAt semantics,
+// so the file offset is not altered during the write.
+func (f *File) WriteAt(b []byte, off int64) (int, error) {
+	if len(b) <= f.c.maxPacket {
+		// We can do this in one write.
+		return f.writeChunkAt(nil, b, off)
+	}
+
+	if f.c.useConcurrentWrites {
+		return f.writeAtConcurrent(b, off)
+	}
+
 	ch := make(chan result, 1) // reusable channel
 
-	for { // Still, do this in a loop, just to be sure we read everything to io.EOF.
-		n, err := r.Read(b)
-		if n < 0 {
-			panic("sftp.File: reader returned negative count from Read")
+	var written int
+	chunkSize := f.c.maxPacket
+
+	for written < len(b) {
+		wb := b[written:]
+		if len(wb) > chunkSize {
+			wb = wb[:chunkSize]
 		}
 
+		n, err := f.writeChunkAt(ch, wb, off+int64(written))
 		if n > 0 {
-			read += int64(n)
-
-			m, err2 := f.writeChunkAt(ch, b[:n], int64(f.offset))
-			f.offset += uint64(m)
-
-			if err == nil {
-				err = err2
-			}
+			written += n
 		}
 
 		if err != nil {
-			if err == io.EOF {
-				return read, nil // return nil explicitly.
-			}
-
-			return read, err
+			return written, err
 		}
 	}
+
+	return len(b), nil
 }
 
-// ReadFrom reads data from r until EOF and writes it to the file. The return
-// value is the number of bytes read. Any error except io.EOF encountered
-// during the read is also returned.
-//
-// This method is preferred over calling Write multiple times to
-// maximise throughput for transferring the entire file (especially
-// over high latency links).
-func (f *File) ReadFrom(r io.Reader) (int64, error) {
-	var read int64
+// readFromConcurrent implements ReaderFrom, but works concurrently rather than sequentially.
+func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err error) {
+	// Split the write into multiple maxPacket sized concurrent writes.
+	// This allows writes with a suitably large reader
+	// to transfer data at a much faster rate due to overlapping round trip times.
 
-	remain := int64(1 << 62)
-	switch r := r.(type) {
-	case interface{ Len() int }:
-		remain = int64(r.Len())
-	case *io.LimitedReader:
-		remain = r.N
-	}
-
-	if remain <= 0 {
-		return 0, nil
-	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if remain <= int64(f.c.maxPacket) {
-		// Try and spot cases where we likely will only need to read and write once.
-		return f.readFromSequential(r)
-	}
-
-	// Split the write into multiple maxPacket sized concurrent writes
-	// bounded by maxConcurrentRequests. This allows writes with a suitably
-	// large buffer to transfer data at a much faster rate due to
-	// overlapping round trip times.
+	cancel := make(chan struct{})
 
 	type work struct {
 		b   []byte
 		n   int
 		off int64
 	}
-
-	cancel := make(chan struct{})
 	workCh := make(chan work)
 
 	type rwErr struct {
@@ -1432,13 +1481,15 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
-	go func(offset int64) {
+	go func() {
 		defer close(workCh)
+
+		offset := f.offset
 
 		for {
 			b := pool.Get().([]byte)
-			n, err := r.Read(b)
 
+			n, err := r.Read(b)
 			if n > 0 {
 				read += int64(n)
 
@@ -1459,9 +1510,9 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 				return
 			}
 		}
-	}(int64(f.offset))
+	}()
 
-	concurrency := int(remain/int64(f.c.maxPacket) + 1) // bad guess, but better than no guess
+	concurrency := int(remain/int64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
 	if concurrency > f.c.maxConcurrentRequests {
 		concurrency = f.c.maxConcurrentRequests
 	}
@@ -1492,7 +1543,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 		close(errCh)
 	}()
 
-	// collect all the results into a relevant return: the earliest offset to return an error.
+	// Collect all the results into a relevant return: the earliest offset to return an error.
 	firstErr := rwErr{math.MaxInt64, nil}
 	for rwErr := range errCh {
 		if rwErr.off <= firstErr.off {
@@ -1508,34 +1559,115 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	if firstErr.err != nil {
-		// firstErr.err != nil if and only if firstErr.off is the last successful written offset.
-		f.offset = uint64(firstErr.off)
+		// firstErr.err != nil if and only if firstErr.off is a valid offset.
+		//
+		// firstErr.off will then be the lesser of:
+		// * the last successfully written offset,
+		// * the last successfully read offset.
+		//
+		// This could be less than the last succesfully written offset,
+		// which is the whole reason for the UseConcurrentWrites() ClientOption.
+		// Callers are responsible for truncating any SFTP files to the correct length.
+		f.offset = firstErr.off
+
+		// ReadFrom is defined to return the read bytes, regardless of any writer errors.
 		return read, firstErr.err
 	}
 
-	f.offset += uint64(read)
+	f.offset += read
 	return read, nil
+}
+
+// ReadFrom reads data from r until EOF and writes it to the file. The return
+// value is the number of bytes read. Any error except io.EOF encountered
+// during the read is also returned.
+//
+// This method is preferred over calling Write multiple times
+// to maximise throughput for transferring the entire file,
+// especially over high-latency links.
+func (f *File) ReadFrom(r io.Reader) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.c.useConcurrentWrites {
+		var remain int64
+		switch r := r.(type) {
+		case interface{ Len() int }:
+			remain = int64(r.Len())
+
+		case *io.LimitedReader:
+			remain = r.N
+
+		case *os.File:
+			// For files, always presume max concurrency.
+			remain = math.MaxInt64
+		}
+
+		if remain > int64(f.c.maxPacket) {
+			// Only use concurrency, if it would be at least two read/writes.
+			return f.readFromConcurrent(r, remain)
+		}
+	}
+
+	ch := make(chan result, 1) // reusable channel
+
+	b := make([]byte, f.c.maxPacket)
+
+	var read int64
+	for {
+		n, err := r.Read(b)
+		if n < 0 {
+			panic("sftp.File: reader returned negative count from Read")
+		}
+
+		if n > 0 {
+			read += int64(n)
+
+			m, err2 := f.writeChunkAt(ch, b[:n], f.offset)
+			f.offset += int64(m)
+
+			if err == nil {
+				err = err2
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				return read, nil // return nil explicitly.
+			}
+
+			return read, err
+		}
+	}
 }
 
 // Seek implements io.Seeker by setting the client offset for the next Read or
 // Write. It returns the next offset read. Seeking before or after the end of
 // the file is undefined. Seeking relative to the end calls Stat.
 func (f *File) Seek(offset int64, whence int) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	switch whence {
 	case io.SeekStart:
-		f.offset = uint64(offset)
 	case io.SeekCurrent:
-		f.offset = uint64(int64(f.offset) + offset)
+		offset += f.offset
 	case io.SeekEnd:
 		fi, err := f.Stat()
 		if err != nil {
-			return int64(f.offset), err
+			return f.offset, err
 		}
-		f.offset = uint64(fi.Size() + offset)
+		offset += fi.Size()
 	default:
-		return int64(f.offset), unimplementedSeekWhence(whence)
+		return f.offset, unimplementedSeekWhence(whence)
 	}
-	return int64(f.offset), nil
+
+	if offset < 0 {
+		return f.offset, os.ErrInvalid
+	}
+
+	f.offset = offset
+	return f.offset, nil
 }
 
 // Chown changes the uid/gid of the current file.
