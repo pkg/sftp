@@ -268,7 +268,7 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []*sshFxpNameAttr{
-			&sshFxpNameAttr{
+			{
 				Name:     path,
 				LongName: path,
 				Attrs:    emptyFileStat,

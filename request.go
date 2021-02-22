@@ -476,7 +476,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		return &sshFxpNamePacket{
 			ID: pkt.id(),
 			NameAttrs: []*sshFxpNameAttr{
-				&sshFxpNameAttr{
+				{
 					Name:     filename,
 					LongName: filename,
 					Attrs:    emptyFileStat,

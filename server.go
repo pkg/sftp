@@ -230,7 +230,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		rpkt = &sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []*sshFxpNameAttr{
-				&sshFxpNameAttr{
+				{
 					Name:     f,
 					LongName: f,
 					Attrs:    emptyFileStat,
@@ -246,7 +246,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		rpkt = &sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []*sshFxpNameAttr{
-				&sshFxpNameAttr{
+				{
 					Name:     f,
 					LongName: f,
 					Attrs:    emptyFileStat,
