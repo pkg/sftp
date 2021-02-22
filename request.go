@@ -219,7 +219,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 	case "Stat", "Lstat", "Readlink":
 		return filestat(handlers.FileList, r, pkt)
 	default:
-		return statusFromError(pkt,
+		return statusFromError(pkt.id(),
 			errors.Errorf("unexpected method: %s", r.Method))
 	}
 }
@@ -228,6 +228,8 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	flags := r.Pflags()
 
+	id := pkt.id()
+
 	switch {
 	case flags.Write, flags.Append, flags.Creat, flags.Trunc:
 		if flags.Read {
@@ -235,36 +237,37 @@ func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 				r.Method = "Open"
 				rw, err := openFileWriter.OpenFile(r)
 				if err != nil {
-					return statusFromError(pkt, err)
+					return statusFromError(id, err)
 				}
 				r.state.writerReaderAt = rw
-				return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
+				return &sshFxpHandlePacket{ID: id, Handle: r.handle}
 			}
 		}
 
 		r.Method = "Put"
 		wr, err := h.FilePut.Filewrite(r)
 		if err != nil {
-			return statusFromError(pkt, err)
+			return statusFromError(id, err)
 		}
 		r.state.writerAt = wr
 	case flags.Read:
 		r.Method = "Get"
 		rd, err := h.FileGet.Fileread(r)
 		if err != nil {
-			return statusFromError(pkt, err)
+			return statusFromError(id, err)
 		}
 		r.state.readerAt = rd
 	default:
-		return statusFromError(pkt, errors.New("bad file flags"))
+		return statusFromError(id, errors.New("bad file flags"))
 	}
-	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
+	return &sshFxpHandlePacket{ID: id, Handle: r.handle}
 }
+
 func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 	r.Method = "List"
 	la, err := h.FileList.Filelist(r)
 	if err != nil {
-		return statusFromError(pkt, wrapPathError(r.Filepath, err))
+		return statusFromError(pkt.id(), wrapPathError(r.Filepath, err))
 	}
 	r.state.listerAt = la
 	return &sshFxpHandlePacket{ID: pkt.id(), Handle: r.handle}
@@ -276,14 +279,14 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 	reader := r.state.readerAt
 	r.state.RUnlock()
 	if reader == nil {
-		return statusFromError(pkt, errors.New("unexpected read packet"))
+		return statusFromError(pkt.id(), errors.New("unexpected read packet"))
 	}
 
 	data, offset, _ := packetData(pkt, alloc, orderID)
 	n, err := reader.ReadAt(data, offset)
 	// only return EOF error if no data left to read
 	if err != nil && (err != io.EOF || n == 0) {
-		return statusFromError(pkt, err)
+		return statusFromError(pkt.id(), err)
 	}
 	return &sshFxpDataPacket{
 		ID:     pkt.id(),
@@ -298,12 +301,12 @@ func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orde
 	writer := r.state.writerAt
 	r.state.RUnlock()
 	if writer == nil {
-		return statusFromError(pkt, errors.New("unexpected write packet"))
+		return statusFromError(pkt.id(), errors.New("unexpected write packet"))
 	}
 
 	data, offset, _ := packetData(pkt, alloc, orderID)
 	_, err := writer.WriteAt(data, offset)
-	return statusFromError(pkt, err)
+	return statusFromError(pkt.id(), err)
 }
 
 // wrap OpenFileWriter handler
@@ -312,7 +315,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 	writerReader := r.state.writerReaderAt
 	r.state.RUnlock()
 	if writerReader == nil {
-		return statusFromError(pkt, errors.New("unexpected write and read packet"))
+		return statusFromError(pkt.id(), errors.New("unexpected write and read packet"))
 	}
 	switch p := pkt.(type) {
 	case *sshFxpReadPacket:
@@ -320,7 +323,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 		n, err := writerReader.ReadAt(data, offset)
 		// only return EOF error if no data left to read
 		if err != nil && (err != io.EOF || n == 0) {
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 		return &sshFxpDataPacket{
 			ID:     pkt.id(),
@@ -330,9 +333,9 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 	case *sshFxpWritePacket:
 		data, offset := p.Data, int64(p.Offset)
 		_, err := writerReader.WriteAt(data, offset)
-		return statusFromError(pkt, err)
+		return statusFromError(pkt.id(), err)
 	default:
-		return statusFromError(pkt, errors.New("unexpected packet type for read or write"))
+		return statusFromError(pkt.id(), errors.New("unexpected packet type for read or write"))
 	}
 }
 
@@ -358,30 +361,30 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 	if r.Method == "PosixRename" {
 		if posixRenamer, ok := h.(PosixRenameFileCmder); ok {
 			err := posixRenamer.PosixRename(r)
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 
 		// PosixRenameFileCmder not implemented handle this request as a Rename
 		r.Method = "Rename"
 		err := h.Filecmd(r)
-		return statusFromError(pkt, err)
+		return statusFromError(pkt.id(), err)
 	}
 
 	if r.Method == "StatVFS" {
 		if statVFSCmdr, ok := h.(StatVFSFileCmder); ok {
 			stat, err := statVFSCmdr.StatVFS(r)
 			if err != nil {
-				return statusFromError(pkt, err)
+				return statusFromError(pkt.id(), err)
 			}
 			stat.ID = pkt.id()
 			return stat
 		}
 
-		return statusFromError(pkt, ErrSSHFxOpUnsupported)
+		return statusFromError(pkt.id(), ErrSSHFxOpUnsupported)
 	}
 
 	err := h.Filecmd(r)
-	return statusFromError(pkt, err)
+	return statusFromError(pkt.id(), err)
 }
 
 // wrap FileLister handler
@@ -389,7 +392,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	var err error
 	lister := r.getLister()
 	if lister == nil {
-		return statusFromError(pkt, errors.New("unexpected dir packet"))
+		return statusFromError(pkt.id(), errors.New("unexpected dir packet"))
 	}
 
 	offset := r.lsNext()
@@ -402,16 +405,16 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	switch r.Method {
 	case "List":
 		if err != nil && err != io.EOF {
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 		if err == io.EOF && n == 0 {
-			return statusFromError(pkt, io.EOF)
+			return statusFromError(pkt.id(), io.EOF)
 		}
 		dirname := filepath.ToSlash(path.Base(r.Filepath))
 		ret := &sshFxpNamePacket{ID: pkt.id()}
 
 		for _, fi := range finfo {
-			ret.NameAttrs = append(ret.NameAttrs, sshFxpNameAttr{
+			ret.NameAttrs = append(ret.NameAttrs, &sshFxpNameAttr{
 				Name:     fi.Name(),
 				LongName: runLs(dirname, fi),
 				Attrs:    []interface{}{fi},
@@ -420,7 +423,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		return ret
 	default:
 		err = errors.Errorf("unexpected method: %s", r.Method)
-		return statusFromError(pkt, err)
+		return statusFromError(pkt.id(), err)
 	}
 }
 
@@ -440,7 +443,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		lister, err = h.Filelist(r)
 	}
 	if err != nil {
-		return statusFromError(pkt, err)
+		return statusFromError(pkt.id(), err)
 	}
 	finfo := make([]os.FileInfo, 1)
 	n, err := lister.ListAt(finfo, 0)
@@ -449,12 +452,12 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	switch r.Method {
 	case "Stat", "Lstat":
 		if err != nil && err != io.EOF {
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 		if n == 0 {
 			err = &os.PathError{Op: strings.ToLower(r.Method), Path: r.Filepath,
 				Err: syscall.ENOENT}
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 		return &sshFxpStatResponse{
 			ID:   pkt.id(),
@@ -462,25 +465,27 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		}
 	case "Readlink":
 		if err != nil && err != io.EOF {
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 		if n == 0 {
 			err = &os.PathError{Op: "readlink", Path: r.Filepath,
 				Err: syscall.ENOENT}
-			return statusFromError(pkt, err)
+			return statusFromError(pkt.id(), err)
 		}
 		filename := finfo[0].Name()
 		return &sshFxpNamePacket{
 			ID: pkt.id(),
-			NameAttrs: []sshFxpNameAttr{{
-				Name:     filename,
-				LongName: filename,
-				Attrs:    emptyFileStat,
-			}},
+			NameAttrs: []*sshFxpNameAttr{
+				&sshFxpNameAttr{
+					Name:     filename,
+					LongName: filename,
+					Attrs:    emptyFileStat,
+				},
+			},
 		}
 	default:
 		err = errors.Errorf("unexpected method: %s", r.Method)
-		return statusFromError(pkt, err)
+		return statusFromError(pkt.id(), err)
 	}
 }
 

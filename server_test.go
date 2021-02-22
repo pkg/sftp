@@ -281,10 +281,10 @@ func TestConcurrentRequests(t *testing.T) {
 func TestStatusFromError(t *testing.T) {
 	type test struct {
 		err error
-		pkt sshFxpStatusPacket
+		pkt *sshFxpStatusPacket
 	}
-	tpkt := func(id, code uint32) sshFxpStatusPacket {
-		return sshFxpStatusPacket{
+	tpkt := func(id, code uint32) *sshFxpStatusPacket {
+		return &sshFxpStatusPacket{
 			ID:          id,
 			StatusError: StatusError{Code: code},
 		}
@@ -301,7 +301,7 @@ func TestStatusFromError(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		tc.pkt.StatusError.msg = tc.err.Error()
-		assert.Equal(t, tc.pkt, statusFromError(tc.pkt, tc.err))
+		assert.Equal(t, tc.pkt, statusFromError(tc.pkt.ID, tc.err))
 	}
 }
 
@@ -327,13 +327,13 @@ func TestOpenStatRace(t *testing.T) {
 	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
 	ch := make(chan result, 3)
 	id1 := client.nextID()
-	client.dispatchRequest(ch, sshFxpOpenPacket{
+	client.dispatchRequest(ch, &sshFxpOpenPacket{
 		ID:     id1,
 		Path:   tmppath,
 		Pflags: pflags,
 	})
 	id2 := client.nextID()
-	client.dispatchRequest(ch, sshFxpLstatPacket{
+	client.dispatchRequest(ch, &sshFxpLstatPacket{
 		ID:   id2,
 		Path: tmppath,
 	})
@@ -370,8 +370,8 @@ func TestStatNonExistent(t *testing.T) {
 }
 
 func TestServerWithBrokenClient(t *testing.T) {
-	validInit := sp(sshFxInitPacket{Version: 3})
-	brokenOpen := sp(sshFxpOpenPacket{Path: "foo"})
+	validInit := sp(&sshFxInitPacket{Version: 3})
+	brokenOpen := sp(&sshFxpOpenPacket{Path: "foo"})
 	brokenOpen = brokenOpen[:len(brokenOpen)-2]
 
 	for _, clientInput := range [][]byte{

@@ -193,10 +193,10 @@ func (rs *RequestServer) packetWorker(
 		var rpkt responsePacket
 		switch pkt := pkt.requestPacket.(type) {
 		case *sshFxInitPacket:
-			rpkt = sshFxVersionPacket{Version: sftpProtocolVersion, Extensions: sftpExtensions}
+			rpkt = &sshFxVersionPacket{Version: sftpProtocolVersion, Extensions: sftpExtensions}
 		case *sshFxpClosePacket:
 			handle := pkt.getHandle()
-			rpkt = statusFromError(pkt, rs.closeRequest(handle))
+			rpkt = statusFromError(pkt.ID, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
 			rpkt = cleanPacketPath(pkt)
 		case *sshFxpOpendirPacket:
@@ -219,7 +219,7 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
-				rpkt = statusFromError(pkt, EBADF)
+				rpkt = statusFromError(pkt.ID, EBADF)
 			} else {
 				request = NewRequest("Stat", request.Filepath)
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
@@ -228,7 +228,7 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
-				rpkt = statusFromError(pkt, EBADF)
+				rpkt = statusFromError(pkt.ID, EBADF)
 			} else {
 				request = NewRequest("Setstat", request.Filepath)
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
@@ -244,7 +244,7 @@ func (rs *RequestServer) packetWorker(
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
-				rpkt = statusFromError(pkt, EBADF)
+				rpkt = statusFromError(pkt.id(), EBADF)
 			} else {
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
@@ -253,7 +253,7 @@ func (rs *RequestServer) packetWorker(
 			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			request.close()
 		default:
-			rpkt = statusFromError(pkt, ErrSSHFxOpUnsupported)
+			rpkt = statusFromError(pkt.id(), ErrSSHFxOpUnsupported)
 		}
 
 		rs.pktMgr.readyPacket(
@@ -267,11 +267,13 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket) responsePacket {
 	path := cleanPath(pkt.getPath())
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
-		NameAttrs: []sshFxpNameAttr{{
-			Name:     path,
-			LongName: path,
-			Attrs:    emptyFileStat,
-		}},
+		NameAttrs: []*sshFxpNameAttr{
+			&sshFxpNameAttr{
+				Name:     path,
+				LongName: path,
+				Attrs:    emptyFileStat,
+			},
+		},
 	}
 }
 

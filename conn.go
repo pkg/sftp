@@ -186,6 +186,6 @@ type serverConn struct {
 	conn
 }
 
-func (s *serverConn) sendError(p ider, err error) error {
-	return s.sendPacket(statusFromError(p, err))
+func (s *serverConn) sendError(id uint32, err error) error {
+	return s.sendPacket(statusFromError(id, err))
 }
