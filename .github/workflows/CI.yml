@@ -12,10 +12,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go: [1.15, 1.14]
+        go: [1.16, 1.15]
         exclude:
           - os: macos-latest
-            go: 1.14
+            go: 1.15
 
     steps:
       - uses: actions/checkout@v2
