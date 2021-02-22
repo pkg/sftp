@@ -91,7 +91,7 @@ func (c *clientConn) recv() error {
 			// This is an unexpected occurrence. Send the error
 			// back to all listeners so that they terminate
 			// gracefully.
-			return errors.Errorf("sid: %v not fond", sid)
+			return errors.Errorf("sid not found: %v", sid)
 		}
 
 		ch <- result{typ: typ, data: data}
