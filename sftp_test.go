@@ -10,7 +10,6 @@ import (
 )
 
 func TestErrFxCode(t *testing.T) {
-	ider := sshFxpStatusPacket{ID: 1}
 	table := []struct {
 		err error
 		fx  fxerr
@@ -22,7 +21,7 @@ func TestErrFxCode(t *testing.T) {
 		{err: io.EOF, fx: ErrSSHFxEOF},
 	}
 	for _, tt := range table {
-		statusErr := statusFromError(ider, tt.err).StatusError
+		statusErr := statusFromError(1, tt.err).StatusError
 		assert.Equal(t, statusErr.FxCode(), tt.fx)
 	}
 }

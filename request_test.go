@@ -118,11 +118,11 @@ func (h *Handlers) returnError(err error) {
 }
 
 func getStatusMsg(p interface{}) string {
-	pkt := p.(sshFxpStatusPacket)
+	pkt := p.(*sshFxpStatusPacket)
 	return pkt.StatusError.msg
 }
 func checkOkStatus(t *testing.T, p interface{}) {
-	pkt := p.(sshFxpStatusPacket)
+	pkt := p.(*sshFxpStatusPacket)
 	assert.Equal(t, pkt.StatusError.Code, uint32(sshFxOk),
 		"sshFxpStatusPacket not OK\n", pkt.StatusError.msg)
 }
@@ -166,7 +166,7 @@ func TestRequestCustomError(t *testing.T) {
 	cmdErr := errors.New("stat not supported")
 	handlers.returnError(cmdErr)
 	rpkt := request.call(handlers, pkt, nil, 0)
-	assert.Equal(t, rpkt, statusFromError(rpkt, cmdErr))
+	assert.Equal(t, rpkt, statusFromError(pkt.myid, cmdErr))
 }
 
 // XXX can't just set method to Get, need to use Open to setup Get/Put
@@ -194,7 +194,7 @@ func TestRequestCmdr(t *testing.T) {
 
 	handlers.returnError(errTest)
 	rpkt = request.call(handlers, pkt, nil, 0)
-	assert.Equal(t, rpkt, statusFromError(rpkt, errTest))
+	assert.Equal(t, rpkt, statusFromError(pkt.myid, errTest))
 }
 
 func TestRequestInfoStat(t *testing.T) {
@@ -227,7 +227,7 @@ func TestRequestInfoReadlink(t *testing.T) {
 	rpkt := request.call(handlers, pkt, nil, 0)
 	npkt, ok := rpkt.(*sshFxpNamePacket)
 	if assert.True(t, ok) {
-		assert.IsType(t, sshFxpNameAttr{}, npkt.NameAttrs[0])
+		assert.IsType(t, &sshFxpNameAttr{}, npkt.NameAttrs[0])
 		assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
 	}
 }

@@ -6,8 +6,8 @@ import (
 	"syscall"
 )
 
-func (p sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
-	return statusFromError(p, syscall.ENOTSUP)
+func (p *sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
+	return statusFromError(p.ID, syscall.ENOTSUP)
 }
 
 func getStatVFSForPath(name string) (*StatVFS, error) {

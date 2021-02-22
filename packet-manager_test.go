@@ -31,7 +31,7 @@ func fake(rid, order uint32) fakepacket {
 }
 
 func (fakepacket) MarshalBinary() ([]byte, error) {
-	return []byte{}, nil
+	return make([]byte, 4), nil
 }
 
 func (fakepacket) UnmarshalBinary([]byte) error {

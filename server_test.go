@@ -193,15 +193,16 @@ type sshFxpTestBadExtendedPacket struct {
 func (p sshFxpTestBadExtendedPacket) id() uint32 { return p.ID }
 
 func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
-	l := 1 + 4 + 4 + // type(byte) + uint32 + uint32
-		len(p.Extension) +
-		len(p.Data)
+	l := 4 + 1 + 4 + // uint32(length) + byte(type) + uint32(id)
+		4 + len(p.Extension) +
+		4 + len(p.Data)
 
-	b := make([]byte, 0, l)
+	b := make([]byte, 4, l)
 	b = append(b, sshFxpExtended)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Extension)
 	b = marshalString(b, p.Data)
+
 	return b, nil
 }
 
@@ -222,7 +223,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	defer server.Close()
 
 	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
-	typ, data, err := client.clientConn.sendPacket(badPacket)
+	typ, data, err := client.clientConn.sendPacket(nil, badPacket)
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
 	}
@@ -280,10 +281,10 @@ func TestConcurrentRequests(t *testing.T) {
 func TestStatusFromError(t *testing.T) {
 	type test struct {
 		err error
-		pkt sshFxpStatusPacket
+		pkt *sshFxpStatusPacket
 	}
-	tpkt := func(id, code uint32) sshFxpStatusPacket {
-		return sshFxpStatusPacket{
+	tpkt := func(id, code uint32) *sshFxpStatusPacket {
+		return &sshFxpStatusPacket{
 			ID:          id,
 			StatusError: StatusError{Code: code},
 		}
@@ -300,7 +301,7 @@ func TestStatusFromError(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		tc.pkt.StatusError.msg = tc.err.Error()
-		assert.Equal(t, tc.pkt, statusFromError(tc.pkt, tc.err))
+		assert.Equal(t, tc.pkt, statusFromError(tc.pkt.ID, tc.err))
 	}
 }
 
@@ -326,17 +327,17 @@ func TestOpenStatRace(t *testing.T) {
 	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
 	ch := make(chan result, 3)
 	id1 := client.nextID()
-	client.dispatchRequest(ch, sshFxpOpenPacket{
+	client.dispatchRequest(ch, &sshFxpOpenPacket{
 		ID:     id1,
 		Path:   tmppath,
 		Pflags: pflags,
 	})
 	id2 := client.nextID()
-	client.dispatchRequest(ch, sshFxpLstatPacket{
+	client.dispatchRequest(ch, &sshFxpLstatPacket{
 		ID:   id2,
 		Path: tmppath,
 	})
-	testreply := func(id uint32, ch chan result) {
+	testreply := func(id uint32) {
 		r := <-ch
 		switch r.typ {
 		case sshFxpAttrs, sshFxpHandle: // ignore
@@ -344,11 +345,11 @@ func TestOpenStatRace(t *testing.T) {
 			err := normaliseError(unmarshalStatus(id, r.data))
 			assert.NoError(t, err, "race hit, stat before open")
 		default:
-			assert.Fail(t, "Unexpected type")
+			t.Fatal("unexpected type:", r.typ)
 		}
 	}
-	testreply(id1, ch)
-	testreply(id2, ch)
+	testreply(id1)
+	testreply(id2)
 	os.Remove(tmppath)
 	checkServerAllocator(t, server)
 }
@@ -369,8 +370,8 @@ func TestStatNonExistent(t *testing.T) {
 }
 
 func TestServerWithBrokenClient(t *testing.T) {
-	validInit := sp(sshFxInitPacket{Version: 3})
-	brokenOpen := sp(sshFxpOpenPacket{Path: "foo"})
+	validInit := sp(&sshFxInitPacket{Version: 3})
+	brokenOpen := sp(&sshFxpOpenPacket{Path: "foo"})
 	brokenOpen = brokenOpen[:len(brokenOpen)-2]
 
 	for _, clientInput := range [][]byte{

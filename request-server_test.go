@@ -39,11 +39,14 @@ const sock = "/tmp/rstest.sock"
 func clientRequestServerPair(t *testing.T) *csPair {
 	skipIfWindows(t)
 	skipIfPlan9(t)
-	ready := make(chan bool)
+
+	ready := make(chan struct{})
+	canReturn := make(chan struct{})
 	os.Remove(sock) // either this or signal handling
 	pair := &csPair{
 		svrResult: make(chan error, 1),
 	}
+
 	var server *RequestServer
 	go func() {
 		l, err := net.Listen("unix", sock)
@@ -51,26 +54,37 @@ func clientRequestServerPair(t *testing.T) *csPair {
 			// neither assert nor t.Fatal reliably exit before Accept errors
 			panic(err)
 		}
-		ready <- true
+
+		close(ready)
+
 		fd, err := l.Accept()
 		require.NoError(t, err)
+
 		handlers := InMemHandler()
 		var options []RequestServerOption
 		if *testAllocator {
 			options = append(options, WithRSAllocator())
 		}
+
 		server = NewRequestServer(fd, handlers, options...)
+		close(canReturn)
+
 		err = server.Serve()
 		pair.svrResult <- err
 	}()
+
 	<-ready
 	defer os.Remove(sock)
+
 	c, err := net.Dial("unix", sock)
 	require.NoError(t, err)
+
 	client, err := NewClientPipe(c, c)
 	if err != nil {
-		t.Fatalf("%+v\n", err)
+		t.Fatalf("unexpected error: %+v", err)
 	}
+
+	<-canReturn
 	pair.svr = server
 	pair.cli = client
 	return pair
@@ -147,11 +161,12 @@ func TestRequestCacheState(t *testing.T) {
 
 func putTestFile(cli *Client, path, content string) (int, error) {
 	w, err := cli.Create(path)
-	if err == nil {
-		defer w.Close()
-		return w.Write([]byte(content))
+	if err != nil {
+		return 0, err
 	}
-	return 0, err
+	defer w.Close()
+
+	return w.Write([]byte(content))
 }
 
 func getTestFile(cli *Client, path string) ([]byte, error) {
