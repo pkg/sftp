@@ -1008,7 +1008,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		// Map_i: each worker gets work, and does the Read into each buffer from its respective offset.
+		// Map_i: each worker gets work, and then performs the Read into its buffer from its respective offset.
 		go func() {
 			defer wg.Done()
 
@@ -1031,7 +1031,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 		close(errCh)
 	}()
 
-	// collect all the results into a relevant return: the earliest offset to return an error.
+	// Reduce: collect all the results into a relevant return: the earliest offset to return an error.
 	firstErr := rErr{math.MaxInt64, nil}
 	for rErr := range errCh {
 		if rErr.off <= firstErr.off {
@@ -1098,7 +1098,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// While working concurrently, we want to guess how many concurrent workers we should use.
+	// For concurrency, we want to guess how many concurrent workers we should use.
 	var fileSize uint64
 	if f.c.useFstat {
 		fileStat, err := f.c.fstat(f.handle)
@@ -1124,11 +1124,12 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
-	// If the writing Reduce phase has ended, then all work unconditionally needs to be thrown out.
 	cancel := make(chan struct{})
 	var wg sync.WaitGroup
 	defer func() {
+		// Once the writing Reduce phase has ended, all the feed work needs to unconditionally stop.
 		close(cancel)
+
 		// We want to wait until all outstanding goroutines with an `f` or `f.c` reference have completed.
 		// Just to be sure we don’t orphan any goroutines any hanging references.
 		wg.Wait()
@@ -1150,18 +1151,14 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	}
 	readCh := make(chan readWork)
 
-	pool := sync.Pool{
-		New: func() interface{} {
-			return make([]byte, f.c.maxPacket)
-		},
-	}
-
 	// Slice: hand out chunks of work on demand, with a `cur` and `next` channel built-in for sequencing.
-	go func(off int64, chunkSize int) {
-		// We pass in arguments, so this goroutine never has to reference `f` or `f.c`.
+	go func() {
+		defer close(readCh)
+
+		off := f.offset
+		chunkSize := int64(f.c.maxPacket)
 
 		cur := writeCh
-
 		for {
 			next := make(chan writeWork)
 			readWork := readWork{
@@ -1169,17 +1166,23 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				cur:  cur,
 				next: next,
 			}
-			off += int64(chunkSize)
-			cur = next
 
 			select {
+			case readCh <- readWork:
 			case <-cancel:
 				return
-			case readCh <- readWork:
 			}
 
+			off += chunkSize
+			cur = next
 		}
-	}(f.offset, f.c.maxPacket)
+	}()
+
+	pool := sync.Pool{
+		New: func() interface{} {
+			return make([]byte, f.c.maxPacket)
+		},
+	}
 
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
@@ -1189,15 +1192,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 			ch := make(chan result, 1) // reusable channel
 
-			for {
-				var readWork readWork
-
-				select {
-				case <-cancel:
-					return
-				case readWork = <-readCh:
-				}
-
+			for readWork := range readCh {
 				b := pool.Get().([]byte)
 
 				n, err := f.readChunkAt(ch, b, readWork.off)
@@ -1208,7 +1203,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				writeWork := writeWork{
 					b:   b,
 					n:   n,
-					off: readWork.off + int64(n),
+					off: readWork.off,
 					err: err,
 
 					next: readWork.next,
@@ -1221,17 +1216,11 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				}
 
 				if err != nil {
-					//close(cur)
 					return
 				}
 			}
 		}()
 	}
-
-	lastOff := f.offset
-	defer func() {
-		f.offset = lastOff
-	}()
 
 	// Reduce: serialize the results from the reads into sequential writes.
 	cur := writeCh
@@ -1241,8 +1230,8 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 			return written, nil
 		}
 
-		// Because writeWork is serialized, we know we will visit these packets in order.
-		lastOff = packet.off
+		// Because writes are serialized, this will always be the last successfully read byte.
+		f.offset = packet.off + int64(packet.n)
 
 		if packet.n > 0 {
 			n, err := w.Write(packet.b[:packet.n])
@@ -1419,7 +1408,7 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 // WriteAt writess up to len(b) byte to the File at a given offset `off`. It returns
 // the number of bytes written and an error, if any. WriteAt follows io.WriterAt semantics,
 // so the file offset is not altered during the write.
-func (f *File) WriteAt(b []byte, off int64) (int, error) {
+func (f *File) WriteAt(b []byte, off int64) (written int, err error) {
 	if len(b) <= f.c.maxPacket {
 		// We can do this in one write.
 		return f.writeChunkAt(nil, b, off)
@@ -1431,7 +1420,6 @@ func (f *File) WriteAt(b []byte, off int64) (int, error) {
 
 	ch := make(chan result, 1) // reusable channel
 
-	var written int
 	chunkSize := f.c.maxPacket
 
 	for written < len(b) {
@@ -1484,7 +1472,7 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 	go func() {
 		defer close(workCh)
 
-		offset := f.offset
+		off := f.offset
 
 		for {
 			b := pool.Get().([]byte)
@@ -1494,18 +1482,18 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 				read += int64(n)
 
 				select {
-				case workCh <- work{b, n, offset}:
+				case workCh <- work{b, n, off}:
 					// We need the pool.Put(b) to put the whole slice, not just trunced.
 				case <-cancel:
 					return
 				}
 
-				offset += int64(n)
+				off += int64(n)
 			}
 
 			if err != nil {
 				if err != io.EOF {
-					errCh <- rwErr{offset, err}
+					errCh <- rwErr{off, err}
 				}
 				return
 			}
@@ -1543,7 +1531,7 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 		close(errCh)
 	}()
 
-	// Collect all the results into a relevant return: the earliest offset to return an error.
+	// Reduce: Collect all the results into a relevant return: the earliest offset to return an error.
 	firstErr := rwErr{math.MaxInt64, nil}
 	for rwErr := range errCh {
 		if rwErr.off <= firstErr.off {
@@ -1562,12 +1550,13 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 		// firstErr.err != nil if and only if firstErr.off is a valid offset.
 		//
 		// firstErr.off will then be the lesser of:
-		// * the last successfully written offset,
+		// * the offset of the first error from writing,
 		// * the last successfully read offset.
 		//
 		// This could be less than the last succesfully written offset,
 		// which is the whole reason for the UseConcurrentWrites() ClientOption.
-		// Callers are responsible for truncating any SFTP files to the correct length.
+		//
+		// Callers are responsible for truncating any SFTP files to a safe length.
 		f.offset = firstErr.off
 
 		// ReadFrom is defined to return the read bytes, regardless of any writer errors.
