@@ -1219,21 +1219,24 @@ func TestClientRead(t *testing.T) {
 	}
 	defer os.RemoveAll(d)
 
-	for _, tt := range clientReadTests {
-		f, err := ioutil.TempFile(d, "read-test")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		hash := writeN(t, f, tt.n)
-		f2, err := sftp.Open(f.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f2.Close()
-		hash2, n := readHash(t, f2)
-		if hash != hash2 || tt.n != n {
-			t.Errorf("Read: hash: want: %q, got %q, read: want: %v, got %v", hash, hash2, tt.n, n)
+	for _, disableConcurrentReads := range []bool{true, false} {
+		for _, tt := range clientReadTests {
+			f, err := ioutil.TempFile(d, "read-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			hash := writeN(t, f, tt.n)
+			sftp.disableConcurrentReads = disableConcurrentReads
+			f2, err := sftp.Open(f.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f2.Close()
+			hash2, n := readHash(t, f2)
+			if hash != hash2 || tt.n != n {
+				t.Errorf("Read: hash: want: %q, got %q, read: want: %v, got %v", hash, hash2, tt.n, n)
+			}
 		}
 	}
 }
