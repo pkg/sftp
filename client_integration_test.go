@@ -1115,6 +1115,67 @@ func TestClientReadSimple(t *testing.T) {
 	}
 }
 
+func TestClientReadSequential(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	sftp.disableConcurrentReads = true
+	d, err := ioutil.TempDir("", "sftptest-readsequential")
+	require.NoError(t, err)
+
+	defer os.RemoveAll(d)
+
+	f, err := ioutil.TempFile(d, "read-sequential-test")
+	require.NoError(t, err)
+	fname := f.Name()
+	content := []byte("hello world")
+	f.Write(content)
+	f.Close()
+
+	for _, maxPktSize := range []int{1, 2, 3, 4} {
+		sftp.maxPacket = maxPktSize
+
+		sftpFile, err := sftp.Open(fname)
+		require.NoError(t, err)
+
+		stuff := make([]byte, 32)
+		n, err := sftpFile.Read(stuff)
+		require.NoError(t, err)
+		require.Equal(t, len(content), n)
+		require.Equal(t, content, stuff[0:len(content)])
+
+		err = sftpFile.Close()
+		require.NoError(t, err)
+
+		sftpFile, err = sftp.Open(fname)
+		require.NoError(t, err)
+
+		stuff = make([]byte, 5)
+		n, err = sftpFile.Read(stuff)
+		require.NoError(t, err)
+		require.Equal(t, len(stuff), n)
+		require.Equal(t, content[:len(stuff)], stuff)
+
+		err = sftpFile.Close()
+		require.NoError(t, err)
+
+		// now read from a offset
+		off := int64(3)
+		sftpFile, err = sftp.Open(fname)
+		require.NoError(t, err)
+
+		stuff = make([]byte, 5)
+		n, err = sftpFile.ReadAt(stuff, off)
+		require.NoError(t, err)
+		require.Equal(t, len(stuff), n)
+		require.Equal(t, content[off:off+int64(len(stuff))], stuff)
+
+		err = sftpFile.Close()
+		require.NoError(t, err)
+	}
+}
+
 func TestClientReadDir(t *testing.T) {
 	sftp1, cmd1 := testClient(t, READONLY, NODELAY)
 	sftp2, cmd2 := testClientGoSvr(t, READONLY, NODELAY)

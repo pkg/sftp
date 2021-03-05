@@ -966,13 +966,42 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 	return
 }
 
+func (f *File) readAtSequential(b []byte, off int64) (int, error) {
+	readed := 0
+
+	for {
+		endRead := int64(math.Min(float64(readed+f.c.maxPacket), float64(len(b))))
+		n, err := f.readChunkAt(nil, b[readed:endRead], off+int64(readed))
+		if n < 0 {
+			panic("sftp.File: returned negative count from readChunkAt")
+		}
+		if n > 0 {
+			readed += n
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return readed, nil // return nil explicitly.
+			}
+			return readed, err
+		}
+		if readed == len(b) {
+			return readed, nil
+		}
+	}
+}
+
 // ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns
 // the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics,
 // so the file offset is not altered during the read.
 func (f *File) ReadAt(b []byte, off int64) (int, error) {
-	if len(b) <= f.c.maxPacket || f.c.disableConcurrentReads {
-		// This should be able to be serviced with 1/2 requests or concurrent reads are disabled.
+	if len(b) <= f.c.maxPacket {
+		// This should be able to be serviced with 1/2 requests.
+		// So, just do it directly.
 		return f.readChunkAt(nil, b, off)
+	}
+
+	if f.c.disableConcurrentReads {
+		return f.readAtSequential(b, off)
 	}
 
 	// Split the read into multiple maxPacket-sized concurrent reads bounded by maxConcurrentRequests.
