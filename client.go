@@ -966,28 +966,27 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 	return
 }
 
-func (f *File) readAtSequential(b []byte, off int64) (int, error) {
-	readed := 0
-
-	for {
-		endRead := int64(math.Min(float64(readed+f.c.maxPacket), float64(len(b))))
-		n, err := f.readChunkAt(nil, b[readed:endRead], off+int64(readed))
+func (f *File) readAtSequential(b []byte, off int64) (read int, err error) {
+	for read < len(b) {
+		rb := b[read:]
+		if len(rb) > f.c.maxPacket {
+			rb = rb[:f.c.maxPacket]
+		}
+		n, err := f.readChunkAt(nil, rb, off+int64(read))
 		if n < 0 {
 			panic("sftp.File: returned negative count from readChunkAt")
 		}
 		if n > 0 {
-			readed += n
+			read += n
 		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return readed, nil // return nil explicitly.
+				return read, nil // return nil explicitly.
 			}
-			return readed, err
-		}
-		if readed == len(b) {
-			return readed, nil
+			return read, err
 		}
 	}
+	return read, nil
 }
 
 // ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns
