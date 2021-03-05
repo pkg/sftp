@@ -112,6 +112,24 @@ func UseConcurrentWrites(value bool) ClientOption {
 	}
 }
 
+// UseConcurrentReads allows the Client to perform concurrent Reads.
+//
+// Concurrent reads are generally safe to use and not using them will degrade
+// performance, so this option is enabled by default.
+//
+// When enabled, WriteTo will use Stat/Fstat to get the file size and determines
+// how many concurrent workers to use.
+// Some "read once" servers will delete the file if they receive a stat call on an
+// open file and then the download will fail.
+// Disabling concurrent reads you will be able to download files from these servers.
+// If concurrent reads are disabled, the UseFstat option is ignored.
+func UseConcurrentReads(value bool) ClientOption {
+	return func(c *Client) error {
+		c.disableConcurrentReads = !value
+		return nil
+	}
+}
+
 // UseFstat sets whether to use Fstat or Stat when File.WriteTo is called
 // (usually when copying files).
 // Some servers limit the amount of open files and calling Stat after opening
@@ -152,8 +170,9 @@ type Client struct {
 
 	// write concurrency is… error prone.
 	// Default behavior should be to not use it.
-	useConcurrentWrites bool
-	useFstat            bool
+	useConcurrentWrites    bool
+	useFstat               bool
+	disableConcurrentReads bool
 }
 
 // NewClient creates a new SFTP client on conn, using zero or more option
@@ -947,6 +966,29 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 	return
 }
 
+func (f *File) readAtSequential(b []byte, off int64) (read int, err error) {
+	for read < len(b) {
+		rb := b[read:]
+		if len(rb) > f.c.maxPacket {
+			rb = rb[:f.c.maxPacket]
+		}
+		n, err := f.readChunkAt(nil, rb, off+int64(read))
+		if n < 0 {
+			panic("sftp.File: returned negative count from readChunkAt")
+		}
+		if n > 0 {
+			read += n
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return read, nil // return nil explicitly.
+			}
+			return read, err
+		}
+	}
+	return read, nil
+}
+
 // ReadAt reads up to len(b) byte from the File at a given offset `off`. It returns
 // the number of bytes read and an error, if any. ReadAt follows io.ReaderAt semantics,
 // so the file offset is not altered during the read.
@@ -955,6 +997,10 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 		// This should be able to be serviced with 1/2 requests.
 		// So, just do it directly.
 		return f.readChunkAt(nil, b, off)
+	}
+
+	if f.c.disableConcurrentReads {
+		return f.readAtSequential(b, off)
 	}
 
 	// Split the read into multiple maxPacket-sized concurrent reads bounded by maxConcurrentRequests.
@@ -1097,6 +1143,10 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.c.disableConcurrentReads {
+		return f.writeToSequential(w)
+	}
 
 	// For concurrency, we want to guess how many concurrent workers we should use.
 	var fileSize uint64
