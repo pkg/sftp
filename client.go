@@ -789,6 +789,10 @@ func (c *Client) PosixRename(oldname, newname string) error {
 	}
 }
 
+// RealPath can be used to have the server canonicalize any given path name to an absolute path.
+//
+// This is useful for converting path names containing ".." components,
+// or relative pathnames without a leading slash into absolute paths.
 func (c *Client) RealPath(path string) (string, error) {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpRealpathPacket{
