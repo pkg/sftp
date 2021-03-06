@@ -789,7 +789,7 @@ func (c *Client) PosixRename(oldname, newname string) error {
 	}
 }
 
-func (c *Client) realpath(path string) (string, error) {
+func (c *Client) RealPath(path string) (string, error) {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpRealpathPacket{
 		ID:   id,
@@ -820,7 +820,7 @@ func (c *Client) realpath(path string) (string, error) {
 // Getwd returns the current working directory of the server. Operations
 // involving relative paths will be based at this location.
 func (c *Client) Getwd() (string, error) {
-	return c.realpath(".")
+	return c.RealPath(".")
 }
 
 // Mkdir creates the specified directory. An error will be returned if a file or
