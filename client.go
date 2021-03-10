@@ -273,7 +273,10 @@ func (c *Client) recvVersion() error {
 		return &unexpectedPacketErr{sshFxpVersion, typ}
 	}
 
-	version, data := unmarshalUint32(data)
+	version, data, err := unmarshalUint32Safe(data)
+	if err != nil {
+		return err
+	}
 	if version != sftpProtocolVersion {
 		return &unexpectedVersionErr{sftpProtocolVersion, version}
 	}
