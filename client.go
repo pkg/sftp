@@ -864,12 +864,12 @@ func (c *Client) MkdirAll(path string) error {
 
 	// Slow path: make sure parent exists and then call Mkdir for path.
 	i := len(path)
-	for i > 0 && os.IsPathSeparator(path[i-1]) { // Skip trailing path separator.
+	for i > 0 && path[i-1] == '/' { // Skip trailing path separator.
 		i--
 	}
 
 	j := i
-	for j > 0 && !os.IsPathSeparator(path[j-1]) { // Scan backward over element.
+	for j > 0 && path[j-1] != '/' { // Scan backward over element.
 		j--
 	}
 
