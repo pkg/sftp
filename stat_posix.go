@@ -114,3 +114,9 @@ func fromFileMode(mode os.FileMode) uint32 {
 
 	return ret
 }
+
+const (
+	s_ISUID = syscall.S_ISUID
+	s_ISGID = syscall.S_ISGID
+	s_ISVTX = syscall.S_ISVTX
+)

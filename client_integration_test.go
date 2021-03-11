@@ -873,6 +873,59 @@ func TestClientChmodReadonly(t *testing.T) {
 	}
 }
 
+func TestClientSetuid(t *testing.T) {
+	skipIfWindows(t) // No UNIX permissions.
+	if *testServerImpl {
+		t.Skipf("skipping with -testserver")
+	}
+
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest-setuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.Close()
+
+	const allPerm = os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky |
+		s_ISUID | s_ISGID | s_ISVTX
+
+	for _, c := range []struct {
+		goPerm    os.FileMode
+		posixPerm uint32
+	}{
+		{os.ModeSetuid, s_ISUID},
+		{os.ModeSetgid, s_ISGID},
+		{os.ModeSticky, s_ISVTX},
+		{os.ModeSetuid | os.ModeSticky, s_ISUID | s_ISVTX},
+	} {
+		goPerm := 0700 | c.goPerm
+		posixPerm := 0700 | c.posixPerm
+
+		err = sftp.Chmod(f.Name(), goPerm)
+		require.NoError(t, err)
+
+		info, err := sftp.Stat(f.Name())
+		require.NoError(t, err)
+		require.Equal(t, goPerm, info.Mode()&allPerm)
+
+		err = sftp.Chmod(f.Name(), 0700) // Reset funny bits.
+		require.NoError(t, err)
+
+		// For historical reasons, we also support literal POSIX mode bits in
+		// Chmod. Stat should still translate these to Go os.FileMode bits.
+		err = sftp.Chmod(f.Name(), os.FileMode(posixPerm))
+		require.NoError(t, err)
+
+		info, err = sftp.Stat(f.Name())
+		require.NoError(t, err)
+		require.Equal(t, goPerm, info.Mode()&allPerm)
+	}
+}
+
 func TestClientChown(t *testing.T) {
 	skipIfWindows(t) // No UNIX permissions.
 	sftp, cmd := testClient(t, READWRITE, NODELAY)

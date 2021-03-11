@@ -560,8 +560,12 @@ func (c *Client) Chown(path string, uid, gid int) error {
 }
 
 // Chmod changes the permissions of the named file.
+//
+// Chmod does not apply a umask, because even retrieving the umask is not
+// possible in a portable way without causing a race condition. Callers
+// should mask off umask bits, if desired.
 func (c *Client) Chmod(path string, mode os.FileMode) error {
-	return c.setstat(path, sshFileXferAttrPermissions, uint32(mode))
+	return c.setstat(path, sshFileXferAttrPermissions, toChmodPerm(mode))
 }
 
 // Truncate sets the size of the named file. Although it may be safely assumed
@@ -1719,6 +1723,8 @@ func (f *File) Chown(uid, gid int) error {
 }
 
 // Chmod changes the permissions of the current file.
+//
+// See Client.Chmod for details.
 func (f *File) Chmod(mode os.FileMode) error {
 	return f.c.Chmod(f.path, mode)
 }
@@ -1829,4 +1835,26 @@ func flags(f int) uint32 {
 		out |= sshFxfExcl
 	}
 	return out
+}
+
+// toChmodPerm converts Go permission bits to POSIX permission bits.
+//
+// This differs from fromFileMode in that we preserve the POSIX versions of
+// setuid, setgid and sticky in m, because we've historically supported those
+// bits, and we mask off any non-permission bits.
+func toChmodPerm(m os.FileMode) (perm uint32) {
+	const mask = os.ModePerm | s_ISUID | s_ISGID | s_ISVTX
+	perm = uint32(m & mask)
+
+	if m&os.ModeSetuid != 0 {
+		perm |= s_ISUID
+	}
+	if m&os.ModeSetgid != 0 {
+		perm |= s_ISGID
+	}
+	if m&os.ModeSticky != 0 {
+		perm |= s_ISVTX
+	}
+
+	return perm
 }
