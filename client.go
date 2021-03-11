@@ -1195,13 +1195,13 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		off int64
 		err error
 
-		next chan writeWork
+		next chan *writeWork
 	}
-	writeCh := make(chan writeWork)
+	writeCh := make(chan *writeWork)
 
 	type readWork struct {
 		off       int64
-		cur, next chan writeWork
+		cur, next chan *writeWork
 	}
 	readCh := make(chan readWork)
 
@@ -1214,7 +1214,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 		cur := writeCh
 		for {
-			next := make(chan writeWork)
+			next := make(chan *writeWork)
 			readWork := readWork{
 				off:  off,
 				cur:  cur,
@@ -1234,7 +1234,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 	pool := sync.Pool{
 		New: func() interface{} {
-			return make([]byte, f.c.maxPacket)
+			return &writeWork{b: make([]byte, f.c.maxPacket)}
 		},
 	}
 
@@ -1247,14 +1247,15 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 			ch := make(chan result, 1) // reusable channel
 
 			for readWork := range readCh {
-				b := pool.Get().([]byte)
+				wWork := pool.Get().(*writeWork)
+				b := wWork.b
 
 				n, err := f.readChunkAt(ch, b, readWork.off)
 				if n < 0 {
 					panic("sftp.File: returned negative count from readChunkAt")
 				}
 
-				writeWork := writeWork{
+				*wWork = writeWork{
 					b:   b,
 					n:   n,
 					off: readWork.off,
@@ -1264,7 +1265,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				}
 
 				select {
-				case readWork.cur <- writeWork:
+				case readWork.cur <- wWork:
 				case <-cancel:
 					return
 				}
@@ -1303,8 +1304,9 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 			return written, packet.err
 		}
 
-		pool.Put(packet.b)
 		cur = packet.next
+		packet.next = nil
+		pool.Put(packet)
 	}
 }
 
