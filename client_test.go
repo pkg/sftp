@@ -228,3 +228,14 @@ func TestClientZeroLengthPacket(t *testing.T) {
 		c.Close()
 	}
 }
+
+func TestClientShortPacket(t *testing.T) {
+	// init packet too short.
+	packet := []byte{0, 0, 0, 1, 2}
+
+	r := bytes.NewReader(packet)
+	_, err := NewClientPipe(r, &sink{})
+	if !errors.Is(err, errShortPacket) {
+		t.Fatalf("expected error: %v, got: %v", errShortPacket, err)
+	}
+}
