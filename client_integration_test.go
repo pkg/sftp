@@ -1882,6 +1882,7 @@ var globTests = []struct {
 	{"match.go", "match.go"},
 	{"mat?h.go", "match.go"},
 	{"ma*ch.go", "match.go"},
+	{`\m\a\t\c\h\.\g\o`, "match.go"},
 	{"../*/match.go", "../sftp/match.go"},
 }
 

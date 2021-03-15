@@ -133,6 +133,5 @@ func Join(elem ...string) string {
 // hasMeta reports whether path contains any of the magic characters
 // recognized by Match.
 func hasMeta(path string) bool {
-	// TODO(niemeyer): Should other magic characters be added here?
-	return strings.ContainsAny(path, "*?[")
+	return strings.ContainsAny(path, "\\*?[")
 }
