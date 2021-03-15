@@ -1235,11 +1235,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		}
 	}()
 
-	pool := sync.Pool{
-		New: func() interface{} {
-			return make([]byte, f.c.maxPacket)
-		},
-	}
+	pool := newBufPool(concurrency, f.c.maxPacket)
 
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
@@ -1250,7 +1246,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 			ch := make(chan result, 1) // reusable channel
 
 			for readWork := range readCh {
-				b := pool.Get().([]byte)
+				b := pool.Get()
 
 				n, err := f.readChunkAt(ch, b, readWork.off)
 				if n < 0 {
@@ -1519,11 +1515,12 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 	}
 	errCh := make(chan rwErr)
 
-	pool := sync.Pool{
-		New: func() interface{} {
-			return make([]byte, f.c.maxPacket)
-		},
+	concurrency := int(remain/int64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
+	if concurrency > f.c.maxConcurrentRequests {
+		concurrency = f.c.maxConcurrentRequests
 	}
+
+	pool := newBufPool(concurrency, f.c.maxPacket)
 
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
@@ -1532,7 +1529,7 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 		off := f.offset
 
 		for {
-			b := pool.Get().([]byte)
+			b := pool.Get()
 
 			n, err := r.Read(b)
 			if n > 0 {
@@ -1556,11 +1553,6 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 			}
 		}
 	}()
-
-	concurrency := int(remain/int64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
-	if concurrency > f.c.maxConcurrentRequests {
-		concurrency = f.c.maxConcurrentRequests
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
