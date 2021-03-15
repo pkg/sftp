@@ -84,7 +84,10 @@ func (c *clientConn) recv() error {
 		if err != nil {
 			return err
 		}
-		sid, _ := unmarshalUint32(data)
+		sid, _, err := unmarshalUint32Safe(data)
+		if err != nil {
+			return err
+		}
 
 		ch, ok := c.getChannel(sid)
 		if !ok {
