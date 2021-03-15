@@ -94,3 +94,11 @@ func fromFileMode(mode os.FileMode) uint32 {
 
 	return ret
 }
+
+// Plan 9 doesn't have setuid, setgid or sticky, but a Plan 9 client should
+// be able to send these bits to a POSIX server.
+const (
+	s_ISUID = 04000
+	s_ISGID = 02000
+	S_ISVTX = 01000
+)
