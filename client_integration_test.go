@@ -853,6 +853,15 @@ func TestClientChmod(t *testing.T) {
 	} else if stat.Mode()&os.ModePerm != 0531 {
 		t.Fatalf("invalid perm %o\n", stat.Mode())
 	}
+
+	sf, err := sftp.Open(f.Name())
+	require.NoError(t, err)
+	require.NoError(t, sf.Chmod(0500))
+	sf.Close()
+
+	stat, err := os.Stat(f.Name())
+	require.NoError(t, err)
+	require.EqualValues(t, 0500, stat.Mode())
 }
 
 func TestClientChmodReadonly(t *testing.T) {
