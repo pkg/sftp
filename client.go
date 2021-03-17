@@ -1721,7 +1721,7 @@ func (f *File) Chown(uid, gid int) error {
 //
 // See Client.Chmod for details.
 func (f *File) Chmod(mode os.FileMode) error {
-	return f.c.Chmod(f.path, mode)
+	return f.c.setfstat(f.handle, sshFileXferAttrPermissions, toChmodPerm(mode))
 }
 
 // Sync requests a flush of the contents of a File to stable storage.
