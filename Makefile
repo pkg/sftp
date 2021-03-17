@@ -20,5 +20,8 @@ COUNT ?= 1
 BENCHMARK_PATTERN ?= "."
 
 benchmark:
-	go test -integration -run=NONE -bench=$(BENCHMARK_PATTERN) -benchmem -memprofile memprofile.out -count=$(COUNT)
+	go test -integration -run=NONE -bench=$(BENCHMARK_PATTERN) -benchmem -count=$(COUNT)
+
+benchmark_w_memprofile:
+	go test -integration -run=NONE -bench=$(BENCHMARK_PATTERN) -benchmem -count=$(COUNT) -memprofile memprofile.out
 	go tool pprof -svg -output=memprofile.svg memprofile.out
