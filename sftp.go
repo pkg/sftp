@@ -239,7 +239,7 @@ func getSupportedExtensionByName(extensionName string) (sshExtensionPair, error)
 			return supportedExtension, nil
 		}
 	}
-	return sshExtensionPair{}, fmt.Errorf("unsupported extension: %s", extensionName)
+	return sshExtensionPair{}, errors.Errorf("unsupported extension: %s", extensionName)
 }
 
 // SetSFTPExtensions allows to customize the supported server extensions.
