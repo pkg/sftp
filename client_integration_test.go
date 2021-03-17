@@ -6,7 +6,6 @@ package sftp
 import (
 	"bytes"
 	"crypto/sha1"
-	"encoding"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -1490,26 +1489,48 @@ func TestClientReadFrom(t *testing.T) {
 var errFakeNet = errors.New("Fake network issue")
 
 func TestClientReadFromDeadlock(t *testing.T) {
-	clientWriteDeadlock(t, 1, func(f *File) {
-		b := make([]byte, 32768*4)
-		content := bytes.NewReader(b)
-		_, err := f.ReadFrom(content)
-		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error:", err)
-		}
-	})
+	for i := 0; i < 5; i++ {
+		clientWriteDeadlock(t, i, func(f *File) {
+			b := make([]byte, 32768*4)
+			content := bytes.NewReader(b)
+			_, err := f.ReadFrom(content)
+			if !errors.Is(err, errFakeNet) {
+				t.Fatal("Didn't recieve correct error:", err)
+			}
+		})
+	}
 }
 
 // Write has exact same problem
 func TestClientWriteDeadlock(t *testing.T) {
-	clientWriteDeadlock(t, 1, func(f *File) {
-		b := make([]byte, 32768*4)
+	for i := 0; i < 5; i++ {
+		clientWriteDeadlock(t, i, func(f *File) {
+			b := make([]byte, 32768*4)
 
-		_, err := f.Write(b)
-		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error:", err)
-		}
-	})
+			_, err := f.Write(b)
+			if !errors.Is(err, errFakeNet) {
+				t.Fatal("Didn't recieve correct error:", err)
+			}
+		})
+	}
+}
+
+type timeBombWriter struct {
+	count int
+	w     io.WriteCloser
+}
+
+func (w *timeBombWriter) Write(b []byte) (int, error) {
+	if w.count < 1 {
+		return 0, errFakeNet
+	}
+
+	w.count--
+	return w.w.Write(b)
+}
+
+func (w *timeBombWriter) Close() error {
+	return w.w.Close()
 }
 
 // shared body for both previous tests
@@ -1534,20 +1555,13 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	}
 	defer w.Close()
 
-	// Override sendPacket with failing version
-	// Replicates network error/drop part way through (after 1 good packet)
-	count := 0
-	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
-		count++
-		if count > N {
-			return errFakeNet
-		}
-		return sendPacket(w, m)
+	// Override the clienConn Writer with a failing version
+	// Replicates network error/drop part way through (after N good writes)
+	wrap := sftp.clientConn.conn.WriteCloser
+	sftp.clientConn.conn.WriteCloser = &timeBombWriter{
+		count: N,
+		w:     wrap,
 	}
-	sftp.clientConn.conn.sendPacketTest = sendPacketTest
-	defer func() {
-		sftp.clientConn.conn.sendPacketTest = nil
-	}()
 
 	// this locked (before the fix)
 	badfunc(w)
@@ -1555,27 +1569,31 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 
 // Read/WriteTo has this issue as well
 func TestClientReadDeadlock(t *testing.T) {
-	clientReadDeadlock(t, 1, func(f *File) {
-		b := make([]byte, 32768*4)
+	for i := 0; i < 5; i++ {
+		clientReadDeadlock(t, i, func(f *File) {
+			b := make([]byte, 32768*4)
 
-		_, err := f.Read(b)
-		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error:", err)
-		}
-	})
+			_, err := f.Read(b)
+			if !errors.Is(err, errFakeNet) {
+				t.Fatal("Didn't recieve correct error:", err)
+			}
+		})
+	}
 }
 
 func TestClientWriteToDeadlock(t *testing.T) {
-	clientReadDeadlock(t, 2, func(f *File) {
-		b := make([]byte, 32768*4)
+	for i := 0; i < 5; i++ {
+		clientReadDeadlock(t, i, func(f *File) {
+			b := make([]byte, 32768*4)
 
-		buf := bytes.NewBuffer(b)
+			buf := bytes.NewBuffer(b)
 
-		_, err := f.WriteTo(buf)
-		if err != errFakeNet {
-			t.Fatal("Didn't recieve correct error:", err)
-		}
-	})
+			_, err := f.WriteTo(buf)
+			if !errors.Is(err, errFakeNet) {
+				t.Fatal("Didn't recieve correct error:", err)
+			}
+		})
+	}
 }
 
 func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
@@ -1611,21 +1629,13 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	}
 	defer r.Close()
 
-	// Override sendPacket with failing version
-	// Replicates network error/drop part way through (after 1 good packet)
-	count := 0
-	sendPacketTest := func(w io.Writer, m encoding.BinaryMarshaler) error {
-		count++
-		if count > N {
-			return errFakeNet
-		}
-		return sendPacket(w, m)
+	// Override the clienConn Writer with a failing version
+	// Replicates network error/drop part way through (after N good writes)
+	wrap := sftp.clientConn.conn.WriteCloser
+	sftp.clientConn.conn.WriteCloser = &timeBombWriter{
+		count: N,
+		w:     wrap,
 	}
-
-	sftp.clientConn.conn.sendPacketTest = sendPacketTest
-	defer func() {
-		sftp.clientConn.conn.sendPacketTest = nil
-	}()
 
 	// this locked (before the fix)
 	badfunc(r)
@@ -2444,6 +2454,28 @@ func BenchmarkReadFrom4MiBDelay150Msec(b *testing.B) {
 	benchmarkReadFrom(b, 4*1024*1024, 150*time.Millisecond)
 }
 
+// writeToBuffer implements the relevant parts of bytes.Buffer,
+// but does not release its internal buffer when Reset.
+//
+// Release its internal memory when Reset is good for avoiding memory leaks,
+// but not great for memory benchmarks, as this fills up a lot of irrelevant allocations.
+type writeToBuffer struct {
+	b []byte
+}
+
+func (w *writeToBuffer) Len() int {
+	return len(w.b)
+}
+
+func (w *writeToBuffer) Reset() {
+	w.b = w.b[:0]
+}
+
+func (w *writeToBuffer) Write(b []byte) (int, error) {
+	w.b = append(w.b, b...)
+	return len(b), nil
+}
+
 func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
 	size := 10*1024*1024 + 123 // ~10MiB
 
@@ -2466,7 +2498,9 @@ func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
 	b.ResetTimer()
 	b.SetBytes(int64(size))
 
-	buf := new(bytes.Buffer)
+	buf := &writeToBuffer{
+		b: make([]byte, 0, size),
+	}
 
 	for i := 0; i < b.N; i++ {
 		buf.Reset()

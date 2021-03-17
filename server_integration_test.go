@@ -408,16 +408,16 @@ func testServer(t *testing.T, useSubsystem bool, readonly bool) (net.Listener, s
 func makeDummyKey() (string, error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), crand.Reader)
 	if err != nil {
-		return "", fmt.Errorf("cannot generate key: %v", err)
+		return "", fmt.Errorf("cannot generate key: %w", err)
 	}
 	der, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
-		return "", fmt.Errorf("cannot marshal key: %v", err)
+		return "", fmt.Errorf("cannot marshal key: %w", err)
 	}
 	block := &pem.Block{Type: "EC PRIVATE KEY", Bytes: der}
 	f, err := ioutil.TempFile("", "sftp-test-key-")
 	if err != nil {
-		return "", fmt.Errorf("cannot create temp file: %v", err)
+		return "", fmt.Errorf("cannot create temp file: %w", err)
 	}
 	defer func() {
 		if f != nil {
@@ -426,14 +426,32 @@ func makeDummyKey() (string, error) {
 		}
 	}()
 	if err := pem.Encode(f, block); err != nil {
-		return "", fmt.Errorf("cannot write key: %v", err)
+		return "", fmt.Errorf("cannot write key: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("error closing key file: %v", err)
+		return "", fmt.Errorf("error closing key file: %w", err)
 	}
 	path := f.Name()
 	f = nil
 	return path, nil
+}
+
+type execError struct {
+	path   string
+	stderr string
+	err    error
+}
+
+func (e *execError) Error() string {
+	return fmt.Sprintf("%s: %v: %s", e.path, e.err, e.stderr)
+}
+
+func (e *execError) Unwrap() error {
+	return e.err
+}
+
+func (e *execError) Cause() error {
+	return e.err
 }
 
 func runSftpClient(t *testing.T, script string, path string, host string, port int) (string, error) {
@@ -471,7 +489,11 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 	}
 	err = cmd.Wait()
 	if err != nil {
-		err = fmt.Errorf("%v: %s", err, stderr.String())
+		err = &execError{
+			path:   cmd.Path,
+			stderr: stderr.String(),
+			err:    err,
+		}
 	}
 	return stdout.String(), err
 }

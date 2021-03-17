@@ -3,120 +3,174 @@ package sftp
 import (
 	"bytes"
 	"encoding"
+	"errors"
+	"io/ioutil"
 	"os"
 	"testing"
 )
 
-var marshalUint32Tests = []struct {
-	v    uint32
-	want []byte
-}{
-	{1, []byte{0, 0, 0, 1}},
-	{256, []byte{0, 0, 1, 0}},
-	{^uint32(0), []byte{255, 255, 255, 255}},
-}
-
 func TestMarshalUint32(t *testing.T) {
-	for _, tt := range marshalUint32Tests {
+	var tests = []struct {
+		v    uint32
+		want []byte
+	}{
+		{0, []byte{0, 0, 0, 0}},
+		{42, []byte{0, 0, 0, 42}},
+		{42 << 8, []byte{0, 0, 42, 0}},
+		{42 << 16, []byte{0, 42, 0, 0}},
+		{42 << 24, []byte{42, 0, 0, 0}},
+		{^uint32(0), []byte{255, 255, 255, 255}},
+	}
+
+	for _, tt := range tests {
 		got := marshalUint32(nil, tt.v)
 		if !bytes.Equal(tt.want, got) {
-			t.Errorf("marshalUint32(%d): want %v, got %v", tt.v, tt.want, got)
+			t.Errorf("marshalUint32(%d) = %#v, want %#v", tt.v, got, tt.want)
 		}
 	}
-}
-
-var marshalUint64Tests = []struct {
-	v    uint64
-	want []byte
-}{
-	{1, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1}},
-	{256, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0}},
-	{^uint64(0), []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-	{1 << 32, []byte{0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0}},
 }
 
 func TestMarshalUint64(t *testing.T) {
-	for _, tt := range marshalUint64Tests {
+	var tests = []struct {
+		v    uint64
+		want []byte
+	}{
+		{0, []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+		{42, []byte{0, 0, 0, 0, 0, 0, 0, 42}},
+		{42 << 8, []byte{0, 0, 0, 0, 0, 0, 42, 0}},
+		{42 << 16, []byte{0, 0, 0, 0, 0, 42, 0, 0}},
+		{42 << 24, []byte{0, 0, 0, 0, 42, 0, 0, 0}},
+		{42 << 32, []byte{0, 0, 0, 42, 0, 0, 0, 0}},
+		{42 << 40, []byte{0, 0, 42, 0, 0, 0, 0, 0}},
+		{42 << 48, []byte{0, 42, 0, 0, 0, 0, 0, 0}},
+		{42 << 56, []byte{42, 0, 0, 0, 0, 0, 0, 0}},
+		{^uint64(0), []byte{255, 255, 255, 255, 255, 255, 255, 255}},
+	}
+
+	for _, tt := range tests {
 		got := marshalUint64(nil, tt.v)
 		if !bytes.Equal(tt.want, got) {
-			t.Errorf("marshalUint64(%d): want %#v, got %#v", tt.v, tt.want, got)
+			t.Errorf("marshalUint64(%d) = %#v, want %#v", tt.v, got, tt.want)
 		}
 	}
-}
-
-var marshalStringTests = []struct {
-	v    string
-	want []byte
-}{
-	{"", []byte{0, 0, 0, 0}},
-	{"/foo", []byte{0x0, 0x0, 0x0, 0x4, 0x2f, 0x66, 0x6f, 0x6f}},
 }
 
 func TestMarshalString(t *testing.T) {
-	for _, tt := range marshalStringTests {
+	var tests = []struct {
+		v    string
+		want []byte
+	}{
+		{"", []byte{0, 0, 0, 0}},
+		{"/", []byte{0x0, 0x0, 0x0, 0x01, '/'}},
+		{"/foo", []byte{0x0, 0x0, 0x0, 0x4, '/', 'f', 'o', 'o'}},
+		{"\x00bar", []byte{0x0, 0x0, 0x0, 0x4, 0, 'b', 'a', 'r'}},
+		{"b\x00ar", []byte{0x0, 0x0, 0x0, 0x4, 'b', 0, 'a', 'r'}},
+		{"ba\x00r", []byte{0x0, 0x0, 0x0, 0x4, 'b', 'a', 0, 'r'}},
+		{"bar\x00", []byte{0x0, 0x0, 0x0, 0x4, 'b', 'a', 'r', 0}},
+	}
+
+	for _, tt := range tests {
 		got := marshalString(nil, tt.v)
 		if !bytes.Equal(tt.want, got) {
-			t.Errorf("marshalString(%q): want %#v, got %#v", tt.v, tt.want, got)
+			t.Errorf("marshalString(%q) = %#v, want %#v", tt.v, got, tt.want)
 		}
 	}
-}
-
-var marshalTests = []struct {
-	v    interface{}
-	want []byte
-}{
-	{uint8(1), []byte{1}},
-	{byte(1), []byte{1}},
-	{uint32(1), []byte{0, 0, 0, 1}},
-	{uint64(1), []byte{0, 0, 0, 0, 0, 0, 0, 1}},
-	{"foo", []byte{0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
-	{[]uint32{1, 2, 3, 4}, []byte{0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x2, 0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x4}},
 }
 
 func TestMarshal(t *testing.T) {
-	for _, tt := range marshalTests {
+	type Struct struct {
+		X, Y, Z uint32
+	}
+
+	var tests = []struct {
+		v    interface{}
+		want []byte
+	}{
+		{uint8(42), []byte{42}},
+		{uint32(42 << 8), []byte{0, 0, 42, 0}},
+		{uint64(42 << 32), []byte{0, 0, 0, 42, 0, 0, 0, 0}},
+		{"foo", []byte{0x0, 0x0, 0x0, 0x3, 'f', 'o', 'o'}},
+		{Struct{1, 2, 3}, []byte{0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x2, 0x0, 0x0, 0x0, 0x3}},
+		{[]uint32{1, 2, 3}, []byte{0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x2, 0x0, 0x0, 0x0, 0x3}},
+	}
+
+	for _, tt := range tests {
 		got := marshal(nil, tt.v)
 		if !bytes.Equal(tt.want, got) {
-			t.Errorf("marshal(%v): want %#v, got %#v", tt.v, tt.want, got)
+			t.Errorf("marshal(%#v) = %#v, want %#v", tt.v, got, tt.want)
 		}
 	}
-}
-
-var unmarshalUint32Tests = []struct {
-	b    []byte
-	want uint32
-	rest []byte
-}{
-	{[]byte{0, 0, 0, 0}, 0, nil},
-	{[]byte{0, 0, 1, 0}, 256, nil},
-	{[]byte{255, 0, 0, 255}, 4278190335, nil},
 }
 
 func TestUnmarshalUint32(t *testing.T) {
-	for _, tt := range unmarshalUint32Tests {
-		got, rest := unmarshalUint32(tt.b)
-		if got != tt.want || !bytes.Equal(rest, tt.rest) {
-			t.Errorf("unmarshalUint32(%v): want %v, %#v, got %v, %#v", tt.b, tt.want, tt.rest, got, rest)
+	testBuffer := []byte{
+		0, 0, 0, 0,
+		0, 0, 0, 42,
+		0, 0, 42, 0,
+		0, 42, 0, 0,
+		42, 0, 0, 0,
+		255, 0, 0, 254,
+	}
+
+	var wants = []uint32{
+		0,
+		42,
+		42 << 8,
+		42 << 16,
+		42 << 24,
+		255<<24 | 254,
+	}
+
+	var i int
+	for len(testBuffer) > 0 {
+		got, rest := unmarshalUint32(testBuffer)
+
+		if got != wants[i] {
+			t.Fatalf("unmarshalUint32(%#v) = %d, want %d", testBuffer[:4], got, wants[i])
 		}
+
+		i++
+		testBuffer = rest
 	}
 }
 
-var unmarshalUint64Tests = []struct {
-	b    []byte
-	want uint64
-	rest []byte
-}{
-	{[]byte{0, 0, 0, 0, 0, 0, 0, 0}, 0, nil},
-	{[]byte{0, 0, 0, 0, 0, 0, 1, 0}, 256, nil},
-	{[]byte{255, 0, 0, 0, 0, 0, 0, 255}, 18374686479671623935, nil},
-}
-
 func TestUnmarshalUint64(t *testing.T) {
-	for _, tt := range unmarshalUint64Tests {
-		got, rest := unmarshalUint64(tt.b)
-		if got != tt.want || !bytes.Equal(rest, tt.rest) {
-			t.Errorf("unmarshalUint64(%v): want %v, %#v, got %v, %#v", tt.b, tt.want, tt.rest, got, rest)
+	testBuffer := []byte{
+		0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 42,
+		0, 0, 0, 0, 0, 0, 42, 0,
+		0, 0, 0, 0, 0, 42, 0, 0,
+		0, 0, 0, 0, 42, 0, 0, 0,
+		0, 0, 0, 42, 0, 0, 0, 0,
+		0, 0, 42, 0, 0, 0, 0, 0,
+		0, 42, 0, 0, 0, 0, 0, 0,
+		42, 0, 0, 0, 0, 0, 0, 0,
+		255, 0, 0, 0, 0, 0, 0, 254,
+	}
+
+	var wants = []uint64{
+		0,
+		42,
+		42 << 8,
+		42 << 16,
+		42 << 24,
+		42 << 32,
+		42 << 40,
+		42 << 48,
+		42 << 56,
+		255<<56 | 254,
+	}
+
+	var i int
+	for len(testBuffer) > 0 {
+		got, rest := unmarshalUint64(testBuffer)
+
+		if got != wants[i] {
+			t.Fatalf("unmarshalUint64(%#v) = %d, want %d", testBuffer[:8], got, wants[i])
 		}
+
+		i++
+		testBuffer = rest
 	}
 }
 
@@ -130,85 +184,193 @@ var unmarshalStringTests = []struct {
 }
 
 func TestUnmarshalString(t *testing.T) {
-	for _, tt := range unmarshalStringTests {
-		got, rest := unmarshalString(tt.b)
-		if got != tt.want || !bytes.Equal(rest, tt.rest) {
-			t.Errorf("unmarshalUint64(%v): want %q, %#v, got %q, %#v", tt.b, tt.want, tt.rest, got, rest)
+	testBuffer := []byte{
+		0, 0, 0, 0,
+		0, 0, 0, 1, '/',
+		0, 0, 0, 4, '/', 'f', 'o', 'o',
+		0, 0, 0, 4, 0, 'b', 'a', 'r',
+		0, 0, 0, 4, 'b', 0, 'a', 'r',
+		0, 0, 0, 4, 'b', 'a', 0, 'r',
+		0, 0, 0, 4, 'b', 'a', 'r', 0,
+	}
+
+	var wants = []string{
+		"",
+		"/",
+		"/foo",
+		"\x00bar",
+		"b\x00ar",
+		"ba\x00r",
+		"bar\x00",
+	}
+
+	var i int
+	for len(testBuffer) > 0 {
+		got, rest := unmarshalString(testBuffer)
+
+		if got != wants[i] {
+			t.Fatalf("unmarshalUint64(%#v...) = %q, want %q", testBuffer[:4], got, wants[i])
 		}
+
+		i++
+		testBuffer = rest
 	}
 }
 
-var sendPacketTests = []struct {
-	p    encoding.BinaryMarshaler
-	want []byte
-}{
-	{&sshFxInitPacket{
-		Version: 3,
-		Extensions: []extensionPair{
-			{"posix-rename@openssh.com", "1"},
-		},
-	}, []byte{0x0, 0x0, 0x0, 0x26, 0x1, 0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x18, 0x70, 0x6f, 0x73, 0x69, 0x78, 0x2d, 0x72, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x40, 0x6f, 0x70, 0x65, 0x6e, 0x73, 0x73, 0x68, 0x2e, 0x63, 0x6f, 0x6d, 0x0, 0x0, 0x0, 0x1, 0x31}},
+type nopCloserBuffer struct {
+	bytes.Buffer
+}
 
-	{&sshFxpOpenPacket{
-		ID:     1,
-		Path:   "/foo",
-		Pflags: flags(os.O_RDONLY),
-	}, []byte{0x0, 0x0, 0x0, 0x15, 0x3, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x4, 0x2f, 0x66, 0x6f, 0x6f, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0}},
-
-	{&sshFxpWritePacket{
-		ID:     124,
-		Handle: "foo",
-		Offset: 13,
-		Length: uint32(len([]byte("bar"))),
-		Data:   []byte("bar"),
-	}, []byte{0x0, 0x0, 0x0, 0x1b, 0x6, 0x0, 0x0, 0x0, 0x7c, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xd, 0x0, 0x0, 0x0, 0x3, 0x62, 0x61, 0x72}},
-
-	{&sshFxpSetstatPacket{
-		ID:    31,
-		Path:  "/bar",
-		Flags: flags(os.O_WRONLY),
-		Attrs: struct {
-			UID uint32
-			GID uint32
-		}{1000, 100},
-	}, []byte{0x0, 0x0, 0x0, 0x19, 0x9, 0x0, 0x0, 0x0, 0x1f, 0x0, 0x0, 0x0, 0x4, 0x2f, 0x62, 0x61, 0x72, 0x0, 0x0, 0x0, 0x2, 0x0, 0x0, 0x3, 0xe8, 0x0, 0x0, 0x0, 0x64}},
+func (*nopCloserBuffer) Close() error {
+	return nil
 }
 
 func TestSendPacket(t *testing.T) {
-	for _, tt := range sendPacketTests {
-		var w bytes.Buffer
-		sendPacket(&w, tt.p)
-		if got := w.Bytes(); !bytes.Equal(tt.want, got) {
-			t.Errorf("sendPacket(%v): want %#v, got %#v", tt.p, tt.want, got)
+	var tests = []struct {
+		packet encoding.BinaryMarshaler
+		want   []byte
+	}{
+		{
+			packet: &sshFxInitPacket{
+				Version: 3,
+				Extensions: []extensionPair{
+					{"posix-rename@openssh.com", "1"},
+				},
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x26,
+				0x1,
+				0x0, 0x0, 0x0, 0x3,
+				0x0, 0x0, 0x0, 0x18,
+				'p', 'o', 's', 'i', 'x', '-', 'r', 'e', 'n', 'a', 'm', 'e', '@', 'o', 'p', 'e', 'n', 's', 's', 'h', '.', 'c', 'o', 'm',
+				0x0, 0x0, 0x0, 0x1,
+				'1',
+			},
+		},
+		{
+			packet: &sshFxpOpenPacket{
+				ID:     1,
+				Path:   "/foo",
+				Pflags: flags(os.O_RDONLY),
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x15,
+				0x3,
+				0x0, 0x0, 0x0, 0x1,
+				0x0, 0x0, 0x0, 0x4, '/', 'f', 'o', 'o',
+				0x0, 0x0, 0x0, 0x1,
+				0x0, 0x0, 0x0, 0x0,
+			},
+		},
+		{
+			packet: &sshFxpWritePacket{
+				ID:     124,
+				Handle: "foo",
+				Offset: 13,
+				Length: uint32(len("bar")),
+				Data:   []byte("bar"),
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x1b,
+				0x6,
+				0x0, 0x0, 0x0, 0x7c,
+				0x0, 0x0, 0x0, 0x3, 'f', 'o', 'o',
+				0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xd,
+				0x0, 0x0, 0x0, 0x3, 'b', 'a', 'r',
+			},
+		},
+		{
+			packet: &sshFxpSetstatPacket{
+				ID:    31,
+				Path:  "/bar",
+				Flags: sshFileXferAttrUIDGID,
+				Attrs: struct {
+					UID uint32
+					GID uint32
+				}{
+					UID: 1000,
+					GID: 100,
+				},
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x19,
+				0x9,
+				0x0, 0x0, 0x0, 0x1f,
+				0x0, 0x0, 0x0, 0x4, '/', 'b', 'a', 'r',
+				0x0, 0x0, 0x0, 0x2,
+				0x0, 0x0, 0x3, 0xe8,
+				0x0, 0x0, 0x0, 0x64,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		b := new(bytes.Buffer)
+		sendPacket(b, tt.packet)
+		if got := b.Bytes(); !bytes.Equal(tt.want, got) {
+			t.Errorf("sendPacket(%v): got %x want %x", tt.packet, tt.want, got)
 		}
 	}
 }
 
-func sp(p encoding.BinaryMarshaler) []byte {
-	var w bytes.Buffer
-	sendPacket(&w, p)
-	return w.Bytes()
-}
-
-var recvPacketTests = []struct {
-	b    []byte
-	want uint8
-	rest []byte
-}{
-	{sp(&sshFxInitPacket{
-		Version: 3,
-		Extensions: []extensionPair{
-			{"posix-rename@openssh.com", "1"},
-		},
-	}), sshFxpInit, []byte{0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x18, 0x70, 0x6f, 0x73, 0x69, 0x78, 0x2d, 0x72, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x40, 0x6f, 0x70, 0x65, 0x6e, 0x73, 0x73, 0x68, 0x2e, 0x63, 0x6f, 0x6d, 0x0, 0x0, 0x0, 0x1, 0x31}},
+func sp(data encoding.BinaryMarshaler) []byte {
+	b := new(bytes.Buffer)
+	sendPacket(b, data)
+	return b.Bytes()
 }
 
 func TestRecvPacket(t *testing.T) {
+	var recvPacketTests = []struct {
+		b []byte
+
+		want    uint8
+		body    []byte
+		wantErr error
+	}{
+		{
+			b: sp(&sshFxInitPacket{
+				Version: 3,
+				Extensions: []extensionPair{
+					{"posix-rename@openssh.com", "1"},
+				},
+			}),
+			want: sshFxpInit,
+			body: []byte{
+				0x0, 0x0, 0x0, 0x3,
+				0x0, 0x0, 0x0, 0x18,
+				'p', 'o', 's', 'i', 'x', '-', 'r', 'e', 'n', 'a', 'm', 'e', '@', 'o', 'p', 'e', 'n', 's', 's', 'h', '.', 'c', 'o', 'm',
+				0x0, 0x0, 0x0, 0x01,
+				'1',
+			},
+		},
+		{
+			b: []byte{
+				0x0, 0x0, 0x0, 0x0,
+			},
+			wantErr: errShortPacket,
+		},
+	}
+
 	for _, tt := range recvPacketTests {
 		r := bytes.NewReader(tt.b)
-		got, rest, _ := recvPacket(r, nil, 0)
-		if got != tt.want || !bytes.Equal(rest, tt.rest) {
-			t.Errorf("recvPacket(%#v): want %v, %#v, got %v, %#v", tt.b, tt.want, tt.rest, got, rest)
+
+		got, body, err := recvPacket(r, nil, 0)
+		if tt.wantErr == nil {
+			if err != nil {
+				t.Fatalf("recvPacket(%#v): unexpected error: %v", tt.b, err)
+			}
+		} else {
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("recvPacket(%#v) = %v, want %v", tt.b, err, tt.wantErr)
+			}
+		}
+
+		if got != tt.want {
+			t.Errorf("recvPacket(%#v) = %#v, want %#v", tt.b, got, tt.want)
+		}
+
+		if !bytes.Equal(body, tt.body) {
+			t.Errorf("recvPacket(%#v) = %#v, want %#v", tt.b, body, tt.body)
 		}
 	}
 }
@@ -297,49 +459,49 @@ func TestSSHFxpOpenPackethasPflags(t *testing.T) {
 	}
 }
 
-func BenchmarkMarshalInit(b *testing.B) {
+func benchMarshal(b *testing.B, packet encoding.BinaryMarshaler) {
 	for i := 0; i < b.N; i++ {
-		sp(&sshFxInitPacket{
-			Version: 3,
-			Extensions: []extensionPair{
-				{"posix-rename@openssh.com", "1"},
-			},
-		})
+		sendPacket(ioutil.Discard, packet)
 	}
 }
 
+func BenchmarkMarshalInit(b *testing.B) {
+	benchMarshal(b, &sshFxInitPacket{
+		Version: 3,
+		Extensions: []extensionPair{
+			{"posix-rename@openssh.com", "1"},
+		},
+	})
+}
+
 func BenchmarkMarshalOpen(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		sp(&sshFxpOpenPacket{
-			ID:     1,
-			Path:   "/home/test/some/random/path",
-			Pflags: flags(os.O_RDONLY),
-		})
-	}
+	benchMarshal(b, &sshFxpOpenPacket{
+		ID:     1,
+		Path:   "/home/test/some/random/path",
+		Pflags: flags(os.O_RDONLY),
+	})
 }
 
 func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 	data := make([]byte, 32*1024)
-	for i := 0; i < b.N; i++ {
-		sp(&sshFxpWritePacket{
-			ID:     1,
-			Handle: "someopaquehandle",
-			Offset: 0,
-			Length: uint32(len(data)),
-			Data:   data,
-		})
-	}
+
+	benchMarshal(b, &sshFxpWritePacket{
+		ID:     1,
+		Handle: "someopaquehandle",
+		Offset: 0,
+		Length: uint32(len(data)),
+		Data:   data,
+	})
 }
 
 func BenchmarkMarshalWrite1k(b *testing.B) {
-	data := make([]byte, 1024)
-	for i := 0; i < b.N; i++ {
-		sp(&sshFxpWritePacket{
-			ID:     1,
-			Handle: "someopaquehandle",
-			Offset: 0,
-			Length: uint32(len(data)),
-			Data:   data,
-		})
-	}
+	data := make([]byte, 1025)
+
+	benchMarshal(b, &sshFxpWritePacket{
+		ID:     1,
+		Handle: "someopaquehandle",
+		Offset: 0,
+		Length: uint32(len(data)),
+		Data:   data,
+	})
 }
