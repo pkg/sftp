@@ -1569,7 +1569,7 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 
 // Read/WriteTo has this issue as well
 func TestClientReadDeadlock(t *testing.T) {
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 3; i++ {
 		clientReadDeadlock(t, i, func(f *File) {
 			b := make([]byte, 32768*4)
 
@@ -1582,7 +1582,7 @@ func TestClientReadDeadlock(t *testing.T) {
 }
 
 func TestClientWriteToDeadlock(t *testing.T) {
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 3; i++ {
 		clientReadDeadlock(t, i, func(f *File) {
 			b := make([]byte, 32768*4)
 
@@ -2495,12 +2495,12 @@ func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
 	f.Write(data)
 	f.Close()
 
-	b.ResetTimer()
-	b.SetBytes(int64(size))
-
 	buf := &writeToBuffer{
 		b: make([]byte, 0, size),
 	}
+
+	b.ResetTimer()
+	b.SetBytes(int64(size))
 
 	for i := 0; i < b.N; i++ {
 		buf.Reset()

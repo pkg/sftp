@@ -217,14 +217,6 @@ func TestUnmarshalString(t *testing.T) {
 	}
 }
 
-type nopCloserBuffer struct {
-	bytes.Buffer
-}
-
-func (*nopCloserBuffer) Close() error {
-	return nil
-}
-
 func TestSendPacket(t *testing.T) {
 	var tests = []struct {
 		packet encoding.BinaryMarshaler
@@ -349,6 +341,12 @@ func TestRecvPacket(t *testing.T) {
 			},
 			wantErr: errShortPacket,
 		},
+		{
+			b: []byte{
+				0xff, 0xff, 0xff, 0xff,
+			},
+			wantErr: errLongPacket,
+		},
 	}
 
 	for _, tt := range recvPacketTests {
@@ -460,6 +458,8 @@ func TestSSHFxpOpenPackethasPflags(t *testing.T) {
 }
 
 func benchMarshal(b *testing.B, packet encoding.BinaryMarshaler) {
+	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		sendPacket(ioutil.Discard, packet)
 	}
