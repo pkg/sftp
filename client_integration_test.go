@@ -2473,7 +2473,7 @@ func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
 	f.Write(data)
 	f.Close()
 
-	buf := new(bytes.Buffer)
+	buf := bytes.NewBuffer(make([]byte, 0, size))
 
 	b.ResetTimer()
 	b.SetBytes(int64(size))
