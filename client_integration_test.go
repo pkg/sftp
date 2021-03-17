@@ -2454,28 +2454,6 @@ func BenchmarkReadFrom4MiBDelay150Msec(b *testing.B) {
 	benchmarkReadFrom(b, 4*1024*1024, 150*time.Millisecond)
 }
 
-// writeToBuffer implements the relevant parts of bytes.Buffer,
-// but does not release its internal buffer when Reset.
-//
-// Release its internal memory when Reset is good for avoiding memory leaks,
-// but not great for memory benchmarks, as this fills up a lot of irrelevant allocations.
-type writeToBuffer struct {
-	b []byte
-}
-
-func (w *writeToBuffer) Len() int {
-	return len(w.b)
-}
-
-func (w *writeToBuffer) Reset() {
-	w.b = w.b[:0]
-}
-
-func (w *writeToBuffer) Write(b []byte) (int, error) {
-	w.b = append(w.b, b...)
-	return len(b), nil
-}
-
 func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
 	size := 10*1024*1024 + 123 // ~10MiB
 
@@ -2495,9 +2473,7 @@ func benchmarkWriteTo(b *testing.B, bufsize int, delay time.Duration) {
 	f.Write(data)
 	f.Close()
 
-	buf := &writeToBuffer{
-		b: make([]byte, 0, size),
-	}
+	buf := new(bytes.Buffer)
 
 	b.ResetTimer()
 	b.SetBytes(int64(size))
