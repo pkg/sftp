@@ -29,6 +29,10 @@ const (
 	PacketTypeRename
 	PacketTypeReadlink
 	PacketTypeSymlink
+
+	// see draft-ietf-secsh-filexfer-13
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-4.3
+	// Defined only for interoperability!
 	PacketTypeLink
 	PacketTypeBlock
 	PacketTypeUnblock
