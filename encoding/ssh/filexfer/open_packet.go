@@ -21,8 +21,8 @@ type OpenPacket struct {
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *OpenPacket) MarshalPacket() (header, payload []byte, err error) {
 	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Filename) + // string
-		4 // uint32(pflags)
+		4 + len(p.Filename) + 4 + // string(filename) + uint32(pflags)
+		4 // minimum marshal size of Attributes
 
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeOpen))
@@ -30,9 +30,9 @@ func (p *OpenPacket) MarshalPacket() (header, payload []byte, err error) {
 	b.AppendString(p.Filename)
 	b.AppendUint32(p.PFlags)
 
-	size += p.Attrs.MarshalInto(b)
+	p.Attrs.MarshalInto(b)
 
-	b.PutLength(size)
+	b.PutLength(b.Len() - 4)
 
 	return b.Bytes(), nil, nil
 }

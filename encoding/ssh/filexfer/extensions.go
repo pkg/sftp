@@ -10,11 +10,9 @@ type ExtensionPair struct {
 }
 
 // MarshalInto marshals e onto the end of the given Buffer.
-func (e *ExtensionPair) MarshalInto(buf *Buffer) int {
+func (e *ExtensionPair) MarshalInto(buf *Buffer) {
 	buf.AppendString(e.Name)
 	buf.AppendString(e.Data)
-
-	return 4 + len(e.Name) + 4 + len(e.Data)
 }
 
 // UnmarshalFrom unmarshals an ExtensionPair from the given Buffer into e.
