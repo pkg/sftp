@@ -35,42 +35,34 @@ type Attributes struct {
 }
 
 // MarshalInto marshals e onto the end of the given Buffer.
-func (a *Attributes) MarshalInto(b *Buffer) int {
+func (a *Attributes) MarshalInto(b *Buffer) {
 	b.AppendUint32(a.Flags)
-	size := 4
 
 	if a.Flags&AttrSize != 0 {
 		b.AppendUint64(a.Size)
-		size += 8
 	}
 
 	if a.Flags&AttrUIDGID != 0 {
 		b.AppendUint32(a.UID)
 		b.AppendUint32(a.GID)
-		size += 8
 	}
 
 	if a.Flags&AttrPermissions != 0 {
 		b.AppendUint32(a.Permissions)
-		size += 4
 	}
 
 	if a.Flags&AttrACModTime != 0 {
 		b.AppendUint32(a.ATime)
 		b.AppendUint32(a.MTime)
-		size += 8
 	}
 
 	if a.Flags&AttrExtended != 0 {
 		b.AppendUint32(uint32(len(a.ExtendedAttributes)))
-		size += 4
 
 		for _, ext := range a.ExtendedAttributes {
-			size += ext.MarshalInto(b)
+			ext.MarshalInto(b)
 		}
 	}
-
-	return size
 }
 
 // UnmarshalFrom unmarshals an Attributes from the given Buffer into e.
@@ -142,11 +134,9 @@ type ExtendedAttribute struct {
 }
 
 // MarshalInto marshals e onto the end of the given Buffer.
-func (e *ExtendedAttribute) MarshalInto(b *Buffer) int {
+func (e *ExtendedAttribute) MarshalInto(b *Buffer) {
 	b.AppendString(e.Type)
 	b.AppendString(e.Data)
-
-	return 4 + len(e.Type) + 4 + len(e.Data)
 }
 
 // UnmarshalFrom unmarshals an ExtendedAattribute from the given Buffer into e.

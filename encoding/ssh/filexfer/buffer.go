@@ -36,8 +36,8 @@ func (b *Buffer) Bytes() []byte {
 }
 
 // Len returns the number of unconsumed bytes in the Buffer.
-func (b *Buffer) Len() uint32 {
-	return uint32(len(b.b))
+func (b *Buffer) Len() int {
+	return len(b.b)
 }
 
 // ConsumeUint8 consumes a single byte from the Buffer.
@@ -158,7 +158,7 @@ func (b *Buffer) ConsumeByteSlice() ([]byte, error) {
 		return nil, err
 	}
 
-	if b.Len() < length {
+	if b.Len() < int(length) {
 		return nil, ErrShortPacket
 	}
 
