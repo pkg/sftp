@@ -68,3 +68,52 @@ func (p *OpenPacket) UnmarshalBinary(data []byte) (err error) {
 
 	return p.UnmarshalPacketBody(buf)
 }
+
+// OpendirPacket defines the SSH_FXP_OPEN packet.
+type OpendirPacket struct {
+	RequestID uint32
+	Path      string
+}
+
+// MarshalPacket returns p as a two-part binary encoding of p.
+func (p *OpendirPacket) MarshalPacket() (header, payload []byte, err error) {
+	size := 1 + 4 + // byte(type) + uint32(request-id)
+		4 + len(p.Path) // string(path)
+
+	b := NewMarshalBuffer(size)
+	b.AppendUint8(uint8(PacketTypeOpendir))
+	b.AppendUint32(p.RequestID)
+	b.AppendString(p.Path)
+
+	b.PutLength(size)
+
+	return b.Bytes(), nil, nil
+}
+
+// MarshalBinary returns p as the binary encoding of p.
+func (p *OpendirPacket) MarshalBinary() ([]byte, error) {
+	return ComposePacket(p.MarshalPacket())
+}
+
+// UnmarshalPacketBody unmarshals the packet body from the given Buffer.
+// It is assumed that the uint32(request-id) has already been consumed.
+func (p *OpendirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+	if p.Path, err = buf.ConsumeString(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UnmarshalBinary unmarshals a full raw packet out of the given data.
+// It is assumed that the uint32(length) has already been consumed to receive the data.
+// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
+func (p *OpendirPacket) UnmarshalBinary(data []byte) (err error) {
+	buf := NewBuffer(data)
+
+	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
+		return err
+	}
+
+	return p.UnmarshalPacketBody(buf)
+}
