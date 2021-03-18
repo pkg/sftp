@@ -43,11 +43,8 @@ func (p *OpenPacket) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
+// It is assumed that the uint32(request-id) has already been consumed.
 func (p *OpenPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
-	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
-		return err
-	}
-
 	if p.Filename, err = buf.ConsumeString(); err != nil {
 		return err
 	}
@@ -62,6 +59,12 @@ func (p *OpenPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // UnmarshalBinary unmarshals a full raw packet out of the given data.
 // It is assumed that the uint32(length) has already been consumed to receive the data.
 // It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *OpenPacket) UnmarshalBinary(data []byte) error {
-	return p.UnmarshalPacketBody(NewBuffer(data))
+func (p *OpenPacket) UnmarshalBinary(data []byte) (err error) {
+	buf := NewBuffer(data)
+
+	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
+		return err
+	}
+
+	return p.UnmarshalPacketBody(buf)
 }
