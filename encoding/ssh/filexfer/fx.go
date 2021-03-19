@@ -5,7 +5,7 @@ import (
 )
 
 // Status defines the SFTP error codes used in SSH_FXP_STATUS response packets.
-type Status uint8
+type Status uint32
 
 // Defines the various SSH_FX_* values.
 const (
