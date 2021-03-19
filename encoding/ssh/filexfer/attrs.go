@@ -7,7 +7,7 @@ const (
 	AttrPermissions             // SSH_FILEXFER_ATTR_PERMISSIONS
 	AttrACModTime               // SSH_FILEXFER_ACMODTIME
 
-	AttrExtended = (1 << 31) // SSH_FILEXFER_ATTR_EXTENDED
+	AttrExtended = 1 << 31 // SSH_FILEXFER_ATTR_EXTENDED
 )
 
 // Attributes defines the file attributes type defined in draft-ietf-secsh-filexfer-02
@@ -150,4 +150,36 @@ func (e *ExtendedAttribute) UnmarshalFrom(b *Buffer) (err error) {
 	}
 
 	return nil
+}
+
+// NameEntry implements the SSH_FXP_NAME repeated data type from draft-ietf-secsh-filexfer-02
+//
+// This type is incompatible with versions 4 or higher.
+type NameEntry struct {
+	Filename string
+	Longname string
+	Attrs    Attributes
+}
+
+// MarshalInto marshals e onto the end of the given Buffer.
+func (e *NameEntry) MarshalInto(b *Buffer) {
+	b.AppendString(e.Filename)
+	b.AppendString(e.Longname)
+
+	e.Attrs.MarshalInto(b)
+}
+
+// UnmarshalFrom unmarshals an NameEntry from the given Buffer into e.
+//
+// NOTE: The values of fields not covered in the a.Flags are explicitly undefined.
+func (e *NameEntry) UnmarshalFrom(b *Buffer) (err error) {
+	if e.Filename, err = b.ConsumeString(); err != nil {
+		return err
+	}
+
+	if e.Longname, err = b.ConsumeString(); err != nil {
+		return err
+	}
+
+	return e.Attrs.UnmarshalFrom(b)
 }
