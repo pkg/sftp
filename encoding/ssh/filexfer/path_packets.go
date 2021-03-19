@@ -14,6 +14,7 @@ func (p *LstatPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeLstat))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
@@ -65,6 +66,7 @@ func (p *SetstatPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeSetstat))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	p.Attrs.MarshalInto(b)
@@ -116,6 +118,7 @@ func (p *RemovePacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeRemove))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
@@ -167,6 +170,7 @@ func (p *MkdirPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeMkdir))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	p.Attrs.MarshalInto(b)
@@ -218,6 +222,7 @@ func (p *RmdirPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeRmdir))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
@@ -267,6 +272,7 @@ func (p *RealpathPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeRealpath))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
@@ -316,6 +322,7 @@ func (p *StatPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeStat))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
@@ -367,6 +374,7 @@ func (p *RenamePacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeRename))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.OldPath)
 	b.AppendString(p.NewPath)
 
@@ -421,6 +429,7 @@ func (p *ReadlinkPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeReadlink))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
@@ -470,12 +479,13 @@ type SymlinkPacket struct {
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *SymlinkPacket) MarshalPacket() (header, payload []byte, err error) {
 	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.LinkPath) + // string(linkpath)
-		4 + len(p.TargetPath) // string(targetpath)
+		4 + len(p.TargetPath) + // string(targetpath)
+		4 + len(p.LinkPath) // string(linkpath)
 
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeSymlink))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.TargetPath) // Arguments were inadvertently reversed.
 	b.AppendString(p.LinkPath)
 

@@ -27,6 +27,7 @@ func (p *OpenPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeOpen))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Filename)
 	b.AppendUint32(p.PFlags)
 
@@ -83,6 +84,7 @@ func (p *OpendirPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeOpendir))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Path)
 
 	b.PutLength(size)
