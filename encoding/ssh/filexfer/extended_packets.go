@@ -22,12 +22,9 @@ type ExtendedPacket struct {
 //
 // The Data is marshaled into binary, and returned as the payload.
 func (p *ExtendedPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.ExtendedRequest) // string(extended-request)
+	size := 4 + len(p.ExtendedRequest) // string(extended-request)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeExtended))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeExtended, p.RequestID, size)
 
 	b.AppendString(p.ExtendedRequest)
 
@@ -38,9 +35,7 @@ func (p *ExtendedPacket) MarshalPacket() (header, payload []byte, err error) {
 		}
 	}
 
-	b.PutLength(size + len(payload))
-
-	return b.Bytes(), payload, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -95,11 +90,7 @@ type ExtendedReplyPacket struct {
 //
 // The Data is marshaled into binary, and returned as the payload.
 func (p *ExtendedReplyPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 // byte(type) + uint32(request-id)
-
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeExtendedReply))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeExtendedReply, p.RequestID, 0)
 
 	if p.Data != nil {
 		payload, err = p.Data.MarshalBinary()
@@ -108,9 +99,7 @@ func (p *ExtendedReplyPacket) MarshalPacket() (header, payload []byte, err error
 		}
 	}
 
-	b.PutLength(size + len(payload))
-
-	return b.Bytes(), payload, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.

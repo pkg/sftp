@@ -20,22 +20,17 @@ type OpenPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *OpenPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Filename) + 4 + // string(filename) + uint32(pflags)
-		4 // minimum marshal size of Attributes
+	// string(filename) + uint32(pflags) + ATTRS(attrs)
+	size := 4 + len(p.Filename) + 4 + p.Attrs.Len()
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeOpen))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeOpen, p.RequestID, size)
 
 	b.AppendString(p.Filename)
 	b.AppendUint32(p.PFlags)
 
 	p.Attrs.MarshalInto(b)
 
-	b.PutLength(b.Len() - 4)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -78,18 +73,13 @@ type OpendirPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *OpendirPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Path) // string(path)
+	size := 4 + len(p.Path) // string(path)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeOpendir))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeOpendir, p.RequestID, size)
 
 	b.AppendString(p.Path)
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.

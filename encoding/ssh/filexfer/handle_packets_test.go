@@ -167,13 +167,11 @@ func TestFstatPacket(t *testing.T) {
 	const (
 		id     = 42
 		handle = "somehandle"
-		flags  = 0x12345678
 	)
 
 	p := &FstatPacket{
 		RequestID: id,
 		Handle:    "somehandle",
-		Flags:     flags,
 	}
 
 	data, err := p.MarshalBinary()
@@ -182,11 +180,10 @@ func TestFstatPacket(t *testing.T) {
 	}
 
 	want := []byte{
-		0x00, 0x00, 0x00, 23,
+		0x00, 0x00, 0x00, 19,
 		8,
 		0x00, 0x00, 0x00, 42,
 		0x00, 0x00, 0x00, 10, 's', 'o', 'm', 'e', 'h', 'a', 'n', 'd', 'l', 'e',
-		0x12, 0x34, 0x56, 0x78,
 	}
 
 	if !bytes.Equal(data, want) {
@@ -206,10 +203,6 @@ func TestFstatPacket(t *testing.T) {
 
 	if p.Handle != handle {
 		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
-	}
-
-	if p.Flags != flags {
-		t.Errorf("UnmarshalBinary(): Flags was %x, but expected %x", p.Flags, flags)
 	}
 }
 

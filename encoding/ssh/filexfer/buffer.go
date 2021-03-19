@@ -25,14 +25,34 @@ func NewBuffer(b []byte) *Buffer {
 }
 
 // NewMarshalBuffer creates an initializes a new Buffer ready to start marshaling a Packet into.
-// It preallocates enough space for size additional bytes of data above the 4-byte length.
-func NewMarshalBuffer(size int) *Buffer {
-	return NewBuffer(make([]byte, 4, 4+size))
+// It prepopulates 4 bytes for length, the 1-byte packetType, and the 4-byte requestID.
+// It preallocates enough space for an additional size bytes of data above the prepopulated values.
+func NewMarshalBuffer(packetType PacketType, requestID uint32, size int) *Buffer {
+	buf := NewBuffer(make([]byte, 4, 4+1+4+size))
+
+	buf.AppendUint8(uint8(packetType))
+	buf.AppendUint32(requestID)
+
+	return buf
 }
 
 // Bytes returns a slice of length b.Len() holding the unconsumed bytes in the Buffer.
 func (b *Buffer) Bytes() []byte {
 	return b.b
+}
+
+// Packet finalizes the packet started from NewMarshalPacket.
+//
+// It writes the packet body length into the first four bytes of the Buffer in network byte order (big endian).
+// The packet body length is the size of the Buffer less the 4-byte length itself, plus the length of payload.
+func (b *Buffer) Packet(payload []byte) ([]byte, []byte, error) {
+	if len(b.b) < 4 {
+		b.b = append(b.b, make([]byte, 4-len(b.b))...)
+	}
+
+	b.PutLength(len(b.b) - 4 + len(payload))
+
+	return b.b, payload, nil
 }
 
 // Len returns the number of unconsumed bytes in the Buffer.

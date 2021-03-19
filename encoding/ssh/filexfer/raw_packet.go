@@ -6,20 +6,15 @@ package filexfer
 type RawPacket struct {
 	Type      PacketType
 	RequestID uint32
-	Payload   []byte
+
+	Payload []byte
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RawPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 // byte(type) + uint32(id)
+	b := NewMarshalBuffer(p.Type, p.RequestID, 0)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(p.Type))
-	b.AppendUint32(p.RequestID)
-
-	b.PutLength(size + len(p.Payload))
-
-	return b.Bytes(), p.Payload, nil
+	return b.Packet(p.Payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
