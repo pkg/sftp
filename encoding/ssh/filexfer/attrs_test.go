@@ -32,10 +32,10 @@ func TestAttributes(t *testing.T) {
 		},
 	}
 
-	type test struct{
-		name  string
-		flags uint32
-		encoded  []byte
+	type test struct {
+		name    string
+		flags   uint32
+		encoded []byte
 	}
 
 	tests := []test{
@@ -46,43 +46,43 @@ func TestAttributes(t *testing.T) {
 			},
 		},
 		{
-			name: "size",
+			name:  "size",
 			flags: AttrSize,
-			encoded:  []byte{
+			encoded: []byte{
 				0x00, 0x00, 0x00, 0x01,
 				0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
 			},
 		},
 		{
-			name: "uidgid",
+			name:  "uidgid",
 			flags: AttrUIDGID,
-			encoded:  []byte{
+			encoded: []byte{
 				0x00, 0x00, 0x00, 0x02,
 				0x00, 0x00, 0x03, 0xE8,
 				0x00, 0x00, 0x00, 100,
 			},
 		},
 		{
-			name: "permissions",
+			name:  "permissions",
 			flags: AttrPermissions,
-			encoded:  []byte{
+			encoded: []byte{
 				0x00, 0x00, 0x00, 0x04,
 				0x87, 0x65, 0x43, 0x21,
 			},
 		},
 		{
-			name: "acmodtime",
+			name:  "acmodtime",
 			flags: AttrACModTime,
-			encoded:  []byte{
+			encoded: []byte{
 				0x00, 0x00, 0x00, 0x08,
 				0x2A, 0x2B, 0x2C, 0x2D,
 				0x42, 0x43, 0x44, 0x45,
 			},
 		},
 		{
-			name: "extended",
+			name:  "extended",
 			flags: AttrExtended,
-			encoded:  []byte{
+			encoded: []byte{
 				0x80, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x01,
 				0x00, 0x00, 0x00, 0x03, 'f', 'o', 'o',
@@ -90,9 +90,9 @@ func TestAttributes(t *testing.T) {
 			},
 		},
 		{
-			name: "size uidgid permisssions acmodtime extended",
+			name:  "size uidgid permisssions acmodtime extended",
 			flags: AttrSize | AttrUIDGID | AttrPermissions | AttrACModTime | AttrExtended,
-			encoded:  []byte{
+			encoded: []byte{
 				0x80, 0x00, 0x00, 0x0F,
 				0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
 				0x00, 0x00, 0x03, 0xE8,
@@ -122,8 +122,6 @@ func TestAttributes(t *testing.T) {
 
 			attr = Attributes{}
 
-			buf = NewBuffer(tt.encoded)
-
 			if err := attr.UnmarshalFrom(buf); err != nil {
 				t.Fatal("unexpected error:", err)
 			}
@@ -132,11 +130,11 @@ func TestAttributes(t *testing.T) {
 				t.Errorf("UnmarshalFrom(): Flags was %x, but wanted %x", attr.Flags, tt.flags)
 			}
 
-			if attr.Flags & AttrSize != 0 && attr.Size != size {
+			if attr.Flags&AttrSize != 0 && attr.Size != size {
 				t.Errorf("UnmarshalFrom(): Size was %x, but wanted %x", attr.Size, size)
 			}
 
-			if attr.Flags & AttrUIDGID != 0 {
+			if attr.Flags&AttrUIDGID != 0 {
 				if attr.UID != uid {
 					t.Errorf("UnmarshalFrom(): UID was %x, but wanted %x", attr.UID, uid)
 				}
@@ -146,11 +144,11 @@ func TestAttributes(t *testing.T) {
 				}
 			}
 
-			if attr.Flags & AttrPermissions != 0 && attr.Permissions != perms {
+			if attr.Flags&AttrPermissions != 0 && attr.Permissions != perms {
 				t.Errorf("UnmarshalFrom(): Permissions was %x, but wanted %x", attr.Permissions, perms)
 			}
 
-			if attr.Flags & AttrACModTime != 0 {
+			if attr.Flags&AttrACModTime != 0 {
 				if attr.ATime != atime {
 					t.Errorf("UnmarshalFrom(): ATime was %x, but wanted %x", attr.ATime, atime)
 				}
@@ -160,11 +158,11 @@ func TestAttributes(t *testing.T) {
 				}
 			}
 
-			if attr.Flags & AttrExtended != 0 {
+			if attr.Flags&AttrExtended != 0 {
 				extAttrs := attr.ExtendedAttributes
 
 				if count := len(extAttrs); count != 1 {
-					t.Fatalf("UnmarshalFrom(): len(ExtendedAttributes) was %d, but wanted 1", count)
+					t.Fatalf("UnmarshalFrom(): len(ExtendedAttributes) was %d, but wanted %d", count, 1)
 				}
 
 				if got := extAttrs[0]; got != extAttr {
@@ -172,5 +170,58 @@ func TestAttributes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNameEntry(t *testing.T) {
+	const (
+		filename = "foo"
+		longname = "bar"
+		perms    = 0x87654321
+	)
+
+	e := &NameEntry{
+		Filename: filename,
+		Longname: longname,
+		Attrs: Attributes{
+			Flags:       AttrPermissions,
+			Permissions: perms,
+		},
+	}
+
+	buf := new(Buffer)
+	e.MarshalInto(buf)
+
+	want := []byte{
+		0x00, 0x00, 0x00, 0x03, 'f', 'o', 'o',
+		0x00, 0x00, 0x00, 0x03, 'b', 'a', 'r',
+		0x00, 0x00, 0x00, 0x04,
+		0x87, 0x65, 0x43, 0x21,
+	}
+
+	if got := buf.Bytes(); !bytes.Equal(got, want) {
+		t.Fatalf("MarshalInto() = %X, but wanted %X", got, want)
+	}
+
+	*e = NameEntry{}
+
+	if err := e.UnmarshalFrom(buf); err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+
+	if e.Filename != filename {
+		t.Errorf("UnmarhsalFrom(): Filename was %q, but expected %q", e.Filename, filename)
+	}
+
+	if e.Longname != longname {
+		t.Errorf("UnmarhsalFrom(): Longname was %q, but expected %q", e.Longname, longname)
+	}
+
+	if e.Attrs.Flags != AttrPermissions {
+		t.Errorf("UnmarshalBinary(): Attrs.Flag was %#x, but expected %#x", e.Attrs.Flags, AttrPermissions)
+	}
+
+	if e.Attrs.Permissions != perms {
+		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#x, but expected %#x", e.Attrs.Permissions, perms)
 	}
 }
