@@ -9,6 +9,7 @@ type PacketType uint8
 
 // Request packet types.
 const (
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-3
 	PacketTypeInit = PacketType(iota + 1)
 	PacketTypeVersion
 	PacketTypeOpen
@@ -30,16 +31,17 @@ const (
 	PacketTypeReadlink
 	PacketTypeSymlink
 
-	// see draft-ietf-secsh-filexfer-13
-	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-4.3
-	// Defined only for interoperability!
-	PacketTypeLink
-	PacketTypeBlock
-	PacketTypeUnblock
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-07#section-3.3
+	PacketTypeV6Link
+
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-08#section-3.3
+	PacketTypeV6Block
+	PacketTypeV6Unblock
 )
 
 // Response packet types.
 const (
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-3
 	PacketTypeStatus = PacketType(iota + 101)
 	PacketTypeHandle
 	PacketTypeData
@@ -49,6 +51,7 @@ const (
 
 // Extended packet types.
 const (
+	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-3
 	PacketTypeExtended = PacketType(iota + 200)
 	PacketTypeExtendedReply
 )
@@ -95,11 +98,11 @@ func (f PacketType) String() string {
 		return "SSH_FXP_READLINK"
 	case PacketTypeSymlink:
 		return "SSH_FXP_SYMLINK"
-	case PacketTypeLink:
+	case PacketTypeV6Link:
 		return "SSH_FXP_LINK"
-	case PacketTypeBlock:
+	case PacketTypeV6Block:
 		return "SSH_FXP_BLOCK"
-	case PacketTypeUnblock:
+	case PacketTypeV6Unblock:
 		return "SSH_FXP_UNBLOCK"
 	case PacketTypeStatus:
 		return "SSH_FXP_STATUS"
