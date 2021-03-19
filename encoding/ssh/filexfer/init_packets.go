@@ -8,9 +8,13 @@ type InitPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *InitPacket) MarshalPacket() (header, payload []byte, err error) {
-	const size = 1 + 4 // byte(type) + uint32(version)
+	size := 1 + 4 // byte(type) + uint32(version)
 
-	b := NewMarshalBuffer(size)
+	for _, ext := range p.Extensions {
+		size += ext.Len()
+	}
+
+	b := NewBuffer(make([]byte, 4, 4+size))
 	b.AppendUint8(uint8(PacketTypeInit))
 	b.AppendUint32(p.Version)
 
@@ -18,7 +22,7 @@ func (p *InitPacket) MarshalPacket() (header, payload []byte, err error) {
 		ext.MarshalInto(b)
 	}
 
-	b.PutLength(b.Len() - 4)
+	b.PutLength(size)
 
 	return b.Bytes(), nil, nil
 }
@@ -61,9 +65,13 @@ type VersionPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *VersionPacket) MarshalPacket() (header, payload []byte, err error) {
-	const size = 1 + 4 // byte(type) + uint32(version)
+	size := 1 + 4 // byte(type) + uint32(version)
 
-	b := NewMarshalBuffer(size)
+	for _, ext := range p.Extensions {
+		size += ext.Len()
+	}
+
+	b := NewBuffer(make([]byte, 4, 4+size))
 	b.AppendUint8(uint8(PacketTypeInit))
 	b.AppendUint32(p.Version)
 
@@ -71,7 +79,7 @@ func (p *VersionPacket) MarshalPacket() (header, payload []byte, err error) {
 		ext.MarshalInto(b)
 	}
 
-	b.PutLength(b.Len() - 4)
+	b.PutLength(size)
 
 	return b.Bytes(), nil, nil
 }

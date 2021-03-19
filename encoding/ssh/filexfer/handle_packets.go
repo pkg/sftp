@@ -8,18 +8,13 @@ type ClosePacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ClosePacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Handle) // string
+	size := 4 + len(p.Handle) // string(handle)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeClose))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeClose, p.RequestID, size)
 
 	b.AppendString(p.Handle)
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -60,20 +55,16 @@ type ReadPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ReadPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Handle) + 8 + 4 // string + uint64(offset) + uint32(len)
+	// string(handle) + uint64(offset) + uint32(len)
+	size := 4 + len(p.Handle) + 8 + 4
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeRead))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeRead, p.RequestID, size)
 
 	b.AppendString(p.Handle)
 	b.AppendUint64(p.Offset)
 	b.AppendUint32(p.Len)
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -122,20 +113,16 @@ type WritePacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *WritePacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Handle) + 8 + 4 // string + uint64(offset) + uint32(len(data))
+	// string(handle) + uint64(offset) + uint32(len(data)); data content in payload
+	size := 4 + len(p.Handle) + 8 + 4
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeWrite))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeWrite, p.RequestID, size)
 
 	b.AppendString(p.Handle)
 	b.AppendUint64(p.Offset)
 	b.AppendUint32(uint32(len(p.Data)))
 
-	b.PutLength(size + len(p.Data))
-
-	return b.Bytes(), p.Data, nil
+	return b.Packet(p.Data)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -178,24 +165,17 @@ func (p *WritePacket) UnmarshalBinary(data []byte) (err error) {
 type FstatPacket struct {
 	RequestID uint32
 	Handle    string
-	Flags     uint32
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *FstatPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Handle) + 4 // string + uint32(flags)
+	size := 4 + len(p.Handle) // string(handle)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeFstat))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeFstat, p.RequestID, size)
 
 	b.AppendString(p.Handle)
-	b.AppendUint32(p.Flags)
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -207,10 +187,6 @@ func (p *FstatPacket) MarshalBinary() ([]byte, error) {
 // It is assumed that the uint32(request-id) has already been consumed.
 func (p *FstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Handle, err = buf.ConsumeString(); err != nil {
-		return err
-	}
-
-	if p.Flags, err = buf.ConsumeUint32(); err != nil {
 		return err
 	}
 
@@ -239,20 +215,15 @@ type FsetstatPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *FsetstatPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Handle) // string
+	size := 4 + len(p.Handle) + p.Attrs.Len() // string(handle) + ATTRS(attrs)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeFsetstat))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeFsetstat, p.RequestID, size)
 
 	b.AppendString(p.Handle)
 
 	p.Attrs.MarshalInto(b)
 
-	b.PutLength(b.Len() - 4)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
@@ -291,18 +262,13 @@ type ReaddirPacket struct {
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ReaddirPacket) MarshalPacket() (header, payload []byte, err error) {
-	size := 1 + 4 + // byte(type) + uint32(request-id)
-		4 + len(p.Handle) // string
+	size := 4 + len(p.Handle) // string(handle)
 
-	b := NewMarshalBuffer(size)
-	b.AppendUint8(uint8(PacketTypeReaddir))
-	b.AppendUint32(p.RequestID)
+	b := NewMarshalBuffer(PacketTypeReaddir, p.RequestID, size)
 
 	b.AppendString(p.Handle)
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil, nil
+	return b.Packet(payload)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
