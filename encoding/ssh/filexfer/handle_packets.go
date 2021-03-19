@@ -14,6 +14,7 @@ func (p *ClosePacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeClose))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Handle)
 
 	b.PutLength(size)
@@ -65,6 +66,7 @@ func (p *ReadPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeRead))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Handle)
 	b.AppendUint64(p.Offset)
 	b.AppendUint32(p.Len)
@@ -126,6 +128,7 @@ func (p *WritePacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeWrite))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Handle)
 	b.AppendUint64(p.Offset)
 	b.AppendUint32(uint32(len(p.Data)))
@@ -186,6 +189,7 @@ func (p *FstatPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeFstat))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Handle)
 	b.AppendUint32(p.Flags)
 
@@ -241,6 +245,7 @@ func (p *FsetstatPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeFsetstat))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Handle)
 
 	p.Attrs.MarshalInto(b)
@@ -292,6 +297,7 @@ func (p *ReaddirPacket) MarshalPacket() (header, payload []byte, err error) {
 	b := NewMarshalBuffer(size)
 	b.AppendUint8(uint8(PacketTypeReaddir))
 	b.AppendUint32(p.RequestID)
+
 	b.AppendString(p.Handle)
 
 	b.PutLength(size)
