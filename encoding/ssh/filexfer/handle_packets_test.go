@@ -217,7 +217,7 @@ func TestFsetstatPacket(t *testing.T) {
 	const (
 		id     = 42
 		handle = "somehandle"
-		perms  = 0x12345678
+		perms  = 0x87654321
 	)
 
 	p := &FsetstatPacket{
@@ -240,7 +240,7 @@ func TestFsetstatPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 42,
 		0x00, 0x00, 0x00, 10, 's', 'o', 'm', 'e', 'h', 'a', 'n', 'd', 'l', 'e',
 		0x00, 0x00, 0x00, 0x04,
-		0x12, 0x34, 0x56, 0x78,
+		0x87, 0x65, 0x43, 0x21,
 	}
 
 	if !bytes.Equal(data, want) {

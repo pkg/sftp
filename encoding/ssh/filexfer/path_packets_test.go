@@ -52,7 +52,7 @@ func TestSetstatPacket(t *testing.T) {
 	const (
 		id    = 42
 		path  = "/foo"
-		perms = 0x12345678
+		perms = 0x87654321
 	)
 
 	p := &SetstatPacket{
@@ -75,7 +75,7 @@ func TestSetstatPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 42,
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 		0x00, 0x00, 0x00, 0x04,
-		0x12, 0x34, 0x56, 0x78,
+		0x87, 0x65, 0x43, 0x21,
 	}
 
 	if !bytes.Equal(data, want) {
@@ -153,7 +153,7 @@ func TestMkdirPacket(t *testing.T) {
 	const (
 		id    = 42
 		path  = "/foo"
-		perms = 0x12345678
+		perms = 0x87654321
 	)
 
 	p := &MkdirPacket{
@@ -176,7 +176,7 @@ func TestMkdirPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 42,
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 		0x00, 0x00, 0x00, 0x04,
-		0x12, 0x34, 0x56, 0x78,
+		0x87, 0x65, 0x43, 0x21,
 	}
 
 	if !bytes.Equal(data, want) {
