@@ -222,3 +222,22 @@ func (b *Buffer) PutLength(size int) {
 
 	binary.BigEndian.PutUint32(b.b, uint32(size))
 }
+
+// MarshalBinary returns b as the binary encoding of b.
+func (b *Buffer) MarshalBinary() ([]byte, error) {
+	n := len(b.b)
+
+	// clamp cap() == len(), so any appends will reallocate.
+	return b.b[:n:n], nil
+}
+
+// UnmarshalBinary sets the internal buffer of b to be data.
+//
+// NOTE: To avoid extra allocations, UnmarshalBinary aliases the given byte slice.
+func (b *Buffer) UnmarshalBinary(data []byte) error {
+	n := len(data)
+
+	// clamp cap() == len(), so any appends will reallocate.
+	b.b = data[:n:n]
+	return nil
+}

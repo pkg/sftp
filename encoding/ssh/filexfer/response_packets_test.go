@@ -239,8 +239,8 @@ func TestNamePacket(t *testing.T) {
 
 func TestAttrsPacket(t *testing.T) {
 	const (
-		id       = 42
-		perms    = 0x87654321
+		id    = 42
+		perms = 0x87654321
 	)
 
 	p := &AttrsPacket{
