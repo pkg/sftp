@@ -53,7 +53,7 @@ func TestOpenPacket(t *testing.T) {
 	}
 
 	if p.Filename != filename {
-		t.Fatalf("UnmarshalBinary(): Filename was %q, but expected %q", p.Filename, filename)
+		t.Errorf("UnmarshalBinary(): Filename was %q, but expected %q", p.Filename, filename)
 	}
 
 	if p.PFlags != FlagRead {
@@ -108,6 +108,6 @@ func TestOpendirPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }

@@ -44,7 +44,7 @@ func TestLstatPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestSetstatPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 
 	if p.Attrs.Flags != AttrPermissions {
@@ -145,7 +145,7 @@ func TestRemovePacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }
 
@@ -195,7 +195,7 @@ func TestMkdirPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 
 	if p.Attrs.Flags != AttrPermissions {
@@ -246,7 +246,7 @@ func TestRmdirPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }
 
@@ -289,7 +289,7 @@ func TestRealpathPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestStatPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }
 
@@ -378,11 +378,11 @@ func TestRenamePacket(t *testing.T) {
 	}
 
 	if p.OldPath != oldpath {
-		t.Fatalf("UnmarshalBinary(): OldPath was %q, but expected %q", p.OldPath, oldpath)
+		t.Errorf("UnmarshalBinary(): OldPath was %q, but expected %q", p.OldPath, oldpath)
 	}
 
 	if p.NewPath != newpath {
-		t.Fatalf("UnmarshalBinary(): NewPath was %q, but expected %q", p.NewPath, newpath)
+		t.Errorf("UnmarshalBinary(): NewPath was %q, but expected %q", p.NewPath, newpath)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestReadlinkPacket(t *testing.T) {
 	}
 
 	if p.Path != path {
-		t.Fatalf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
 	}
 }
 
@@ -471,10 +471,10 @@ func TestSymlinkPacket(t *testing.T) {
 	}
 
 	if p.LinkPath != linkpath {
-		t.Fatalf("UnmarshalBinary(): LinkPath was %q, but expected %q", p.LinkPath, linkpath)
+		t.Errorf("UnmarshalBinary(): LinkPath was %q, but expected %q", p.LinkPath, linkpath)
 	}
 
 	if p.TargetPath != targetpath {
-		t.Fatalf("UnmarshalBinary(): TargetPath was %q, but expected %q", p.TargetPath, targetpath)
+		t.Errorf("UnmarshalBinary(): TargetPath was %q, but expected %q", p.TargetPath, targetpath)
 	}
 }
