@@ -129,7 +129,7 @@ func TestAttributes(t *testing.T) {
 			}
 
 			if attr.Flags != tt.flags {
-				t.Fatalf("UnmarshalFrom(): Flags was %x, but wanted %x", attr.Flags, tt.flags)
+				t.Errorf("UnmarshalFrom(): Flags was %x, but wanted %x", attr.Flags, tt.flags)
 			}
 
 			if attr.Flags & AttrSize != 0 && attr.Size != size {

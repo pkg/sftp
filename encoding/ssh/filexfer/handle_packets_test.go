@@ -44,7 +44,7 @@ func TestClosePacket(t *testing.T) {
 	}
 
 	if p.Handle != handle {
-		t.Fatalf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
 
@@ -93,15 +93,15 @@ func TestReadPacket(t *testing.T) {
 	}
 
 	if p.Handle != handle {
-		t.Fatalf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 
 	if p.Offset != offset {
-		t.Fatalf("UnmarshalBinary(): Offset was %x, but expected %x", p.Offset, offset)
+		t.Errorf("UnmarshalBinary(): Offset was %x, but expected %x", p.Offset, offset)
 	}
 
 	if p.Len != length {
-		t.Fatalf("UnmarshalBinary(): Len was %x, but expected %x", p.Len, length)
+		t.Errorf("UnmarshalBinary(): Len was %x, but expected %x", p.Len, length)
 	}
 }
 
@@ -151,15 +151,15 @@ func TestWritePacket(t *testing.T) {
 	}
 
 	if p.Handle != handle {
-		t.Fatalf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 
 	if p.Offset != offset {
-		t.Fatalf("UnmarshalBinary(): Offset was %x, but expected %x", p.Offset, offset)
+		t.Errorf("UnmarshalBinary(): Offset was %x, but expected %x", p.Offset, offset)
 	}
 
 	if !bytes.Equal(p.Data, payload) {
-		t.Fatalf("UnmarshalBinary(): Data was %X, but expected %X", p.Data, payload)
+		t.Errorf("UnmarshalBinary(): Data was %X, but expected %X", p.Data, payload)
 	}
 }
 
@@ -205,11 +205,11 @@ func TestFstatPacket(t *testing.T) {
 	}
 
 	if p.Handle != handle {
-		t.Fatalf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 
 	if p.Flags != flags {
-		t.Fatalf("UnmarshalBinary(): Flags was %x, but expected %x", p.Flags, flags)
+		t.Errorf("UnmarshalBinary(): Flags was %x, but expected %x", p.Flags, flags)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestFsetstatPacket(t *testing.T) {
 	}
 
 	if p.Handle != handle {
-		t.Fatalf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
 
@@ -302,6 +302,6 @@ func TestReaddirPacket(t *testing.T) {
 	}
 
 	if p.Handle != handle {
-		t.Fatalf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
