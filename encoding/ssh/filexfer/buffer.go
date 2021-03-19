@@ -40,6 +40,28 @@ func (b *Buffer) Len() int {
 	return len(b.b)
 }
 
+// ConsumeBool consumes a single byte from the Buffer, and returns true if that byte is non-zero.
+// If Buffer does not have enough data, it will return ErrShortPacket.
+func (b *Buffer) ConsumeBool() (bool, error) {
+	if len(b.b) < 1 {
+		return false, ErrShortPacket
+	}
+
+	var v uint8
+	v, b.b = b.b[0], b.b[1:]
+	return v != 0, nil
+}
+
+// AppendBool appends a single bool into the Buffer.
+// It encodes it as a single byte, with false as 0, and true as 1.
+func (b *Buffer) AppendBool(v bool) {
+	if v {
+		b.b = append(b.b, 1)
+	} else {
+		b.b = append(b.b, 0)
+	}
+}
+
 // ConsumeUint8 consumes a single byte from the Buffer.
 // If Buffer does not have enough data, it will return ErrShortPacket.
 func (b *Buffer) ConsumeUint8() (uint8, error) {
