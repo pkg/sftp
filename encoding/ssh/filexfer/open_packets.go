@@ -69,7 +69,7 @@ func (p *OpenPacket) UnmarshalBinary(data []byte) (err error) {
 	return p.UnmarshalPacketBody(buf)
 }
 
-// OpendirPacket defines the SSH_FXP_OPEN packet.
+// OpendirPacket defines the SSH_FXP_OPENDIR packet.
 type OpendirPacket struct {
 	RequestID uint32
 	Path      string
