@@ -131,7 +131,7 @@ func ExampleClient_Mkdir_parents() {
 					fi, err = client.Stat(parents)
 					if err == nil {
 						if !fi.IsDir() {
-							return fmt.Errorf("File exists: %s", parents)
+							return fmt.Errorf("file exists: %s", parents)
 						}
 					}
 				}

@@ -43,10 +43,10 @@ type ClientOption func(*Client) error
 func MaxPacketChecked(size int) ClientOption {
 	return func(c *Client) error {
 		if size < 1 {
-			return errors.Errorf("size must be greater or equal to 1")
+			return errors.New("size must be greater or equal to 1")
 		}
 		if size > 32768 {
-			return errors.Errorf("sizes larger than 32KB might not work with all servers")
+			return errors.New("sizes larger than 32KB might not work with all servers")
 		}
 		c.maxPacket = size
 		return nil
@@ -65,7 +65,7 @@ func MaxPacketChecked(size int) ClientOption {
 func MaxPacketUnchecked(size int) ClientOption {
 	return func(c *Client) error {
 		if size < 1 {
-			return errors.Errorf("size must be greater or equal to 1")
+			return errors.New("size must be greater or equal to 1")
 		}
 		c.maxPacket = size
 		return nil
@@ -90,7 +90,7 @@ func MaxPacket(size int) ClientOption {
 func MaxConcurrentRequestsPerFile(n int) ClientOption {
 	return func(c *Client) error {
 		if n < 1 {
-			return errors.Errorf("n must be greater or equal to 1")
+			return errors.New("n must be greater or equal to 1")
 		}
 		c.maxConcurrentRequests = n
 		return nil
