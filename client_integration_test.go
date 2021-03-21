@@ -1367,8 +1367,7 @@ func TestClientRead(t *testing.T) {
 // and the hash of the contents.
 func readHash(t *testing.T, r io.Reader) (string, int64) {
 	h := sha1.New()
-	tr := io.TeeReader(r, h)
-	read, err := io.Copy(ioutil.Discard, tr)
+	read, err := io.Copy(h, r)
 	if err != nil {
 		t.Fatal(err)
 	}

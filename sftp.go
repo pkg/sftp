@@ -58,9 +58,9 @@ const (
 	sshFxNoMedia                 = 13
 	sshFxNoSpaceOnFilesystem     = 14
 	sshFxQuotaExceeded           = 15
-	sshFxUnlnownPrincipal        = 16
+	sshFxUnknownPrincipal        = 16
 	sshFxLockConflict            = 17
-	sshFxDitNotEmpty             = 18
+	sshFxDirNotEmpty             = 18
 	sshFxNotADirectory           = 19
 	sshFxInvalidFilename         = 20
 	sshFxLinkLoop                = 21
