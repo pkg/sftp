@@ -6,8 +6,8 @@ type InitPacket struct {
 	Extensions []*ExtensionPair
 }
 
-// MarshalPacket returns p as a two-part binary encoding of p.
-func (p *InitPacket) MarshalPacket() (header, payload []byte, err error) {
+// MarshalBinary returns p as the binary encoding of p.
+func (p *InitPacket) MarshalBinary() ([]byte, error) {
 	size := 1 + 4 // byte(type) + uint32(version)
 
 	for _, ext := range p.Extensions {
@@ -24,16 +24,15 @@ func (p *InitPacket) MarshalPacket() (header, payload []byte, err error) {
 
 	b.PutLength(size)
 
-	return b.Bytes(), nil, nil
+	return b.Bytes(), nil
 }
 
-// MarshalBinary returns p as the binary encoding of p.
-func (p *InitPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket())
-}
+// UnmarshalBinary unmarshals a full raw packet out of the given data.
+// It is assumed that the uint32(length) has already been consumed to receive the data.
+// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
+func (p *InitPacket) UnmarshalBinary(data []byte) (err error) {
+	buf := NewBuffer(data)
 
-// UnmarshalPacketBody unmarshals the packet body from the given Buffer.
-func (p *InitPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Version, err = buf.ConsumeUint32(); err != nil {
 		return err
 	}
@@ -48,13 +47,6 @@ func (p *InitPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	}
 
 	return nil
-}
-
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *InitPacket) UnmarshalBinary(data []byte) error {
-	return p.UnmarshalPacketBody(NewBuffer(data))
 }
 
 // VersionPacket defines the SSH_FXP_VERSION packet.
@@ -63,8 +55,8 @@ type VersionPacket struct {
 	Extensions []*ExtensionPair
 }
 
-// MarshalPacket returns p as a two-part binary encoding of p.
-func (p *VersionPacket) MarshalPacket() (header, payload []byte, err error) {
+// MarshalBinary returns p as the binary encoding of p.
+func (p *VersionPacket) MarshalBinary() ([]byte, error) {
 	size := 1 + 4 // byte(type) + uint32(version)
 
 	for _, ext := range p.Extensions {
@@ -81,16 +73,15 @@ func (p *VersionPacket) MarshalPacket() (header, payload []byte, err error) {
 
 	b.PutLength(size)
 
-	return b.Bytes(), nil, nil
+	return b.Bytes(), nil
 }
 
-// MarshalBinary returns p as the binary encoding of p.
-func (p *VersionPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket())
-}
+// UnmarshalBinary unmarshals a full raw packet out of the given data.
+// It is assumed that the uint32(length) has already been consumed to receive the data.
+// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
+func (p *VersionPacket) UnmarshalBinary(data []byte) (err error) {
+	buf := NewBuffer(data)
 
-// UnmarshalPacketBody unmarshals the packet body from the given Buffer.
-func (p *VersionPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Version, err = buf.ConsumeUint32(); err != nil {
 		return err
 	}
@@ -105,11 +96,4 @@ func (p *VersionPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	}
 
 	return nil
-}
-
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *VersionPacket) UnmarshalBinary(data []byte) error {
-	return p.UnmarshalPacketBody(NewBuffer(data))
 }

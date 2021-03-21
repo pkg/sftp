@@ -12,7 +12,6 @@ type ExtendedData = interface {
 
 // ExtendedPacket defines the SSH_FXP_CLOSE packet.
 type ExtendedPacket struct {
-	RequestID       uint32
 	ExtendedRequest string
 
 	Data ExtendedData
@@ -21,10 +20,10 @@ type ExtendedPacket struct {
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
-func (p *ExtendedPacket) MarshalPacket() (header, payload []byte, err error) {
+func (p *ExtendedPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.ExtendedRequest) // string(extended-request)
 
-	b := NewMarshalBuffer(PacketTypeExtended, p.RequestID, size)
+	b := NewMarshalBuffer(PacketTypeExtended, reqid, size)
 
 	b.AppendString(p.ExtendedRequest)
 
@@ -36,11 +35,6 @@ func (p *ExtendedPacket) MarshalPacket() (header, payload []byte, err error) {
 	}
 
 	return b.Packet(payload)
-}
-
-// MarshalBinary returns p as the binary encoding of p.
-func (p *ExtendedPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket())
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -66,31 +60,16 @@ func (p *ExtendedPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return nil
 }
 
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *ExtendedPacket) UnmarshalBinary(data []byte) (err error) {
-	buf := NewBuffer(data)
-
-	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
-		return err
-	}
-
-	return p.UnmarshalPacketBody(buf)
-}
-
 // ExtendedReplyPacket defines the SSH_FXP_CLOSE packet.
 type ExtendedReplyPacket struct {
-	RequestID uint32
-
 	Data ExtendedData
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
-func (p *ExtendedReplyPacket) MarshalPacket() (header, payload []byte, err error) {
-	b := NewMarshalBuffer(PacketTypeExtendedReply, p.RequestID, 0)
+func (p *ExtendedReplyPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+	b := NewMarshalBuffer(PacketTypeExtendedReply, reqid, 0)
 
 	if p.Data != nil {
 		payload, err = p.Data.MarshalBinary()
@@ -100,11 +79,6 @@ func (p *ExtendedReplyPacket) MarshalPacket() (header, payload []byte, err error
 	}
 
 	return b.Packet(payload)
-}
-
-// MarshalBinary returns p as the binary encoding of p.
-func (p *ExtendedReplyPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket())
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -124,17 +98,4 @@ func (p *ExtendedReplyPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	}
 
 	return nil
-}
-
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *ExtendedReplyPacket) UnmarshalBinary(data []byte) (err error) {
-	buf := NewBuffer(data)
-
-	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
-		return err
-	}
-
-	return p.UnmarshalPacketBody(buf)
 }

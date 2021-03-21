@@ -11,8 +11,8 @@ func TestRawPacket(t *testing.T) {
 	p := &RawPacket{
 		Type:      PacketTypeStat,
 		RequestID: uint32(id),
-		Payload: []byte{
-			0x00, 0x00, 0x00, 0x03, 'f', 'o', 'o',
+		Data: Buffer{
+			b: []byte{0x00, 0x00, 0x00, 0x03, 'f', 'o', 'o'},
 		},
 	}
 
@@ -51,7 +51,7 @@ func TestRawPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 3, 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(p.Payload, want) {
-		t.Errorf("RawPacket.UnmarshalBinary(): Payload was %X, but expected %X", p.Payload, want)
+	if !bytes.Equal(p.Data.Bytes(), want) {
+		t.Errorf("RawPacket.UnmarshalBinary(): Data was %X, but expected %X", p.Data, want)
 	}
 }

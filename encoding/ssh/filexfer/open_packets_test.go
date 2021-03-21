@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+var _ Packet = &OpenPacket{}
+
 func TestOpenPacket(t *testing.T) {
 	const (
 		id       = 42
@@ -13,16 +15,15 @@ func TestOpenPacket(t *testing.T) {
 	)
 
 	p := &OpenPacket{
-		RequestID: id,
-		Filename:  "/foo",
-		PFlags:    FlagRead,
+		Filename: "/foo",
+		PFlags:   FlagRead,
 		Attrs: Attributes{
 			Flags:       AttrPermissions,
 			Permissions: perms,
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -43,31 +44,29 @@ func TestOpenPacket(t *testing.T) {
 
 	*p = OpenPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Filename != filename {
-		t.Errorf("UnmarshalBinary(): Filename was %q, but expected %q", p.Filename, filename)
+		t.Errorf("UnmarshalPacketBody(): Filename was %q, but expected %q", p.Filename, filename)
 	}
 
 	if p.PFlags != FlagRead {
-		t.Errorf("UnmarshalBinary(): PFlags was %#x, but expected %#x", p.PFlags, FlagRead)
+		t.Errorf("UnmarshalPacketBody(): PFlags was %#x, but expected %#x", p.PFlags, FlagRead)
 	}
 
 	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalBinary(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
 	}
 }
+
+var _ Packet = &OpendirPacket{}
 
 func TestOpendirPacket(t *testing.T) {
 	const (
@@ -76,11 +75,10 @@ func TestOpendirPacket(t *testing.T) {
 	)
 
 	p := &OpendirPacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -98,16 +96,12 @@ func TestOpendirPacket(t *testing.T) {
 
 	*p = OpendirPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
