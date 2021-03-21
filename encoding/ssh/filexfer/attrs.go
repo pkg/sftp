@@ -24,7 +24,7 @@ type Attributes struct {
 	GID uint32
 
 	// AttrPermissions
-	Permissions uint32
+	Permissions FileMode
 
 	// AttrACmodTime
 	ATime uint32
@@ -79,7 +79,7 @@ func (a *Attributes) MarshalInto(b *Buffer) {
 	}
 
 	if a.Flags&AttrPermissions != 0 {
-		b.AppendUint32(a.Permissions)
+		b.AppendUint32(uint32(a.Permissions))
 	}
 
 	if a.Flags&AttrACModTime != 0 {
@@ -133,9 +133,12 @@ func (a *Attributes) UnmarshalFrom(b *Buffer) (err error) {
 	}
 
 	if a.Flags&AttrPermissions != 0 {
-		if a.Permissions, err = b.ConsumeUint32(); err != nil {
+		m, err := b.ConsumeUint32()
+		if err != nil {
 			return err
 		}
+
+		a.Permissions = FileMode(m)
 	}
 
 	if a.Flags&AttrACModTime != 0 {

@@ -96,7 +96,7 @@ func TestSetstatPacket(t *testing.T) {
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestMkdirPacket(t *testing.T) {
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
 

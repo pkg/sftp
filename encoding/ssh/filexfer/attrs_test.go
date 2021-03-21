@@ -145,7 +145,7 @@ func TestAttributes(t *testing.T) {
 			}
 
 			if attr.Flags&AttrPermissions != 0 && attr.Permissions != perms {
-				t.Errorf("UnmarshalFrom(): Permissions was %x, but wanted %x", attr.Permissions, perms)
+				t.Errorf("UnmarshalFrom(): Permissions was %#v, but wanted %#v", attr.Permissions, perms)
 			}
 
 			if attr.Flags&AttrACModTime != 0 {
@@ -222,6 +222,6 @@ func TestNameEntry(t *testing.T) {
 	}
 
 	if e.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#x, but expected %#x", e.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#v, but expected %#v", e.Attrs.Permissions, perms)
 	}
 }
