@@ -8,13 +8,15 @@ import (
 // Various encoding errors.
 var (
 	ErrShortPacket = errors.New("packet too short")
+	ErrLongPacket  = errors.New("packet too long")
 )
 
 // Buffer wraps up the various encoding details of the SSH format.
 //
 // Data types are encoded as per section 4 from https://tools.ietf.org/html/draft-ietf-secsh-architecture-09#page-8
 type Buffer struct {
-	b []byte
+	b   []byte
+	off int
 }
 
 // NewBuffer creates and initializes a new Buffer using buf as its initial contents.
@@ -38,7 +40,7 @@ func NewMarshalBuffer(packetType PacketType, requestID uint32, size int) *Buffer
 
 // Bytes returns a slice of length b.Len() holding the unconsumed bytes in the Buffer.
 func (b *Buffer) Bytes() []byte {
-	return b.b
+	return b.b[b.off:]
 }
 
 // Packet finalizes the packet started from NewMarshalPacket.
@@ -46,10 +48,6 @@ func (b *Buffer) Bytes() []byte {
 // It writes the packet body length into the first four bytes of the Buffer in network byte order (big endian).
 // The packet body length is the size of the Buffer less the 4-byte length itself, plus the length of payload.
 func (b *Buffer) Packet(payload []byte) ([]byte, []byte, error) {
-	if len(b.b) < 4 {
-		b.b = append(b.b, make([]byte, 4-len(b.b))...)
-	}
-
 	b.PutLength(len(b.b) - 4 + len(payload))
 
 	return b.b, payload, nil
@@ -57,40 +55,24 @@ func (b *Buffer) Packet(payload []byte) ([]byte, []byte, error) {
 
 // Len returns the number of unconsumed bytes in the Buffer.
 func (b *Buffer) Len() int {
-	return len(b.b)
+	return len(b.b) - b.off
 }
 
-// ConsumeBool consumes a single byte from the Buffer, and returns true if that byte is non-zero.
-// If Buffer does not have enough data, it will return ErrShortPacket.
-func (b *Buffer) ConsumeBool() (bool, error) {
-	if len(b.b) < 1 {
-		return false, ErrShortPacket
-	}
-
-	var v uint8
-	v, b.b = b.b[0], b.b[1:]
-	return v != 0, nil
-}
-
-// AppendBool appends a single bool into the Buffer.
-// It encodes it as a single byte, with false as 0, and true as 1.
-func (b *Buffer) AppendBool(v bool) {
-	if v {
-		b.b = append(b.b, 1)
-	} else {
-		b.b = append(b.b, 0)
-	}
+// Reset resets the buffer to be empty, but it retains the underlying storage for use by future writes.
+func (b *Buffer) Reset() {
+	b.b = b.b[:0]
+	b.off = 0
 }
 
 // ConsumeUint8 consumes a single byte from the Buffer.
 // If Buffer does not have enough data, it will return ErrShortPacket.
 func (b *Buffer) ConsumeUint8() (uint8, error) {
-	if len(b.b) < 1 {
+	if b.Len() < 1 {
 		return 0, ErrShortPacket
 	}
 
 	var v uint8
-	v, b.b = b.b[0], b.b[1:]
+	v, b.off = b.b[b.off], b.off+1
 	return v, nil
 }
 
@@ -99,15 +81,36 @@ func (b *Buffer) AppendUint8(v uint8) {
 	b.b = append(b.b, v)
 }
 
+// ConsumeBool consumes a single byte from the Buffer, and returns true if that byte is non-zero.
+// If Buffer does not have enough data, it will return ErrShortPacket.
+func (b *Buffer) ConsumeBool() (bool, error) {
+	v, err := b.ConsumeUint8()
+	if err != nil {
+		return false, err
+	}
+
+	return v != 0, nil
+}
+
+// AppendBool appends a single bool into the Buffer.
+// It encodes it as a single byte, with false as 0, and true as 1.
+func (b *Buffer) AppendBool(v bool) {
+	if v {
+		b.AppendUint8(1)
+	} else {
+		b.AppendUint8(0)
+	}
+}
+
 // ConsumeUint16 consumes a single uint16 from the Buffer, in network byte order (big-endian).
 // If Buffer does not have enough data, it will return ErrShortPacket.
 func (b *Buffer) ConsumeUint16() (uint16, error) {
-	if len(b.b) < 2 {
+	if b.Len() < 2 {
 		return 0, ErrShortPacket
 	}
 
-	var v uint16
-	v, b.b = uint16(b.b[0])<<8|uint16(b.b[1]), b.b[2:]
+	v := binary.BigEndian.Uint16(b.b[b.off:])
+	b.off += 2
 	return v, nil
 }
 
@@ -121,20 +124,20 @@ func (b *Buffer) AppendUint16(v uint16) {
 
 // unmarshalUint32 is used internally to read the packet length.
 // It is unsafe, and so not exported.
-// Even avoid using it in this package.
-func unmarshalUint32(b []byte) (uint32, []byte) {
-	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3]), b[4:]
+// Even in this package, its use should be avoided.
+func unmarshalUint32(b []byte) uint32 {
+	return binary.BigEndian.Uint32(b)
 }
 
 // ConsumeUint32 consumes a single uint32 from the Buffer, in network byte order (big-endian).
 // If Buffer does not have enough data, it will return ErrShortPacket.
 func (b *Buffer) ConsumeUint32() (uint32, error) {
-	if len(b.b) < 4 {
+	if b.Len() < 4 {
 		return 0, ErrShortPacket
 	}
 
-	var v uint32
-	v, b.b = unmarshalUint32(b.b)
+	v := binary.BigEndian.Uint32(b.b[b.off:])
+	b.off += 4
 	return v, nil
 }
 
@@ -151,14 +154,13 @@ func (b *Buffer) AppendUint32(v uint32) {
 // ConsumeUint64 consumes a single uint64 from the Buffer, in network byte order (big-endian).
 // If Buffer does not have enough data, it will return ErrShortPacket.
 func (b *Buffer) ConsumeUint64() (uint64, error) {
-	if len(b.b) < 8 {
+	if b.Len() < 8 {
 		return 0, ErrShortPacket
 	}
 
-	var h, l uint32
-	h, b.b = unmarshalUint32(b.b)
-	l, b.b = unmarshalUint32(b.b)
-	return uint64(h)<<32 | uint64(l), nil
+	v := binary.BigEndian.Uint64(b.b[b.off:])
+	b.off += 8
+	return v, nil
 }
 
 // AppendUint64 appends a single uint64 into the Buffer, in network byte order (big-endian).
@@ -204,8 +206,11 @@ func (b *Buffer) ConsumeByteSlice() ([]byte, error) {
 		return nil, ErrShortPacket
 	}
 
-	var v []byte
-	v, b.b = b.b[:length], b.b[length:]
+	v := b.b[b.off:]
+	if len(v) > int(length) {
+		v = v[:length:length]
+	}
+	b.off += int(length)
 	return v, nil
 }
 
