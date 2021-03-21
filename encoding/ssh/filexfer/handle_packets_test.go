@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+var _ Packet = &ClosePacket{}
+
 func TestClosePacket(t *testing.T) {
 	const (
 		id     = 42
@@ -12,11 +14,10 @@ func TestClosePacket(t *testing.T) {
 	)
 
 	p := &ClosePacket{
-		RequestID: id,
-		Handle:    "somehandle",
+		Handle: "somehandle",
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -34,19 +35,17 @@ func TestClosePacket(t *testing.T) {
 
 	*p = ClosePacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Handle != handle {
-		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
+
+var _ Packet = &ReadPacket{}
 
 func TestReadPacket(t *testing.T) {
 	const (
@@ -57,13 +56,12 @@ func TestReadPacket(t *testing.T) {
 	)
 
 	p := &ReadPacket{
-		RequestID: id,
-		Handle:    "somehandle",
-		Offset:    offset,
-		Len:       length,
+		Handle: "somehandle",
+		Offset: offset,
+		Len:    length,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -83,27 +81,25 @@ func TestReadPacket(t *testing.T) {
 
 	*p = ReadPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Handle != handle {
-		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 
 	if p.Offset != offset {
-		t.Errorf("UnmarshalBinary(): Offset was %x, but expected %x", p.Offset, offset)
+		t.Errorf("UnmarshalPacketBody(): Offset was %x, but expected %x", p.Offset, offset)
 	}
 
 	if p.Len != length {
-		t.Errorf("UnmarshalBinary(): Len was %x, but expected %x", p.Len, length)
+		t.Errorf("UnmarshalPacketBody(): Len was %x, but expected %x", p.Len, length)
 	}
 }
+
+var _ Packet = &WritePacket{}
 
 func TestWritePacket(t *testing.T) {
 	const (
@@ -115,13 +111,12 @@ func TestWritePacket(t *testing.T) {
 	var payload = []byte(`foobar`)
 
 	p := &WritePacket{
-		RequestID: id,
-		Handle:    "somehandle",
-		Offset:    offset,
-		Data:      payload,
+		Handle: "somehandle",
+		Offset: offset,
+		Data:   payload,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -141,27 +136,25 @@ func TestWritePacket(t *testing.T) {
 
 	*p = WritePacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Handle != handle {
-		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 
 	if p.Offset != offset {
-		t.Errorf("UnmarshalBinary(): Offset was %x, but expected %x", p.Offset, offset)
+		t.Errorf("UnmarshalPacketBody(): Offset was %x, but expected %x", p.Offset, offset)
 	}
 
 	if !bytes.Equal(p.Data, payload) {
-		t.Errorf("UnmarshalBinary(): Data was %X, but expected %X", p.Data, payload)
+		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", p.Data, payload)
 	}
 }
+
+var _ Packet = &FstatPacket{}
 
 func TestFstatPacket(t *testing.T) {
 	const (
@@ -170,11 +163,10 @@ func TestFstatPacket(t *testing.T) {
 	)
 
 	p := &FstatPacket{
-		RequestID: id,
-		Handle:    "somehandle",
+		Handle: "somehandle",
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -192,19 +184,17 @@ func TestFstatPacket(t *testing.T) {
 
 	*p = FstatPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Handle != handle {
-		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
+
+var _ Packet = &FsetstatPacket{}
 
 func TestFsetstatPacket(t *testing.T) {
 	const (
@@ -214,15 +204,14 @@ func TestFsetstatPacket(t *testing.T) {
 	)
 
 	p := &FsetstatPacket{
-		RequestID: id,
-		Handle:    "somehandle",
+		Handle: "somehandle",
 		Attrs: Attributes{
 			Flags:       AttrPermissions,
 			Permissions: perms,
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -242,19 +231,17 @@ func TestFsetstatPacket(t *testing.T) {
 
 	*p = FsetstatPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Handle != handle {
-		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
+
+var _ Packet = &ReaddirPacket{}
 
 func TestReaddirPacket(t *testing.T) {
 	const (
@@ -263,11 +250,10 @@ func TestReaddirPacket(t *testing.T) {
 	)
 
 	p := &ReaddirPacket{
-		RequestID: id,
-		Handle:    "somehandle",
+		Handle: "somehandle",
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -285,16 +271,12 @@ func TestReaddirPacket(t *testing.T) {
 
 	*p = ReaddirPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Handle != handle {
-		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
+		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }

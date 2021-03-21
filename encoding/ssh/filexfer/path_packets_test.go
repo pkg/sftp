@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+var _ Packet = &LstatPacket{}
+
 func TestLstatPacket(t *testing.T) {
 	const (
 		id   = 42
@@ -12,11 +14,10 @@ func TestLstatPacket(t *testing.T) {
 	)
 
 	p := &LstatPacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -34,19 +35,17 @@ func TestLstatPacket(t *testing.T) {
 
 	*p = LstatPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
+
+var _ Packet = &SetstatPacket{}
 
 func TestSetstatPacket(t *testing.T) {
 	const (
@@ -56,15 +55,14 @@ func TestSetstatPacket(t *testing.T) {
 	)
 
 	p := &SetstatPacket{
-		RequestID: id,
-		Path:      "/foo",
+		Path: "/foo",
 		Attrs: Attributes{
 			Flags:       AttrPermissions,
 			Permissions: perms,
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -84,27 +82,25 @@ func TestSetstatPacket(t *testing.T) {
 
 	*p = SetstatPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 
 	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalBinary(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
 	}
 }
+
+var _ Packet = &RemovePacket{}
 
 func TestRemovePacket(t *testing.T) {
 	const (
@@ -113,11 +109,10 @@ func TestRemovePacket(t *testing.T) {
 	)
 
 	p := &RemovePacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -135,19 +130,17 @@ func TestRemovePacket(t *testing.T) {
 
 	*p = RemovePacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
+
+var _ Packet = &MkdirPacket{}
 
 func TestMkdirPacket(t *testing.T) {
 	const (
@@ -157,15 +150,14 @@ func TestMkdirPacket(t *testing.T) {
 	)
 
 	p := &MkdirPacket{
-		RequestID: id,
-		Path:      "/foo",
+		Path: "/foo",
 		Attrs: Attributes{
 			Flags:       AttrPermissions,
 			Permissions: perms,
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -185,27 +177,25 @@ func TestMkdirPacket(t *testing.T) {
 
 	*p = MkdirPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 
 	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalBinary(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
 	}
 }
+
+var _ Packet = &RmdirPacket{}
 
 func TestRmdirPacket(t *testing.T) {
 	const (
@@ -214,11 +204,10 @@ func TestRmdirPacket(t *testing.T) {
 	)
 
 	p := &RmdirPacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -236,19 +225,17 @@ func TestRmdirPacket(t *testing.T) {
 
 	*p = RmdirPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
+
+var _ Packet = &RealpathPacket{}
 
 func TestRealpathPacket(t *testing.T) {
 	const (
@@ -257,11 +244,10 @@ func TestRealpathPacket(t *testing.T) {
 	)
 
 	p := &RealpathPacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -279,19 +265,17 @@ func TestRealpathPacket(t *testing.T) {
 
 	*p = RealpathPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
+
+var _ Packet = &StatPacket{}
 
 func TestStatPacket(t *testing.T) {
 	const (
@@ -300,11 +284,10 @@ func TestStatPacket(t *testing.T) {
 	)
 
 	p := &StatPacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -322,19 +305,17 @@ func TestStatPacket(t *testing.T) {
 
 	*p = StatPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
+
+var _ Packet = &RenamePacket{}
 
 func TestRenamePacket(t *testing.T) {
 	const (
@@ -344,12 +325,11 @@ func TestRenamePacket(t *testing.T) {
 	)
 
 	p := &RenamePacket{
-		RequestID: id,
-		OldPath:   oldpath,
-		NewPath:   newpath,
+		OldPath: oldpath,
+		NewPath: newpath,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -368,23 +348,21 @@ func TestRenamePacket(t *testing.T) {
 
 	*p = RenamePacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.OldPath != oldpath {
-		t.Errorf("UnmarshalBinary(): OldPath was %q, but expected %q", p.OldPath, oldpath)
+		t.Errorf("UnmarshalPacketBody(): OldPath was %q, but expected %q", p.OldPath, oldpath)
 	}
 
 	if p.NewPath != newpath {
-		t.Errorf("UnmarshalBinary(): NewPath was %q, but expected %q", p.NewPath, newpath)
+		t.Errorf("UnmarshalPacketBody(): NewPath was %q, but expected %q", p.NewPath, newpath)
 	}
 }
+
+var _ Packet = &ReadlinkPacket{}
 
 func TestReadlinkPacket(t *testing.T) {
 	const (
@@ -393,11 +371,10 @@ func TestReadlinkPacket(t *testing.T) {
 	)
 
 	p := &ReadlinkPacket{
-		RequestID: id,
-		Path:      path,
+		Path: path,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -415,19 +392,17 @@ func TestReadlinkPacket(t *testing.T) {
 
 	*p = ReadlinkPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.Path != path {
-		t.Errorf("UnmarshalBinary(): Path was %q, but expected %q", p.Path, path)
+		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
+
+var _ Packet = &SymlinkPacket{}
 
 func TestSymlinkPacket(t *testing.T) {
 	const (
@@ -437,12 +412,11 @@ func TestSymlinkPacket(t *testing.T) {
 	)
 
 	p := &SymlinkPacket{
-		RequestID:  id,
 		LinkPath:   linkpath,
 		TargetPath: targetpath,
 	}
 
-	data, err := p.MarshalBinary()
+	data, err := ComposePacket(p.MarshalPacket(id))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -461,20 +435,16 @@ func TestSymlinkPacket(t *testing.T) {
 
 	*p = SymlinkPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.RequestID != uint32(id) {
-		t.Errorf("UnmarshalBinary(): RequestID was %d, but expected %d", p.RequestID, id)
-	}
-
 	if p.LinkPath != linkpath {
-		t.Errorf("UnmarshalBinary(): LinkPath was %q, but expected %q", p.LinkPath, linkpath)
+		t.Errorf("UnmarshalPacketBody(): LinkPath was %q, but expected %q", p.LinkPath, linkpath)
 	}
 
 	if p.TargetPath != targetpath {
-		t.Errorf("UnmarshalBinary(): TargetPath was %q, but expected %q", p.TargetPath, targetpath)
+		t.Errorf("UnmarshalPacketBody(): TargetPath was %q, but expected %q", p.TargetPath, targetpath)
 	}
 }

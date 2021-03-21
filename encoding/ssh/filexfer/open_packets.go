@@ -12,18 +12,17 @@ const (
 
 // OpenPacket defines the SSH_FXP_OPEN packet.
 type OpenPacket struct {
-	RequestID uint32
-	Filename  string
-	PFlags    uint32
-	Attrs     Attributes
+	Filename string
+	PFlags   uint32
+	Attrs    Attributes
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *OpenPacket) MarshalPacket() (header, payload []byte, err error) {
+func (p *OpenPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	// string(filename) + uint32(pflags) + ATTRS(attrs)
 	size := 4 + len(p.Filename) + 4 + p.Attrs.Len()
 
-	b := NewMarshalBuffer(PacketTypeOpen, p.RequestID, size)
+	b := NewMarshalBuffer(PacketTypeOpen, reqid, size)
 
 	b.AppendString(p.Filename)
 	b.AppendUint32(p.PFlags)
@@ -31,11 +30,6 @@ func (p *OpenPacket) MarshalPacket() (header, payload []byte, err error) {
 	p.Attrs.MarshalInto(b)
 
 	return b.Packet(payload)
-}
-
-// MarshalBinary returns p as the binary encoding of p.
-func (p *OpenPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket())
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -52,39 +46,20 @@ func (p *OpenPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return p.Attrs.UnmarshalFrom(buf)
 }
 
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *OpenPacket) UnmarshalBinary(data []byte) (err error) {
-	buf := NewBuffer(data)
-
-	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
-		return err
-	}
-
-	return p.UnmarshalPacketBody(buf)
-}
-
 // OpendirPacket defines the SSH_FXP_OPENDIR packet.
 type OpendirPacket struct {
-	RequestID uint32
-	Path      string
+	Path string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *OpendirPacket) MarshalPacket() (header, payload []byte, err error) {
+func (p *OpendirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Path) // string(path)
 
-	b := NewMarshalBuffer(PacketTypeOpendir, p.RequestID, size)
+	b := NewMarshalBuffer(PacketTypeOpendir, reqid, size)
 
 	b.AppendString(p.Path)
 
 	return b.Packet(payload)
-}
-
-// MarshalBinary returns p as the binary encoding of p.
-func (p *OpendirPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket())
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -95,17 +70,4 @@ func (p *OpendirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	}
 
 	return nil
-}
-
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
-func (p *OpendirPacket) UnmarshalBinary(data []byte) (err error) {
-	buf := NewBuffer(data)
-
-	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
-		return err
-	}
-
-	return p.UnmarshalPacketBody(buf)
 }
