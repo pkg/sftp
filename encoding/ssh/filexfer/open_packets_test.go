@@ -62,7 +62,7 @@ func TestOpenPacket(t *testing.T) {
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
 

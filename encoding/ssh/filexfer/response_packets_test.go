@@ -219,8 +219,8 @@ func TestNamePacket(t *testing.T) {
 			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Flags was %#x, but expected %#x", i, got, want)
 		}
 
-		if got, want := e.Attrs.Permissions, perms|(i+1); got != uint32(want) {
-			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Flags was %#x, but expected %#x", i, got, want)
+		if got, want := e.Attrs.Permissions, FileMode(perms|(i+1)); got != want {
+			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Permissions was %#v, but expected %#v", i, got, want)
 		}
 	}
 }
@@ -269,6 +269,6 @@ func TestAttrsPacket(t *testing.T) {
 	}
 
 	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#x, but expected %#x", p.Attrs.Permissions, perms)
+		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
