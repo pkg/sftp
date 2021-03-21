@@ -11,6 +11,7 @@ type ExtendedData = interface {
 	encoding.BinaryUnmarshaler
 }
 
+// ExtendedDataConstructor defines a function that returns a new(ArbitraryExtendedPacket).
 type ExtendedDataConstructor func() ExtendedData
 
 var extendedPacketTypes = struct {
@@ -20,6 +21,7 @@ var extendedPacketTypes = struct {
 	constructors: make(map[string]ExtendedDataConstructor),
 }
 
+// RegisterExtendedPacketType defines a specific ExtendedDataConstructor for the given extension string.
 func RegisterExtendedPacketType(extension string, constructor ExtendedDataConstructor) {
 	extendedPacketTypes.mu.Lock()
 	defer extendedPacketTypes.mu.Unlock()
