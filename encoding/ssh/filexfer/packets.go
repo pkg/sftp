@@ -76,6 +76,9 @@ func (p *RawPacket) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalFrom decodes a RawPacket from the given Buffer into p.
+//
+// The Data field will take ownership of the underyling byte slice of buf.
+// The caller should not use buf after this call.
 func (p *RawPacket) UnmarshalFrom(buf *Buffer) error {
 	typ, err := buf.ConsumeUint8()
 	if err != nil {
