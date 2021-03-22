@@ -20,9 +20,12 @@ type Buffer struct {
 }
 
 // NewBuffer creates and initializes a new Buffer using buf as its initial contents.
-func NewBuffer(b []byte) *Buffer {
+// The new Buffer takes ownership of buf, and the caller should not use buf after this call.
+//
+// In most cases, new(Buffer) (or just declaring a Buffer variable) is sufficient to initialize a Buffer.
+func NewBuffer(buf []byte) *Buffer {
 	return &Buffer{
-		b: b,
+		b: buf,
 	}
 }
 
@@ -39,15 +42,23 @@ func NewMarshalBuffer(packetType PacketType, requestID uint32, size int) *Buffer
 }
 
 // Bytes returns a slice of length b.Len() holding the unconsumed bytes in the Buffer.
+// The slice is valid for use only until the next buffer modification
+// (that is, only until the next call to an Append or Consume method).
 func (b *Buffer) Bytes() []byte {
 	return b.b[b.off:]
 }
 
 // Packet finalizes the packet started from NewMarshalPacket.
+// It is expected that this will end the ownership of the underlying byte-slice,
+// and so the returned byte-slices may potentially be returned to a memory pool the same as any other byte-slice.
+// The caller should not use this Buffer at all after this call.
 //
 // It writes the packet body length into the first four bytes of the Buffer in network byte order (big endian).
 // The packet body length is the size of the Buffer less the 4-byte length itself, plus the length of payload.
-func (b *Buffer) Packet(payload []byte) ([]byte, []byte, error) {
+//
+// It is assumed that no Consume methods have been called on this Buffer,
+// and so it returns the whole underlying slice.
+func (b *Buffer) Packet(payload []byte) (header, payloadPassThru []byte, err error) {
 	b.PutLength(len(b.b) - 4 + len(payload))
 
 	return b.b, payload, nil
@@ -248,21 +259,19 @@ func (b *Buffer) PutLength(size int) {
 	binary.BigEndian.PutUint32(b.b, uint32(size))
 }
 
-// MarshalBinary returns b as the binary encoding of b.
+// MarshalBinary returns the remaining binary data in the Buffer as a byte slice.
+// This aliases the internal buffer, and so comes with the same caveats as Bytes().
+//
+// This function is a thin wrapper of Bytes() solely to implement encoding.BinaryMarshaler.
 func (b *Buffer) MarshalBinary() ([]byte, error) {
-	n := len(b.b)
-
-	// clamp cap() == len(), so any appends will reallocate.
-	return b.b[:n:n], nil
+	return b.Bytes(), nil
 }
 
-// UnmarshalBinary sets the internal buffer of b to be data.
-//
-// NOTE: To avoid extra allocations, UnmarshalBinary aliases the given byte slice.
+// UnmarshalBinary sets the internal buffer of b to be data, and zeros any internal offset.
+// To avoid additional allocations,
+// UnmarshalBinary takes ownership of buf, and the caller should not use buf after this call.
 func (b *Buffer) UnmarshalBinary(data []byte) error {
-	n := len(data)
-
-	// clamp cap() == len(), so any appends will reallocate.
-	b.b = data[:n:n]
+	b.b = data
+	b.off = 0
 	return nil
 }
