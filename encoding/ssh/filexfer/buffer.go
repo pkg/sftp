@@ -226,9 +226,12 @@ func (b *Buffer) AppendByteSlice(v []byte) {
 	b.b = append(b.b, v...)
 }
 
-// ConsumeString consumes a single string of UTF-8 encoded text from the Buffer.
+// ConsumeString consumes a single string of binary data from the Buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
 // If Buffer does not have enough data, or defines a length larger than available, it will return ErrShortPacket.
+//
+// NOTE: Go implicitly assumes that strings contain UTF-8 encoded data.
+// All caveats on using arbitrary binary data in Go strings applies.
 func (b *Buffer) ConsumeString() (string, error) {
 	v, err := b.ConsumeByteSlice()
 	if err != nil {
@@ -238,7 +241,7 @@ func (b *Buffer) ConsumeString() (string, error) {
 	return string(v), nil
 }
 
-// AppendString appends a single string of UTF-8 encoded text into the Buffer.
+// AppendString appends a single string of binary data into the Buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
 func (b *Buffer) AppendString(v string) {
 	b.AppendByteSlice([]byte(v))
