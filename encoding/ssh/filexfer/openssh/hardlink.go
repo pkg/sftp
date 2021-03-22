@@ -27,13 +27,13 @@ type HardlinkExtendedPacket struct {
 }
 
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
-func (ep *HardlinkExtendedPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (ep *HardlinkExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
 		ExtendedRequest: extensionHardlink,
 
 		Data: ep,
 	}
-	return p.MarshalPacket(reqid)
+	return p.MarshalPacket(reqid, b)
 }
 
 // MarshalInto encodes ep into the binary encoding of the hardlink@openssh.com extended packet-specific data.

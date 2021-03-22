@@ -64,15 +64,20 @@ type RawPacket struct {
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The internal p.RequestID is overridden by the reqid argument.
-func (p *RawPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	b := NewMarshalBuffer(p.Type, reqid, 0)
+func (p *RawPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		buf = NewMarshalBuffer(0)
+	}
 
-	return b.Packet(p.Data.Bytes())
+	buf.StartPacket(p.Type, reqid)
+
+	return buf.Packet(p.Data.Bytes())
 }
 
 // MarshalBinary returns p as the binary encoding of p.
 func (p *RawPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket(p.RequestID))
+	return ComposePacket(p.MarshalPacket(p.RequestID, nil))
 }
 
 // UnmarshalFrom decodes a RawPacket from the given Buffer into p.
@@ -139,7 +144,8 @@ func (p *RawPacket) ReadFrom(r io.Reader, b []byte) error {
 	return p.UnmarshalBinary(b)
 }
 
-// RequestPacket decodes a full request packet from the internal Data based on the Type.
+// RequestPacket decodes a full RequestPacket from the internal Data based on the Type.
+// Prefer using a RequestPacket directly, rather than going indirectly through RawPacket.
 func (p *RawPacket) RequestPacket() (*RequestPacket, error) {
 	packet, err := newPacketFromType(p.Type)
 	if err != nil {
@@ -173,17 +179,17 @@ func (p *RequestPacket) Reset() {
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The internal p.RequestID is overridden by the reqid argument.
-func (p *RequestPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *RequestPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	if p.Request == nil {
 		return nil, nil, errors.New("empty request packet")
 	}
 
-	return p.Request.MarshalPacket(reqid)
+	return p.Request.MarshalPacket(reqid, b)
 }
 
 // MarshalBinary returns p as the binary encoding of p.
 func (p *RequestPacket) MarshalBinary() ([]byte, error) {
-	return ComposePacket(p.MarshalPacket(p.RequestID))
+	return ComposePacket(p.MarshalPacket(p.RequestID, nil))
 }
 
 // UnmarshalFrom decodes a RequestPacket from the given Buffer into p.

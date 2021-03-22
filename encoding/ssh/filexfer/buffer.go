@@ -29,16 +29,19 @@ func NewBuffer(buf []byte) *Buffer {
 	}
 }
 
-// NewMarshalBuffer creates an initializes a new Buffer ready to start marshaling a Packet into.
-// It prepopulates 4 bytes for length, the 1-byte packetType, and the 4-byte requestID.
-// It preallocates enough space for an additional size bytes of data above the prepopulated values.
-func NewMarshalBuffer(packetType PacketType, requestID uint32, size int) *Buffer {
-	buf := NewBuffer(make([]byte, 4, 4+1+4+size))
+// NewMarshalBuffer creates a new Buffer ready to start marshaling a Packet into.
+// It preallocates enough space for uint32(length), uint8(type), uint32(request-id) and size more bytes.
+func NewMarshalBuffer(size int) *Buffer {
+	return NewBuffer(make([]byte, 4+1+4+size))
+}
 
-	buf.AppendUint8(uint8(packetType))
-	buf.AppendUint32(requestID)
+// StartPacket resets and initializes the Buffer to be ready to start marshaling a Packet body into.
+// It truncates the buffer, reserves space for uint32(length), then appends the packetType and requestID.
+func (b *Buffer) StartPacket(packetType PacketType, requestID uint32) {
+	b.b = append(b.b[:0], make([]byte, 4)...)
 
-	return buf
+	b.AppendUint8(uint8(packetType))
+	b.AppendUint32(requestID)
 }
 
 // Bytes returns a slice of length b.Len() holding the unconsumed bytes in the Buffer.
@@ -65,9 +68,11 @@ func (b *Buffer) Packet(payload []byte) (header, payloadPassThru []byte, err err
 }
 
 // Len returns the number of unconsumed bytes in the Buffer.
-func (b *Buffer) Len() int {
-	return len(b.b) - b.off
-}
+func (b *Buffer) Len() int { return len(b.b) - b.off }
+
+// Cap returns the capacity of the Buffer’s underlying byte slice,
+// that is, the total space allocated for the buffer’s data.
+func (b *Buffer) Cap() int { return cap(b.b) }
 
 // ConsumeUint8 consumes a single byte from the Buffer.
 // If Buffer does not have enough data, it will return ErrShortPacket.

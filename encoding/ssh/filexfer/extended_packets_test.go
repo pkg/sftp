@@ -42,7 +42,7 @@ func TestExtendedPacketNoData(t *testing.T) {
 		ExtendedRequest: extendedRequest,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -86,7 +86,7 @@ func TestExtendedPacketTestData(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -153,7 +153,7 @@ func TestExtendedReplyNoData(t *testing.T) {
 
 	p := &ExtendedReplyPacket{}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -190,7 +190,7 @@ func TestExtendedReplyPacketTestData(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}

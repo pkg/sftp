@@ -18,18 +18,21 @@ type OpenPacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *OpenPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	// string(filename) + uint32(pflags) + ATTRS(attrs)
-	size := 4 + len(p.Filename) + 4 + p.Attrs.Len()
+func (p *OpenPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		// string(filename) + uint32(pflags) + ATTRS(attrs)
+		size := 4 + len(p.Filename) + 4 + p.Attrs.Len()
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeOpen, reqid, size)
+	buf.StartPacket(PacketTypeOpen, reqid)
+	buf.AppendString(p.Filename)
+	buf.AppendUint32(p.PFlags)
 
-	b.AppendString(p.Filename)
-	b.AppendUint32(p.PFlags)
+	p.Attrs.MarshalInto(buf)
 
-	p.Attrs.MarshalInto(b)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -52,14 +55,17 @@ type OpenDirPacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *OpenDirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	size := 4 + len(p.Path) // string(path)
+func (p *OpenDirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		size := 4 + len(p.Path) // string(path)
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeOpenDir, reqid, size)
+	buf.StartPacket(PacketTypeOpenDir, reqid)
+	buf.AppendString(p.Path)
 
-	b.AppendString(p.Path)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.

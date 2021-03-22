@@ -21,7 +21,7 @@ func TestStatusPacket(t *testing.T) {
 		LanguageTag:  languageTag,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -71,7 +71,7 @@ func TestHandlePacket(t *testing.T) {
 		Handle: "somehandle",
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -112,7 +112,7 @@ func TestDataPacket(t *testing.T) {
 		Data: payload,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -171,7 +171,7 @@ func TestNamePacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -240,7 +240,7 @@ func TestAttrsPacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
