@@ -25,3 +25,10 @@ type Packet interface {
 func ComposePacket(header, payload []byte, err error) ([]byte, error) {
 	return append(header, payload...), err
 }
+
+// Default length values,
+// Defined in draft-ietf-secsh-filexfer-02 section 3.
+const (
+	DefaultMaxPacketLength = 34000
+	DefaultMaxDataLength   = 32768
+)
