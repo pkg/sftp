@@ -1,15 +1,15 @@
 package filexfer
 
-// LstatPacket defines the SSH_FXP_LSTAT packet.
-type LstatPacket struct {
+// LStatPacket defines the SSH_FXP_LSTAT packet.
+type LStatPacket struct {
 	Path string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *LstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *LStatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Path) // string(path)
 
-	b := NewMarshalBuffer(PacketTypeLstat, reqid, size)
+	b := NewMarshalBuffer(PacketTypeLStat, reqid, size)
 
 	b.AppendString(p.Path)
 
@@ -18,7 +18,7 @@ func (p *LstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err e
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *LstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *LStatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Path, err = buf.ConsumeString(); err != nil {
 		return err
 	}
@@ -136,16 +136,16 @@ func (p *RmdirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return nil
 }
 
-// RealpathPacket defines the SSH_FXP_REALPATH packet.
-type RealpathPacket struct {
+// RealPathPacket defines the SSH_FXP_REALPATH packet.
+type RealPathPacket struct {
 	Path string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *RealpathPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *RealPathPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Path) // string(path)
 
-	b := NewMarshalBuffer(PacketTypeRealpath, reqid, size)
+	b := NewMarshalBuffer(PacketTypeRealPath, reqid, size)
 
 	b.AppendString(p.Path)
 
@@ -154,7 +154,7 @@ func (p *RealpathPacket) MarshalPacket(reqid uint32) (header, payload []byte, er
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *RealpathPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *RealPathPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Path, err = buf.ConsumeString(); err != nil {
 		return err
 	}
@@ -221,16 +221,16 @@ func (p *RenamePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return nil
 }
 
-// ReadlinkPacket defines the SSH_FXP_READLINK packet.
-type ReadlinkPacket struct {
+// ReadLinkPacket defines the SSH_FXP_READLINK packet.
+type ReadLinkPacket struct {
 	Path string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *ReadlinkPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *ReadLinkPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Path) // string(path)
 
-	b := NewMarshalBuffer(PacketTypeReadlink, reqid, size)
+	b := NewMarshalBuffer(PacketTypeReadLink, reqid, size)
 
 	b.AppendString(p.Path)
 
@@ -239,7 +239,7 @@ func (p *ReadlinkPacket) MarshalPacket(reqid uint32) (header, payload []byte, er
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *ReadlinkPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *ReadLinkPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Path, err = buf.ConsumeString(); err != nil {
 		return err
 	}

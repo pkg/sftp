@@ -154,15 +154,15 @@ func TestWritePacket(t *testing.T) {
 	}
 }
 
-var _ Packet = &FstatPacket{}
+var _ Packet = &FStatPacket{}
 
-func TestFstatPacket(t *testing.T) {
+func TestFStatPacket(t *testing.T) {
 	const (
 		id     = 42
 		handle = "somehandle"
 	)
 
-	p := &FstatPacket{
+	p := &FStatPacket{
 		Handle: "somehandle",
 	}
 
@@ -182,7 +182,7 @@ func TestFstatPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = FstatPacket{}
+	*p = FStatPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
@@ -194,16 +194,16 @@ func TestFstatPacket(t *testing.T) {
 	}
 }
 
-var _ Packet = &FsetstatPacket{}
+var _ Packet = &FSetstatPacket{}
 
-func TestFsetstatPacket(t *testing.T) {
+func TestFSetstatPacket(t *testing.T) {
 	const (
 		id     = 42
 		handle = "somehandle"
 		perms  = 0x87654321
 	)
 
-	p := &FsetstatPacket{
+	p := &FSetstatPacket{
 		Handle: "somehandle",
 		Attrs: Attributes{
 			Flags:       AttrPermissions,
@@ -229,7 +229,7 @@ func TestFsetstatPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = FsetstatPacket{}
+	*p = FSetstatPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
@@ -241,15 +241,15 @@ func TestFsetstatPacket(t *testing.T) {
 	}
 }
 
-var _ Packet = &ReaddirPacket{}
+var _ Packet = &ReadDirPacket{}
 
-func TestReaddirPacket(t *testing.T) {
+func TestReadDirPacket(t *testing.T) {
 	const (
 		id     = 42
 		handle = "somehandle"
 	)
 
-	p := &ReaddirPacket{
+	p := &ReadDirPacket{
 		Handle: "somehandle",
 	}
 
@@ -269,7 +269,7 @@ func TestReaddirPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = ReaddirPacket{}
+	*p = ReadDirPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {

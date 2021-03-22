@@ -46,16 +46,16 @@ func (p *OpenPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return p.Attrs.UnmarshalFrom(buf)
 }
 
-// OpendirPacket defines the SSH_FXP_OPENDIR packet.
-type OpendirPacket struct {
+// OpenDirPacket defines the SSH_FXP_OPENDIR packet.
+type OpenDirPacket struct {
 	Path string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *OpendirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *OpenDirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Path) // string(path)
 
-	b := NewMarshalBuffer(PacketTypeOpendir, reqid, size)
+	b := NewMarshalBuffer(PacketTypeOpenDir, reqid, size)
 
 	b.AppendString(p.Path)
 
@@ -64,7 +64,7 @@ func (p *OpendirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *OpendirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *OpenDirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Path, err = buf.ConsumeString(); err != nil {
 		return err
 	}
