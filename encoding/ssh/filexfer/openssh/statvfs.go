@@ -26,13 +26,13 @@ type StatVFSExtendedPacket struct {
 }
 
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
-func (ep *StatVFSExtendedPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (ep *StatVFSExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
 		ExtendedRequest: extensionStatVFS,
 
 		Data: ep,
 	}
-	return p.MarshalPacket(reqid)
+	return p.MarshalPacket(reqid, b)
 }
 
 // MarshalInto encodes ep into the binary encoding of the statvfs@openssh.com extended packet-specific data.
@@ -89,13 +89,13 @@ type FStatVFSExtendedPacket struct {
 }
 
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
-func (ep *FStatVFSExtendedPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (ep *FStatVFSExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
 		ExtendedRequest: extensionFStatVFS,
 
 		Data: ep,
 	}
-	return p.MarshalPacket(reqid)
+	return p.MarshalPacket(reqid, b)
 }
 
 // MarshalInto encodes ep into the binary encoding of the statvfs@openssh.com extended packet-specific data.
@@ -153,11 +153,11 @@ type StatVFSExtendedReplyPacket struct {
 }
 
 // MarshalPacket returns ep as a two-part binary encoding of the full extended reply packet.
-func (ep *StatVFSExtendedReplyPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (ep *StatVFSExtendedReplyPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedReplyPacket{
 		Data: ep,
 	}
-	return p.MarshalPacket(reqid)
+	return p.MarshalPacket(reqid, b)
 }
 
 // MarshalInto encodes ep into the binary encoding of the (f)statvfs@openssh.com extended reply packet-specific data.

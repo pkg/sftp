@@ -50,12 +50,15 @@ type ExtendedPacket struct {
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
-func (p *ExtendedPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	size := 4 + len(p.ExtendedRequest) // string(extended-request)
+func (p *ExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		size := 4 + len(p.ExtendedRequest) // string(extended-request)
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeExtended, reqid, size)
-
-	b.AppendString(p.ExtendedRequest)
+	buf.StartPacket(PacketTypeExtended, reqid)
+	buf.AppendString(p.ExtendedRequest)
 
 	if p.Data != nil {
 		payload, err = p.Data.MarshalBinary()
@@ -64,7 +67,7 @@ func (p *ExtendedPacket) MarshalPacket(reqid uint32) (header, payload []byte, er
 		}
 	}
 
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -93,8 +96,13 @@ type ExtendedReplyPacket struct {
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
-func (p *ExtendedReplyPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	b := NewMarshalBuffer(PacketTypeExtendedReply, reqid, 0)
+func (p *ExtendedReplyPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		buf = NewMarshalBuffer(0)
+	}
+
+	buf.StartPacket(PacketTypeExtendedReply, reqid)
 
 	if p.Data != nil {
 		payload, err = p.Data.MarshalBinary()
@@ -103,7 +111,7 @@ func (p *ExtendedReplyPacket) MarshalPacket(reqid uint32) (header, payload []byt
 		}
 	}
 
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.

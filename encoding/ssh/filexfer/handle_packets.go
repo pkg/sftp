@@ -6,14 +6,17 @@ type ClosePacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *ClosePacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	size := 4 + len(p.Handle) // string(handle)
+func (p *ClosePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		size := 4 + len(p.Handle) // string(handle)
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeClose, reqid, size)
+	buf.StartPacket(PacketTypeClose, reqid)
+	buf.AppendString(p.Handle)
 
-	b.AppendString(p.Handle)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -34,17 +37,20 @@ type ReadPacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *ReadPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	// string(handle) + uint64(offset) + uint32(len)
-	size := 4 + len(p.Handle) + 8 + 4
+func (p *ReadPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		// string(handle) + uint64(offset) + uint32(len)
+		size := 4 + len(p.Handle) + 8 + 4
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeRead, reqid, size)
+	buf.StartPacket(PacketTypeRead, reqid)
+	buf.AppendString(p.Handle)
+	buf.AppendUint64(p.Offset)
+	buf.AppendUint32(p.Len)
 
-	b.AppendString(p.Handle)
-	b.AppendUint64(p.Offset)
-	b.AppendUint32(p.Len)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -73,17 +79,20 @@ type WritePacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *WritePacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	// string(handle) + uint64(offset) + uint32(len(data)); data content in payload
-	size := 4 + len(p.Handle) + 8 + 4
+func (p *WritePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		// string(handle) + uint64(offset) + uint32(len(data)); data content in payload
+		size := 4 + len(p.Handle) + 8 + 4
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeWrite, reqid, size)
+	buf.StartPacket(PacketTypeWrite, reqid)
+	buf.AppendString(p.Handle)
+	buf.AppendUint64(p.Offset)
+	buf.AppendUint32(uint32(len(p.Data)))
 
-	b.AppendString(p.Handle)
-	b.AppendUint64(p.Offset)
-	b.AppendUint32(uint32(len(p.Data)))
-
-	return b.Packet(p.Data)
+	return buf.Packet(p.Data)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -110,14 +119,17 @@ type FStatPacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *FStatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	size := 4 + len(p.Handle) // string(handle)
+func (p *FStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		size := 4 + len(p.Handle) // string(handle)
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeFStat, reqid, size)
+	buf.StartPacket(PacketTypeFStat, reqid)
+	buf.AppendString(p.Handle)
 
-	b.AppendString(p.Handle)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -137,16 +149,19 @@ type FSetstatPacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *FSetstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	size := 4 + len(p.Handle) + p.Attrs.Len() // string(handle) + ATTRS(attrs)
+func (p *FSetstatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		size := 4 + len(p.Handle) + p.Attrs.Len() // string(handle) + ATTRS(attrs)
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeFSetstat, reqid, size)
+	buf.StartPacket(PacketTypeFSetstat, reqid)
+	buf.AppendString(p.Handle)
 
-	b.AppendString(p.Handle)
+	p.Attrs.MarshalInto(buf)
 
-	p.Attrs.MarshalInto(b)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
@@ -165,14 +180,17 @@ type ReadDirPacket struct {
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *ReadDirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
-	size := 4 + len(p.Handle) // string(handle)
+func (p *ReadDirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	buf := NewBuffer(b)
+	if buf.Cap() < 9 {
+		size := 4 + len(p.Handle) // string(handle)
+		buf = NewMarshalBuffer(size)
+	}
 
-	b := NewMarshalBuffer(PacketTypeReadDir, reqid, size)
+	buf.StartPacket(PacketTypeReadDir, reqid)
+	buf.AppendString(p.Handle)
 
-	b.AppendString(p.Handle)
-
-	return b.Packet(payload)
+	return buf.Packet(payload)
 }
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.

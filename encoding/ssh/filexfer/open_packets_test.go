@@ -23,7 +23,7 @@ func TestOpenPacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -78,7 +78,7 @@ func TestOpenDirPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id))
+	data, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
