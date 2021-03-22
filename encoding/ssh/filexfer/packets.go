@@ -61,12 +61,6 @@ type RawPacket struct {
 	Data Buffer
 }
 
-// Reset clears the pointers and reference-semantic variables of RawPacket,
-// making it suitable to be put into a sync.Pool.
-func (p *RawPacket) Reset() {
-	p.Data.Reset()
-}
-
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The internal p.RequestID is overridden by the reqid argument.

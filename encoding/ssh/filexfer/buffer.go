@@ -69,12 +69,6 @@ func (b *Buffer) Len() int {
 	return len(b.b) - b.off
 }
 
-// Reset resets the buffer to be empty, but it retains the underlying storage for use by future writes.
-func (b *Buffer) Reset() {
-	b.b = b.b[:0]
-	b.off = 0
-}
-
 // ConsumeUint8 consumes a single byte from the Buffer.
 // If Buffer does not have enough data, it will return ErrShortPacket.
 func (b *Buffer) ConsumeUint8() (uint8, error) {
