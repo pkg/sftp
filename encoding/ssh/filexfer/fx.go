@@ -61,6 +61,10 @@ const (
 	StatusV6NoMatchingByteRangeLock
 )
 
+func (f Status) Error() string {
+	return f.String()
+}
+
 func (f Status) String() string {
 	switch f {
 	case StatusOK:
