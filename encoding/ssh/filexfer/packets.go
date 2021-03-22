@@ -108,14 +108,11 @@ func (p *RawPacket) UnmarshalBinary(data []byte) error {
 	return p.UnmarshalFrom(NewBuffer(data))
 }
 
-// defaultMaxPacketSize is defined in draft-ietf-secsh-filexfer-02 section 3.
-const defaultMaxPacketSize = 34000
-
 // readPacket reads a uint32 length-prefixed binary data packet from r.
-// If the given buffer is less than 4-bytes, it allocates a new buffer of size defaultMaxPacketSize.
+// If the given buffer is less than 4-bytes, it allocates a new buffer of size DefaultMaxPacketLength.
 func readPacket(r io.Reader, b []byte) ([]byte, error) {
 	if len(b) < 4 {
-		b = make([]byte, defaultMaxPacketSize)
+		b = make([]byte, DefaultMaxPacketLength)
 	}
 
 	if _, err := io.ReadFull(r, b[:4]); err != nil {
