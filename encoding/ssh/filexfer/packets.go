@@ -16,32 +16,32 @@ func newPacketFromType(typ PacketType) (Packet, error) {
 		return new(ReadPacket), nil
 	case PacketTypeWrite:
 		return new(WritePacket), nil
-	case PacketTypeLstat:
-		return new(LstatPacket), nil
-	case PacketTypeFstat:
-		return new(FstatPacket), nil
+	case PacketTypeLStat:
+		return new(LStatPacket), nil
+	case PacketTypeFStat:
+		return new(FStatPacket), nil
 	case PacketTypeSetstat:
 		return new(SetstatPacket), nil
-	case PacketTypeFsetstat:
-		return new(FsetstatPacket), nil
-	case PacketTypeOpendir:
-		return new(OpendirPacket), nil
-	case PacketTypeReaddir:
-		return new(ReaddirPacket), nil
+	case PacketTypeFSetstat:
+		return new(FSetstatPacket), nil
+	case PacketTypeOpenDir:
+		return new(OpenDirPacket), nil
+	case PacketTypeReadDir:
+		return new(ReadDirPacket), nil
 	case PacketTypeRemove:
 		return new(RemovePacket), nil
 	case PacketTypeMkdir:
 		return new(MkdirPacket), nil
 	case PacketTypeRmdir:
 		return new(RmdirPacket), nil
-	case PacketTypeRealpath:
-		return new(RealpathPacket), nil
+	case PacketTypeRealPath:
+		return new(RealPathPacket), nil
 	case PacketTypeStat:
 		return new(StatPacket), nil
 	case PacketTypeRename:
 		return new(RenamePacket), nil
-	case PacketTypeReadlink:
-		return new(ReadlinkPacket), nil
+	case PacketTypeReadLink:
+		return new(ReadLinkPacket), nil
 	case PacketTypeSymlink:
 		return new(SymlinkPacket), nil
 	case PacketTypeExtended:

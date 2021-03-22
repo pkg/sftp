@@ -66,15 +66,15 @@ func TestOpenPacket(t *testing.T) {
 	}
 }
 
-var _ Packet = &OpendirPacket{}
+var _ Packet = &OpenDirPacket{}
 
-func TestOpendirPacket(t *testing.T) {
+func TestOpenDirPacket(t *testing.T) {
 	const (
 		id   = 42
 		path = "/foo"
 	)
 
-	p := &OpendirPacket{
+	p := &OpenDirPacket{
 		Path: path,
 	}
 
@@ -94,7 +94,7 @@ func TestOpendirPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = OpendirPacket{}
+	*p = OpenDirPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {

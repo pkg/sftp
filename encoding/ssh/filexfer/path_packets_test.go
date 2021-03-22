@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-var _ Packet = &LstatPacket{}
+var _ Packet = &LStatPacket{}
 
-func TestLstatPacket(t *testing.T) {
+func TestLStatPacket(t *testing.T) {
 	const (
 		id   = 42
 		path = "/foo"
 	)
 
-	p := &LstatPacket{
+	p := &LStatPacket{
 		Path: path,
 	}
 
@@ -33,7 +33,7 @@ func TestLstatPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = LstatPacket{}
+	*p = LStatPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
@@ -235,15 +235,15 @@ func TestRmdirPacket(t *testing.T) {
 	}
 }
 
-var _ Packet = &RealpathPacket{}
+var _ Packet = &RealPathPacket{}
 
-func TestRealpathPacket(t *testing.T) {
+func TestRealPathPacket(t *testing.T) {
 	const (
 		id   = 42
 		path = "/foo"
 	)
 
-	p := &RealpathPacket{
+	p := &RealPathPacket{
 		Path: path,
 	}
 
@@ -263,7 +263,7 @@ func TestRealpathPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = RealpathPacket{}
+	*p = RealPathPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
@@ -362,15 +362,15 @@ func TestRenamePacket(t *testing.T) {
 	}
 }
 
-var _ Packet = &ReadlinkPacket{}
+var _ Packet = &ReadLinkPacket{}
 
-func TestReadlinkPacket(t *testing.T) {
+func TestReadLinkPacket(t *testing.T) {
 	const (
 		id   = 42
 		path = "/foo"
 	)
 
-	p := &ReadlinkPacket{
+	p := &ReadLinkPacket{
 		Path: path,
 	}
 
@@ -390,7 +390,7 @@ func TestReadlinkPacket(t *testing.T) {
 		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
 	}
 
-	*p = ReadlinkPacket{}
+	*p = ReadLinkPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {

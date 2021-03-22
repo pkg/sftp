@@ -104,16 +104,16 @@ func (p *WritePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return nil
 }
 
-// FstatPacket defines the SSH_FXP_FSTAT packet.
-type FstatPacket struct {
+// FStatPacket defines the SSH_FXP_FSTAT packet.
+type FStatPacket struct {
 	Handle string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *FstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *FStatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Handle) // string(handle)
 
-	b := NewMarshalBuffer(PacketTypeFstat, reqid, size)
+	b := NewMarshalBuffer(PacketTypeFStat, reqid, size)
 
 	b.AppendString(p.Handle)
 
@@ -122,7 +122,7 @@ func (p *FstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err e
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *FstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *FStatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Handle, err = buf.ConsumeString(); err != nil {
 		return err
 	}
@@ -130,17 +130,17 @@ func (p *FstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return nil
 }
 
-// FsetstatPacket defines the SSH_FXP_FSETSTAT packet.
-type FsetstatPacket struct {
+// FSetstatPacket defines the SSH_FXP_FSETSTAT packet.
+type FSetstatPacket struct {
 	Handle string
 	Attrs  Attributes
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *FsetstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *FSetstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Handle) + p.Attrs.Len() // string(handle) + ATTRS(attrs)
 
-	b := NewMarshalBuffer(PacketTypeFsetstat, reqid, size)
+	b := NewMarshalBuffer(PacketTypeFSetstat, reqid, size)
 
 	b.AppendString(p.Handle)
 
@@ -151,7 +151,7 @@ func (p *FsetstatPacket) MarshalPacket(reqid uint32) (header, payload []byte, er
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *FsetstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *FSetstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Handle, err = buf.ConsumeString(); err != nil {
 		return err
 	}
@@ -159,16 +159,16 @@ func (p *FsetstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return p.Attrs.UnmarshalFrom(buf)
 }
 
-// ReaddirPacket defines the SSH_FXP_READDIR packet.
-type ReaddirPacket struct {
+// ReadDirPacket defines the SSH_FXP_READDIR packet.
+type ReadDirPacket struct {
 	Handle string
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
-func (p *ReaddirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
+func (p *ReadDirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err error) {
 	size := 4 + len(p.Handle) // string(handle)
 
-	b := NewMarshalBuffer(PacketTypeReaddir, reqid, size)
+	b := NewMarshalBuffer(PacketTypeReadDir, reqid, size)
 
 	b.AppendString(p.Handle)
 
@@ -177,7 +177,7 @@ func (p *ReaddirPacket) MarshalPacket(reqid uint32) (header, payload []byte, err
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
-func (p *ReaddirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
+func (p *ReadDirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Handle, err = buf.ConsumeString(); err != nil {
 		return err
 	}

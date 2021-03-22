@@ -16,19 +16,19 @@ const (
 	PacketTypeClose
 	PacketTypeRead
 	PacketTypeWrite
-	PacketTypeLstat
-	PacketTypeFstat
+	PacketTypeLStat
+	PacketTypeFStat
 	PacketTypeSetstat
-	PacketTypeFsetstat
-	PacketTypeOpendir
-	PacketTypeReaddir
+	PacketTypeFSetstat
+	PacketTypeOpenDir
+	PacketTypeReadDir
 	PacketTypeRemove
 	PacketTypeMkdir
 	PacketTypeRmdir
-	PacketTypeRealpath
+	PacketTypeRealPath
 	PacketTypeStat
 	PacketTypeRename
-	PacketTypeReadlink
+	PacketTypeReadLink
 	PacketTypeSymlink
 
 	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-07#section-3.3
@@ -70,17 +70,17 @@ func (f PacketType) String() string {
 		return "SSH_FXP_READ"
 	case PacketTypeWrite:
 		return "SSH_FXP_WRITE"
-	case PacketTypeLstat:
+	case PacketTypeLStat:
 		return "SSH_FXP_LSTAT"
-	case PacketTypeFstat:
+	case PacketTypeFStat:
 		return "SSH_FXP_FSTAT"
 	case PacketTypeSetstat:
 		return "SSH_FXP_SETSTAT"
-	case PacketTypeFsetstat:
+	case PacketTypeFSetstat:
 		return "SSH_FXP_FSETSTAT"
-	case PacketTypeOpendir:
+	case PacketTypeOpenDir:
 		return "SSH_FXP_OPENDIR"
-	case PacketTypeReaddir:
+	case PacketTypeReadDir:
 		return "SSH_FXP_READDIR"
 	case PacketTypeRemove:
 		return "SSH_FXP_REMOVE"
@@ -88,13 +88,13 @@ func (f PacketType) String() string {
 		return "SSH_FXP_MKDIR"
 	case PacketTypeRmdir:
 		return "SSH_FXP_RMDIR"
-	case PacketTypeRealpath:
+	case PacketTypeRealPath:
 		return "SSH_FXP_REALPATH"
 	case PacketTypeStat:
 		return "SSH_FXP_STAT"
 	case PacketTypeRename:
 		return "SSH_FXP_RENAME"
-	case PacketTypeReadlink:
+	case PacketTypeReadLink:
 		return "SSH_FXP_READLINK"
 	case PacketTypeSymlink:
 		return "SSH_FXP_SYMLINK"
