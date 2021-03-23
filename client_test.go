@@ -239,3 +239,21 @@ func TestClientShortPacket(t *testing.T) {
 		t.Fatalf("expected error: %v, got: %v", errShortPacket, err)
 	}
 }
+
+// Issue #418: panic in clientConn.recv when the sid is incomplete.
+func TestClientNoSid(t *testing.T) {
+	stream := new(bytes.Buffer)
+	sendPacket(stream, &sshFxVersionPacket{Version: sftpProtocolVersion})
+	// Next packet has the sid cut short after two bytes.
+	stream.Write([]byte{0, 0, 0, 10, 0, 0})
+
+	c, err := NewClientPipe(stream, &sink{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.Stat("anything")
+	if !errors.Is(err, ErrSSHFxConnectionLost) {
+		t.Fatal("expected ErrSSHFxConnectionLost, got", err)
+	}
+}
