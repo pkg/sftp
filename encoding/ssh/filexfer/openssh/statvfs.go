@@ -6,7 +6,8 @@ import (
 
 const extensionStatVFS = "statvfs@openssh.com"
 
-func init() {
+// RegisterExtensionStatVFS registers the "statvfs@openssh.com" extended packet with the encoding/ssh/filexfer package.
+func RegisterExtensionStatVFS() {
 	sshfx.RegisterExtendedPacketType(extensionStatVFS, func() sshfx.ExtendedData {
 		return new(StatVFSExtendedPacket)
 	})
@@ -69,7 +70,8 @@ func (ep *StatVFSExtendedPacket) UnmarshalBinary(data []byte) (err error) {
 
 const extensionFStatVFS = "fstatvfs@openssh.com"
 
-func init() {
+// RegisterExtensionFStatVFS registers the "fstatvfs@openssh.com" extended packet with the encoding/ssh/filexfer package.
+func RegisterExtensionFStatVFS() {
 	sshfx.RegisterExtendedPacketType(extensionFStatVFS, func() sshfx.ExtendedData {
 		return new(FStatVFSExtendedPacket)
 	})

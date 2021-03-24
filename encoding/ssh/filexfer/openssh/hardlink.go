@@ -6,7 +6,8 @@ import (
 
 const extensionHardlink = "hardlink@openssh.com"
 
-func init() {
+// RegisterExtensionHardlink registers the "hardlink@openssh.com" extended packet with the encoding/ssh/filexfer package.
+func RegisterExtensionHardlink() {
 	sshfx.RegisterExtendedPacketType(extensionHardlink, func() sshfx.ExtendedData {
 		return new(HardlinkExtendedPacket)
 	})

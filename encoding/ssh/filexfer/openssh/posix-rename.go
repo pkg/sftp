@@ -6,7 +6,8 @@ import (
 
 const extensionPosixRename = "posix-rename@openssh.com"
 
-func init() {
+// RegisterExtensionPosixRename registers the "posix-rename@openssh.com" extended packet with the encoding/ssh/filexfer package.
+func RegisterExtensionPosixRename() {
 	sshfx.RegisterExtendedPacketType(extensionPosixRename, func() sshfx.ExtendedData {
 		return new(PosixRenameExtendedPacket)
 	})
