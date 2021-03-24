@@ -26,6 +26,10 @@ func RegisterExtendedPacketType(extension string, constructor ExtendedDataConstr
 	extendedPacketTypes.mu.Lock()
 	defer extendedPacketTypes.mu.Unlock()
 
+	if _, exist := extendedPacketTypes.constructors[extension]; exist {
+		panic("encoding/ssh/filexfer: multiple registration of extended packet type " + extension)
+	}
+
 	extendedPacketTypes.constructors[extension] = constructor
 }
 
