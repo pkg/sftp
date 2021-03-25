@@ -6,6 +6,9 @@ import (
 	"io"
 )
 
+// smallBufferSize is an initial allocation minimal capacity.
+const smallBufferSize = 64
+
 func newPacketFromType(typ PacketType) (Packet, error) {
 	switch typ {
 	case PacketTypeOpen:
@@ -139,8 +142,16 @@ func (p *RawPacket) UnmarshalBinary(data []byte) error {
 // If the given byte slice is insufficient to hold the packet,
 // then it will be extended to fill the packet size.
 func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
-	if len(b) < 64 {
-		b = make([]byte, 64)
+	if cap(b) < 4 {
+		// We will need allocate our own buffer just for reading the packet length.
+
+		// However, we don’t really want to allocate an extremely narrow buffer (4-bytes),
+		// and cause unnecessary allocation churn from both length reads and small packet reads,
+		// so we use smallBufferSize from the bytes package as a reasonable guess.
+
+		// But if callers really do want to force narrow throw-away allocation of every packet body,
+		// they can do so with a buffer of capacity 4.
+		b = make([]byte, smallBufferSize)
 	}
 
 	if _, err := io.ReadFull(r, b[:4]); err != nil {
@@ -149,6 +160,8 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 
 	length := unmarshalUint32(b)
 	if int(length) < 5 {
+		// Must have at least uint8(type) and uint32(request-id)
+
 		if int(length) < 0 {
 			// Only possible when strconv.IntSize == 32,
 			// the packet length is longer than math.MaxInt32,
@@ -156,7 +169,6 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 			return nil, ErrLongPacket
 		}
 
-		// Must have at least uint8(type) and uint32(request-id)
 		return nil, ErrShortPacket
 	}
 	if length > maxPacketLength {
