@@ -1637,12 +1637,17 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 		case interface{ Len() int }:
 			remain = int64(r.Len())
 
+		case interface{ Size() int64 }:
+			remain = r.Size()
+
 		case *io.LimitedReader:
 			remain = r.N
 
-		case *os.File:
-			// For files, always presume max concurrency.
-			remain = math.MaxInt64
+		case interface{ Stat() (os.FileInfo, error) }:
+			info, err := r.Stat()
+			if err == nil {
+				remain = info.Size()
+			}
 		}
 
 		if remain > int64(f.c.maxPacket) {
