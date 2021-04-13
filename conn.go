@@ -142,6 +142,13 @@ func (c *clientConn) sendPacket(ch chan result, p idmarshaler) (byte, []byte, er
 
 	c.dispatchRequest(ch, p)
 	s := <-ch
+
+	if errors.Is(s.err, io.EOF) {
+		// This function should never return io.EOF.
+		// Proper client EOFs are always from SSH_FX_EOF packets.
+		return s.typ, s.data, ErrSSHFxConnectionLost
+	}
+
 	return s.typ, s.data, s.err
 }
 

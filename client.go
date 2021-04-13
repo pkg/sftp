@@ -944,7 +944,7 @@ func (f *File) Read(b []byte) (int, error) {
 // readChunkAt attempts to read the whole entire length of the buffer from the file starting at the offset.
 // It will continue progressively reading into the buffer until it fills the whole buffer, or an error occurs.
 func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err error) {
-	for err == nil && n < len(b) {
+	for n < len(b) {
 		id := f.c.nextID()
 		typ, data, err := f.c.sendPacket(ch, &sshFxpReadPacket{
 			ID:     id,
@@ -953,6 +953,12 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 			Len:    uint32(len(b) - n),
 		})
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				// sendPacket should never return io.EOF.
+				// Proper client EOFs are always from SSH_FX_EOF packets handled below.
+				return n, ErrSSHFxConnectionLost
+			}
+
 			return n, err
 		}
 
@@ -974,7 +980,7 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 		}
 	}
 
-	return
+	return len(b), nil
 }
 
 func (f *File) readAtSequential(b []byte, off int64) (read int, err error) {
@@ -1782,7 +1788,13 @@ func normaliseError(err error) error {
 		default:
 			return err
 		}
+
 	default:
+		// io.EOF should only ever come from an SSH_FX_EOF packet as handled above.
+		if errors.Is(err, io.EOF) {
+			return ErrSSHFxConnectionLost
+		}
+
 		return err
 	}
 }
