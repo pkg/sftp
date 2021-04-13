@@ -1284,7 +1284,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	for {
 		packet, ok := <-cur
 		if !ok {
-			return written, nil
+			return written, errors.New("sftp.File.WriteTo: unexpectedly closed channel")
 		}
 
 		// Because writes are serialized, this will always be the last successfully read byte.
