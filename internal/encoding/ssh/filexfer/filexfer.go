@@ -3,6 +3,9 @@ package filexfer
 
 // Packet defines the behavior of an SFTP packet.
 type Packet interface {
+	// Type returns the SSH_FXP_xy value associated with the specific packet.
+	Type() PacketType
+
 	// MarshalPacket is the primary intended way to encode a packet.
 	// The request-id for the packet is set from reqid.
 	//

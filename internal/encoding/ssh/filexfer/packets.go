@@ -65,10 +65,15 @@ func newPacketFromType(typ PacketType) (Packet, error) {
 //
 // Defined in https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-3
 type RawPacket struct {
-	Type      PacketType
-	RequestID uint32
+	PacketType PacketType
+	RequestID  uint32
 
 	Data Buffer
+}
+
+// Type returns the Type field defining the SSH_FXP_xy type for this packet.
+func (p *RawPacket) Type() PacketType {
+	return p.PacketType
 }
 
 // Reset clears the pointers and reference-semantic variables of RawPacket,
@@ -87,7 +92,7 @@ func (p *RawPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byt
 		buf = NewMarshalBuffer(0)
 	}
 
-	buf.StartPacket(p.Type, reqid)
+	buf.StartPacket(p.PacketType, reqid)
 
 	return buf.Packet(p.Data.Bytes())
 }
@@ -110,7 +115,7 @@ func (p *RawPacket) UnmarshalFrom(buf *Buffer) error {
 		return err
 	}
 
-	p.Type = PacketType(typ)
+	p.PacketType = PacketType(typ)
 
 	if p.RequestID, err = buf.ConsumeUint32(); err != nil {
 		return err
@@ -225,6 +230,11 @@ type RequestPacket struct {
 	RequestID uint32
 
 	Request Packet
+}
+
+// Type returns the SSH_FXP_xyI value associated with the underlying packet.
+func (p *RequestPacket) Type() PacketType {
+	return p.Request.Type()
 }
 
 // Reset clears the pointers and reference-semantic variables in RequestPacket,

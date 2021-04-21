@@ -9,6 +9,11 @@ type StatusPacket struct {
 	LanguageTag  string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *StatusPacket) Type() PacketType {
+	return PacketTypeStatus
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *StatusPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -51,6 +56,11 @@ type HandlePacket struct {
 	Handle string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *HandlePacket) Type() PacketType {
+	return PacketTypeHandle
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *HandlePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -80,6 +90,11 @@ type DataPacket struct {
 	Data []byte
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *DataPacket) Type() PacketType {
+	return PacketTypeData
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *DataPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -107,6 +122,11 @@ func (p *DataPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // NamePacket defines the SSH_FXP_NAME packet.
 type NamePacket struct {
 	Entries []*NameEntry
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *NamePacket) Type() PacketType {
+	return PacketTypeName
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -157,6 +177,11 @@ func (p *NamePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // AttrsPacket defines the SSH_FXP_ATTRS packet.
 type AttrsPacket struct {
 	Attrs Attributes
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *AttrsPacket) Type() PacketType {
+	return PacketTypeAttrs
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.

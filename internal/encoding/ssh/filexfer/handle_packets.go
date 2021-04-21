@@ -5,6 +5,11 @@ type ClosePacket struct {
 	Handle string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ClosePacket) Type() PacketType {
+	return PacketTypeClose
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ClosePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -34,6 +39,11 @@ type ReadPacket struct {
 	Handle string
 	Offset uint64
 	Len    uint32
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ReadPacket) Type() PacketType {
+	return PacketTypeRead
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -78,6 +88,11 @@ type WritePacket struct {
 	Data   []byte
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *WritePacket) Type() PacketType {
+	return PacketTypeWrite
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *WritePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -118,6 +133,11 @@ type FStatPacket struct {
 	Handle string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *FStatPacket) Type() PacketType {
+	return PacketTypeFStat
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *FStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -146,6 +166,11 @@ func (p *FStatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 type FSetstatPacket struct {
 	Handle string
 	Attrs  Attributes
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *FSetstatPacket) Type() PacketType {
+	return PacketTypeFSetstat
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -177,6 +202,11 @@ func (p *FSetstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // ReadDirPacket defines the SSH_FXP_READDIR packet.
 type ReadDirPacket struct {
 	Handle string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ReadDirPacket) Type() PacketType {
+	return PacketTypeReadDir
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.

@@ -13,8 +13,8 @@ func TestRawPacket(t *testing.T) {
 	)
 
 	p := &RawPacket{
-		Type:      PacketTypeStatus,
-		RequestID: id,
+		PacketType: PacketTypeStatus,
+		RequestID:  id,
 		Data: Buffer{
 			b: []byte{
 				0x00, 0x00, 0x00, 0x01,
@@ -48,8 +48,8 @@ func TestRawPacket(t *testing.T) {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.Type != PacketTypeStatus {
-		t.Errorf("RawPacket.UnmarshalBinary(): Type was %v, but expected %v", p.Type, PacketTypeStat)
+	if p.PacketType != PacketTypeStatus {
+		t.Errorf("RawPacket.UnmarshalBinary(): Type was %v, but expected %v", p.PacketType, PacketTypeStat)
 	}
 
 	if p.RequestID != uint32(id) {
