@@ -8,13 +8,14 @@ import (
 	"os"
 	"path"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/kr/fs"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 var (
@@ -166,7 +167,6 @@ type Client struct {
 
 	maxPacket             int // max packet size read or written.
 	maxConcurrentRequests int
-	nextid                uint32
 
 	// write concurrency is… error prone.
 	// Default behavior should be to not use it.
@@ -257,11 +257,6 @@ func (c *Client) sendInit() error {
 	return c.clientConn.conn.sendPacket(&sshFxInitPacket{
 		Version: sftpProtocolVersion, // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 	})
-}
-
-// returns the next value of c.nextid
-func (c *Client) nextID() uint32 {
-	return atomic.AddUint32(&c.nextid, 1)
 }
 
 func (c *Client) recvVersion() error {
@@ -622,20 +617,11 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 // to SSH_FXP_OPEN or SSH_FXP_OPENDIR. The handle becomes invalid
 // immediately after this request has been sent.
 func (c *Client) close(handle string) error {
-	id := c.nextID()
-	typ, data, err := c.sendPacket(nil, &sshFxpClosePacket{
-		ID:     id,
+	err := c.sendFXPacket(&filexfer.ClosePacket{
 		Handle: handle,
-	})
-	if err != nil {
-		return err
-	}
-	switch typ {
-	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
-	default:
-		return unimplementedPacketErr(typ)
-	}
+	}, nil)
+
+	return normaliseError(err)
 }
 
 func (c *Client) fstat(handle string) (*FileStat, error) {
