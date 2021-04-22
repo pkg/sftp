@@ -2,6 +2,9 @@
 package filexfer
 
 // PacketMarshaller narrowly defines packets that will only be transmitted.
+//
+// ExtendedPacket types will often only implement this interface,
+// since decoding the whole packet body of an ExtendedPacket can only be done dependent on the ExtendedRequest field.
 type PacketMarshaller interface{
 	// MarshalPacket is the primary intended way to encode a packet.
 	// The request-id for the packet is set from reqid.
@@ -17,7 +20,12 @@ type PacketMarshaller interface{
 	MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error)
 }
 
-// Packet defines the behavior of an SFTP packet.
+// Packet defines the behavior of a full generic SFTP packet.
+//
+// InitPacket, and VersionPacket are not generic SFTP packets, and instead implement (Un)MarshalBinary.
+//
+// ExtendedPacket types should not iplement this interface,
+// since decoding the whole packet body of an ExtendedPacket can only be done dependent on the ExtendedRequest field.
 type Packet interface {
 	PacketMarshaller
 
