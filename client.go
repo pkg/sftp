@@ -1058,7 +1058,7 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	errCh := make(chan rErr)
 
 	concurrency := len(b)/f.c.maxPacket + 1
-	if concurrency > f.c.maxConcurrentRequests {
+	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
@@ -1181,7 +1181,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	}
 
 	concurrency := int(fileSize/uint64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
-	if concurrency > f.c.maxConcurrentRequests {
+	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
@@ -1410,7 +1410,7 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 	errCh := make(chan wErr)
 
 	concurrency := len(b)/f.c.maxPacket + 1
-	if concurrency > f.c.maxConcurrentRequests {
+	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
@@ -1520,7 +1520,7 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 	errCh := make(chan rwErr)
 
 	concurrency := int(remain/int64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
-	if concurrency > f.c.maxConcurrentRequests {
+	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
@@ -1648,6 +1648,10 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 			if err == nil {
 				remain = info.Size()
 			}
+		}
+
+		if remain < 0 {
+			remain = math.MaxInt64
 		}
 
 		if remain > int64(f.c.maxPacket) {
