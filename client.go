@@ -1180,10 +1180,11 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		return f.writeToSequential(w)
 	}
 
-	concurrency := int(fileSize/uint64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
-	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
-		concurrency = f.c.maxConcurrentRequests
+	concurrency64 := fileSize/uint64(f.c.maxPacket) + 1 // a bad guess, but better than no guess
+	if concurrency64 > uint64(f.c.maxConcurrentRequests) || concurrency64 < 1 {
+		concurrency64 = uint64(f.c.maxConcurrentRequests)
 	}
+	concurrency := int(concurrency64)
 
 	cancel := make(chan struct{})
 	var wg sync.WaitGroup
@@ -1519,10 +1520,11 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 	}
 	errCh := make(chan rwErr)
 
-	concurrency := int(remain/int64(f.c.maxPacket) + 1) // a bad guess, but better than no guess
-	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
-		concurrency = f.c.maxConcurrentRequests
+	concurrency64 := remain/int64(f.c.maxPacket) + 1 // a bad guess, but better than no guess
+	if concurrency64 > int64(f.c.maxConcurrentRequests) || concurrency64 < 1 {
+		concurrency64 = int64(f.c.maxConcurrentRequests)
 	}
+	concurrency := int(concurrency64)
 
 	pool := newBufPool(concurrency, f.c.maxPacket)
 
