@@ -1,11 +1,8 @@
 // Package filexfer implements the wire encoding for secsh-filexfer as described in https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 package filexfer
 
-// Packet defines the behavior of an SFTP packet.
-type Packet interface {
-	// Type returns the SSH_FXP_xy value associated with the specific packet.
-	Type() PacketType
-
+// PacketMarshaller narrowly defines packets that will only be transmitted.
+type PacketMarshaller interface{
 	// MarshalPacket is the primary intended way to encode a packet.
 	// The request-id for the packet is set from reqid.
 	//
@@ -18,6 +15,14 @@ type Packet interface {
 	//
 	// It shall encode in the first 4-bytes of the header the proper length of the rest of the header+payload.
 	MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error)
+}
+
+// Packet defines the behavior of an SFTP packet.
+type Packet interface {
+	PacketMarshaller
+
+	// Type returns the SSH_FXP_xy value associated with the specific packet.
+	Type() PacketType
 
 	// UnmarshalPacketBody decodes a packet body from the given Buffer.
 	// It is assumed that the common header values of the length, type and request-id have already been consumed.
