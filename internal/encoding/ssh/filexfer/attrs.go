@@ -149,7 +149,7 @@ func (a *Attributes) MarshalInto(b *Buffer) {
 
 // MarshalBinary returns a as the binary encoding of a.
 func (a *Attributes) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, a.Len()))
+	buf := NewBuffer(make([]byte, 0, a.Len()))
 	a.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -243,7 +243,7 @@ func (e *ExtendedAttribute) MarshalInto(b *Buffer) {
 
 // MarshalBinary returns e as the binary encoding of e.
 func (e *ExtendedAttribute) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.Len()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -290,7 +290,7 @@ func (e *NameEntry) MarshalInto(b *Buffer) {
 
 // MarshalBinary returns e as the binary encoding of e.
 func (e *NameEntry) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.Len()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
