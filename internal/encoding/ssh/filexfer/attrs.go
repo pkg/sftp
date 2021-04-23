@@ -158,9 +158,19 @@ func (a *Attributes) MarshalBinary() ([]byte, error) {
 //
 // NOTE: The values of fields not covered in the a.Flags are explicitly undefined.
 func (a *Attributes) UnmarshalFrom(b *Buffer) (err error) {
-	if a.Flags, err = b.ConsumeUint32(); err != nil {
+	flags, err := b.ConsumeUint32()
+	if err != nil {
 		return err
 	}
+
+	return a.XXX_UnmarshalByFlags(flags, b)
+}
+
+// XXX_UnmarshalByFlags uses the pre-existing a.Flags field to determine which fields to decode.
+// DO NOT USE THIS: it is an anti-corruption function to implement existing internal usage in pkg/sftp.
+// This function is not a part of any compatibility promise.
+func (a *Attributes) XXX_UnmarshalByFlags(flags uint32, b *Buffer) (err error) {
+	a.Flags = flags
 
 	// Short-circuit dummy attributes.
 	if a.Flags == 0 {
