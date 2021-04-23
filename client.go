@@ -1184,6 +1184,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	if concurrency64 > uint64(f.c.maxConcurrentRequests) || concurrency64 < 1 {
 		concurrency64 = uint64(f.c.maxConcurrentRequests)
 	}
+	// Now that concurrency64 is saturated to an int value, we know this assignment cannot possibly overflow.
 	concurrency := int(concurrency64)
 
 	cancel := make(chan struct{})
@@ -1524,6 +1525,7 @@ func (f *File) readFromConcurrent(r io.Reader, remain int64) (read int64, err er
 	if concurrency64 > int64(f.c.maxConcurrentRequests) || concurrency64 < 1 {
 		concurrency64 = int64(f.c.maxConcurrentRequests)
 	}
+	// Now that concurrency64 is saturated to an int value, we know this assignment cannot possibly overflow.
 	concurrency := int(concurrency64)
 
 	pool := newBufPool(concurrency, f.c.maxPacket)
