@@ -114,3 +114,33 @@ func fromAttributes(attrs sshfx.Attributes) FileStat {
 
 	return stat
 }
+
+func attributesFromGenericFileInfo(fi os.FileInfo) sshfx.Attributes {
+	const allAttr = sshfx.AttrSize | sshfx.AttrUIDGID | sshfx.AttrPermissions | sshfx.AttrACModTime
+
+	var attrs sshfx.Attributes
+
+	switch sys := fi.Sys().(type) {
+	case *FileStat:
+		attrs = sys.toAttributes(allAttr)
+		if len(attrs.ExtendedAttributes) > 0 {
+			attrs.Flags |= sshfx.AttrExtended
+		}
+
+	case *sshfx.Attributes:
+		attrs = *sys
+		if len(sys.ExtendedAttributes) > 0 {
+			attrs.ExtendedAttributes = make([]sshfx.ExtendedAttribute, len(sys.ExtendedAttributes))
+			copy(attrs.ExtendedAttributes, sys.ExtendedAttributes)
+		}
+
+	default:
+		attrs.SetSize(uint64(fi.Size()))
+		attrs.SetPermissions(fromFileMode(fi.Mode()))
+
+		mtime := uint32(fi.ModTime().Unix())
+		attrs.SetACModTime(mtime, mtime)
+	}
+
+	return attrs
+}
