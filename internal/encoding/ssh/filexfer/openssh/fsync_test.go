@@ -15,7 +15,7 @@ func init() {
 
 func TestFSyncExtendedPacket(t *testing.T) {
 	const (
-		id      = 42
+		id     = 42
 		handle = "somehandle"
 	)
 
