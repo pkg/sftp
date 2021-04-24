@@ -86,5 +86,29 @@ func (m FileMode) String() string {
 		}
 	}
 
+	if m&ModeSetUID != 0 {
+		if buf[3] == 'x' {
+			buf[3] = 's'
+		} else {
+			buf[3] = 'S'
+		}
+	}
+
+	if m&ModeSetGID != 0 {
+		if buf[6] == 'x' {
+			buf[6] = 's'
+		} else {
+			buf[6] = 'S'
+		}
+	}
+
+	if m&ModeSticky != 0 {
+		if buf[9] == 'x' {
+			buf[9] = 't'
+		} else {
+			buf[9] = 'T'
+		}
+	}
+
 	return string(buf[:])
 }
