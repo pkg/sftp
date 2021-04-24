@@ -41,6 +41,7 @@ func TestMain(m *testing.M) {
 		"/usr/libexec/sftp-server",
 		"/usr/lib/openssh/sftp-server",
 		"/usr/lib/ssh/sftp-server",
+		"C:\\Program Files\\Git\\usr\\lib\\ssh\\sftp-server.exe",
 	}
 	sftpServer, _ := exec.LookPath("sftp-server")
 	if len(sftpServer) == 0 {
