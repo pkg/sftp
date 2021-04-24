@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 func TestMarshalUint32(t *testing.T) {
@@ -217,15 +219,15 @@ func TestUnmarshalString(t *testing.T) {
 	}
 }
 
-func TestSendPacket(t *testing.T) {
+func TestSendBinary(t *testing.T) {
 	var tests = []struct {
 		packet encoding.BinaryMarshaler
 		want   []byte
 	}{
 		{
-			packet: &sshFxInitPacket{
+			packet: &sshfx.InitPacket{
 				Version: 3,
-				Extensions: []extensionPair{
+				Extensions: []*sshfx.ExtensionPair{
 					{"posix-rename@openssh.com", "1"},
 				},
 			},
@@ -240,10 +242,50 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
-			packet: &sshFxpOpenPacket{
-				ID:     1,
-				Path:   "/foo",
-				Pflags: flags(os.O_RDONLY),
+			packet: &sshfx.VersionPacket{
+				Version: 3,
+				Extensions: []*sshfx.ExtensionPair{
+					{"posix-rename@openssh.com", "1"},
+				},
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x26,
+				0x2,
+				0x0, 0x0, 0x0, 0x3,
+				0x0, 0x0, 0x0, 0x18,
+				'p', 'o', 's', 'i', 'x', '-', 'r', 'e', 'n', 'a', 'm', 'e', '@', 'o', 'p', 'e', 'n', 's', 's', 'h', '.', 'c', 'o', 'm',
+				0x0, 0x0, 0x0, 0x1,
+				'1',
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		b := new(bytes.Buffer)
+
+		conn := &conn{
+			Writer: b,
+		}
+
+		conn.writeBinary(tt.packet)
+
+		if got := b.Bytes(); !bytes.Equal(tt.want, got) {
+			t.Errorf("writeBinary(%v): got %x want %x", tt.packet, tt.want, got)
+		}
+	}
+}
+
+func TestSendPacket(t *testing.T) {
+	var tests = []struct {
+		id     uint32
+		packet sshfx.PacketMarshaller
+		want   []byte
+	}{
+		{
+			id: 1,
+			packet: &sshfx.OpenPacket{
+				Filename: "/foo",
+				PFlags:   flags(os.O_RDONLY),
 			},
 			want: []byte{
 				0x0, 0x0, 0x0, 0x15,
@@ -255,11 +297,10 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
-			packet: &sshFxpWritePacket{
-				ID:     124,
+			id: 124,
+			packet: &sshfx.WritePacket{
 				Handle: "foo",
 				Offset: 13,
-				Length: uint32(len("bar")),
 				Data:   []byte("bar"),
 			},
 			want: []byte{
@@ -272,16 +313,13 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
-			packet: &sshFxpSetstatPacket{
-				ID:    31,
-				Path:  "/bar",
-				Flags: sshFileXferAttrUIDGID,
-				Attrs: struct {
-					UID uint32
-					GID uint32
-				}{
-					UID: 1000,
-					GID: 100,
+			id: 31,
+			packet: &sshfx.SetstatPacket{
+				Path: "/bar",
+				Attrs: sshfx.Attributes{
+					Flags: sshfx.AttrUIDGID,
+					UID:   1000,
+					GID:   100,
 				},
 			},
 			want: []byte{
@@ -298,7 +336,13 @@ func TestSendPacket(t *testing.T) {
 
 	for _, tt := range tests {
 		b := new(bytes.Buffer)
-		sendPacket(b, tt.packet)
+
+		conn := &conn{
+			Writer: b,
+		}
+
+		conn.writePacket(tt.id, tt.packet, nil)
+
 		if got := b.Bytes(); !bytes.Equal(tt.want, got) {
 			t.Errorf("sendPacket(%v): got %x want %x", tt.packet, tt.want, got)
 		}
@@ -474,22 +518,34 @@ func BenchmarkMarshalInit(b *testing.B) {
 	})
 }
 
+func benchMarshalFX(b *testing.B, packet sshfx.PacketMarshaller) {
+	conn := &conn{
+		Writer: ioutil.Discard,
+	}
+
+	// Intentionally set to the default value in client.go.
+	buf := make([]byte, 1<<15)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		conn.writePacket(1, packet, buf)
+	}
+}
+
 func BenchmarkMarshalOpen(b *testing.B) {
-	benchMarshal(b, &sshFxpOpenPacket{
-		ID:     1,
-		Path:   "/home/test/some/random/path",
-		Pflags: flags(os.O_RDONLY),
+	benchMarshalFX(b, &sshfx.OpenPacket{
+		Filename: "/home/test/some/random/path",
+		PFlags:   flags(os.O_RDONLY),
 	})
 }
 
 func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 	data := make([]byte, 32*1024)
 
-	benchMarshal(b, &sshFxpWritePacket{
-		ID:     1,
+	benchMarshalFX(b, &sshfx.WritePacket{
 		Handle: "someopaquehandle",
 		Offset: 0,
-		Length: uint32(len(data)),
 		Data:   data,
 	})
 }
@@ -497,11 +553,9 @@ func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 func BenchmarkMarshalWrite1k(b *testing.B) {
 	data := make([]byte, 1025)
 
-	benchMarshal(b, &sshFxpWritePacket{
-		ID:     1,
+	benchMarshalFX(b, &sshfx.WritePacket{
 		Handle: "someopaquehandle",
 		Offset: 0,
-		Length: uint32(len(data)),
 		Data:   data,
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -15,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 const (
@@ -76,89 +79,90 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 	// expected layout is:
 	// drwxr-xr-x   8 501      20            272 Aug  9 19:46 examples
 
-	// permissions (len 10, "drwxr-xr-x")
-	got := result[0:10]
-	if ok, err := regexp.MatchString("^"+expectedType+"[rwx-]{9}$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): permission field mismatch, expected dir, got: %#v, err: %#v", path, got, err)
+	t.Log(result)
+
+	sparce := strings.Split(result, " ")
+
+	var fields []string
+	for _, field := range sparce {
+		if field == "" {
+			continue
+		}
+
+		fields = append(fields, field)
 	}
 
-	// space
-	got = result[10:11]
-	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 1 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+	perms, linkCnt, user, group, size := fields[0], fields[1], fields[2], fields[3], fields[4]
+	dateTime := strings.Join(fields[5:8], " ")
+	filename := fields[8]
+
+	// permissions (len 10, "drwxr-xr-x")
+	const (
+		rwxs = "[-r][-w][-xsS]"
+		rwxt = "[-r][-w][-xtT]"
+	)
+	if ok, err := regexp.MatchString("^"+expectedType+rwxs+rwxs+rwxt+"$", perms); !ok {
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
+
+		t.Errorf("runLs(%q): permission field mismatch, expected dir, got: %#v, err: %#v", path, perms, err)
 	}
 
 	// link count (len 3, number)
-	got = result[12:15]
-	if ok, err := regexp.MatchString("^\\s*[0-9]+$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): link count field mismatch, got: %#v, err: %#v", path, got, err)
-	}
+	const (
+		number = "(?:[0-9]+)"
+	)
+	if ok, err := regexp.MatchString("^"+number+"$", linkCnt); !ok {
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
 
-	// spacer
-	got = result[15:16]
-	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 2 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(%q): link count field mismatch, got: %#v, err: %#v", path, linkCnt, err)
 	}
 
 	// username / uid (len 8, number or string)
-	got = result[16:24]
-	if ok, err := regexp.MatchString("^[^\\s]{1,8}\\s*$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): username / uid mismatch, expected user, got: %#v, err: %#v", path, got, err)
-	}
+	const (
+		name = "(?:[a-z_][a-z0-9_]*)"
+	)
+	if ok, err := regexp.MatchString("^(?:"+number+"|"+name+")+$", user); !ok {
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
 
-	// spacer
-	got = result[24:25]
-	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 3 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(%q): username / uid mismatch, expected user, got: %#v, err: %#v", path, user, err)
 	}
 
 	// groupname / gid (len 8, number or string)
-	got = result[25:33]
-	if ok, err := regexp.MatchString("^[^\\s]{1,8}\\s*$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): groupname / gid mismatch, expected group, got: %#v, err: %#v", path, got, err)
-	}
+	if ok, err := regexp.MatchString("^(?:"+number+"|"+name+")+$", group); !ok {
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
 
-	// spacer
-	got = result[33:34]
-	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 4 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(%q): groupname / gid mismatch, expected group, got: %#v, err: %#v", path, group, err)
 	}
 
 	// filesize (len 8)
-	got = result[34:42]
-	if ok, err := regexp.MatchString("^\\s*[0-9]+$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): filesize field mismatch, expected size in bytes, got: %#v, err: %#v", path, got, err)
-	}
+	if ok, err := regexp.MatchString("^"+number+"$", size); !ok {
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
 
-	// spacer
-	got = result[42:43]
-	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 5 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(%q): filesize field mismatch, expected size in bytes, got: %#v, err: %#v", path, size, err)
 	}
 
 	// mod time (len 12, e.g. Aug  9 19:46)
-	got = result[43:55]
-	layout := "Jan  2 15:04"
-	_, err := time.Parse(layout, got)
-
+	_, err := time.Parse("Jan 2 15:04", dateTime)
 	if err != nil {
-		layout = "Jan  2 2006"
-		_, err = time.Parse(layout, got)
-	}
-	if err != nil {
-		t.Errorf("runLs(%#v, *FileInfo): mod time field mismatch, expected date layout %s, got: %#v, err: %#v", path, layout, got, err)
-	}
-
-	// spacer
-	got = result[55:56]
-	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 6 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		_, err = time.Parse("Jan 2 2006", dateTime)
+		if err != nil {
+			t.Errorf("runLs.dateTime = %#v should match `Jan 2 15:04` or `Jan 2 2006`: %+v", dateTime, err)
+		}
 	}
 
 	// filename
-	got = result[56:]
-	if ok, err := regexp.MatchString("^"+path+"$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): name field mismatch, expected examples, got: %#v, err: %#v", path, got, err)
+	if path != filename {
+		t.Errorf("runLs.filename = %#v, expected: %#v", filename, path)
 	}
 }
 
@@ -184,26 +188,48 @@ func clientServerPair(t *testing.T) (*Client, *Server) {
 	return client, server
 }
 
-type sshFxpTestBadExtendedPacket struct {
-	ID        uint32
-	Extension string
-	Data      string
+const extensionBad = "notexist@example.net"
+
+type BadExtendedPacket struct {
+	Payload string
 }
 
-func (p sshFxpTestBadExtendedPacket) id() uint32 { return p.ID }
+func (ep *BadExtendedPacket) Type() sshfx.PacketType {
+	return sshfx.PacketTypeExtended
+}
 
-func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
-	l := 4 + 1 + 4 + // uint32(length) + byte(type) + uint32(id)
-		4 + len(p.Extension) +
-		4 + len(p.Data)
+func (ep *BadExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	p := &sshfx.ExtendedPacket{
+		ExtendedRequest: extensionBad,
 
-	b := make([]byte, 4, l)
-	b = append(b, sshFxpExtended)
-	b = marshalUint32(b, p.ID)
-	b = marshalString(b, p.Extension)
-	b = marshalString(b, p.Data)
+		Data: ep,
+	}
 
-	return b, nil
+	return p.MarshalPacket(reqid, b)
+}
+
+func (ep *BadExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
+	buf.AppendString(ep.Payload)
+}
+
+func (ep *BadExtendedPacket) MarshalBinary() ([]byte, error) {
+	size := 4 + len(ep.Payload)
+
+	buf := sshfx.NewBuffer(make([]byte, 0, size))
+	ep.MarshalInto(buf)
+	return buf.Bytes(), nil
+}
+
+func (ep *BadExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
+	if ep.Payload, err = buf.ConsumeString(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ep *BadExtendedPacket) UnmarshalBinary(data []byte) (err error) {
+	return ep.UnmarshalFrom(sshfx.NewBuffer(data))
 }
 
 func checkServerAllocator(t *testing.T, server *Server) {
@@ -222,23 +248,23 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	defer client.Close()
 	defer server.Close()
 
-	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
-	typ, data, err := client.clientConn.sendPacket(nil, badPacket)
-	if err != nil {
-		t.Fatalf("unexpected error from sendPacket: %s", err)
+	badPacket := &BadExtendedPacket{
+		Payload: "foobar",
 	}
-	if typ != sshFxpStatus {
-		t.Fatalf("received non-FPX_STATUS packet: %v", typ)
+	err := client.sendPacket(badPacket, nil)
+	if err == nil {
+		t.Fatal("expected error from sendPacket, but got none")
 	}
 
-	err = unmarshalStatus(badPacket.id(), data)
 	statusErr, ok := err.(*StatusError)
 	if !ok {
-		t.Fatal("failed to convert error from unmarshalStatus to *StatusError")
+		t.Fatalf("failed to convert error from sendPacket to *StatusError: %T: %v", err, err)
 	}
-	if statusErr.Code != sshFxOPUnsupported {
-		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, sshFxOPUnsupported)
+
+	if code := sshfx.Status(statusErr.Code); code != sshfx.StatusOPUnsupported {
+		t.Errorf("statusErr.Code = %s, wanted %s", code, sshfx.StatusOPUnsupported)
 	}
+
 	checkServerAllocator(t, server)
 }
 
@@ -321,36 +347,88 @@ func TestOpenStatRace(t *testing.T) {
 	defer client.Close()
 	defer server.Close()
 
+	ch := make(chan result, 3)
+
 	// openpacket finishes to fast to trigger race in tests
 	// need to add a small sleep on server to openpackets somehow
 	tmppath := path.Join(os.TempDir(), "stat_race")
-	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
-	ch := make(chan result, 3)
+	defer os.Remove(tmppath)
+
 	id1 := client.nextID()
-	client.dispatchRequest(ch, &sshFxpOpenPacket{
-		ID:     id1,
-		Path:   tmppath,
-		Pflags: pflags,
+	client.dispatchPacket(ch, id1, &sshfx.OpenPacket{
+		Filename: tmppath,
+		PFlags:   flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC),
 	})
+
 	id2 := client.nextID()
-	client.dispatchRequest(ch, &sshFxpLstatPacket{
-		ID:   id2,
+	client.dispatchPacket(ch, id2, &sshfx.LStatPacket{
 		Path: tmppath,
 	})
-	testreply := func(id uint32) {
-		r := <-ch
-		switch r.typ {
-		case sshFxpAttrs, sshFxpHandle: // ignore
-		case sshFxpStatus:
-			err := normaliseError(unmarshalStatus(id, r.data))
-			assert.NoError(t, err, "race hit, stat before open")
-		default:
-			t.Fatal("unexpected type:", r.typ)
-		}
+
+	r := <-ch
+	if r.err != nil {
+		t.Fatal("unexpected error:", r.err)
 	}
-	testreply(id1)
-	testreply(id2)
-	os.Remove(tmppath)
+
+	switch r.pkt.RequestID {
+	case id1:
+	case id2:
+		t.Fatal("race condition detected: LStat response returned first")
+	default:
+		t.Fatal("unexpected id in response:", r.pkt.RequestID)
+	}
+
+	switch r.pkt.PacketType {
+	case sshfx.PacketTypeHandle:
+		// First, we should get the Open response: Handle
+		var handle sshfx.HandlePacket
+
+		if err := handle.UnmarshalPacketBody(&r.pkt.Data); err != nil {
+			t.Fatal("unexpected error:", err)
+		}
+
+		defer client.close(handle.Handle)
+
+	case sshfx.PacketTypeStatus:
+		var status sshfx.StatusPacket
+
+		if err := status.UnmarshalPacketBody(&r.pkt.Data); err != nil {
+			t.Fatal("unexpected error:", err)
+		}
+
+		t.Fatal("unexpected status packet:", status)
+
+	default:
+		t.Fatal("unexpected type:", r.pkt.PacketType)
+	}
+
+	r = <-ch
+	if r.err != nil {
+		t.Fatal("unexpected error:", r.err)
+	}
+
+	if r.pkt.RequestID != id2 {
+		t.Fatal("unexpected id in response:", r.pkt.RequestID)
+	}
+
+	switch r.pkt.PacketType {
+	case sshfx.PacketTypeAttrs:
+		// Second, we should get the LStat response: Attrs
+		// We can go ahead and ignore this one.
+
+	case sshfx.PacketTypeStatus:
+		var status sshfx.StatusPacket
+
+		if err := status.UnmarshalPacketBody(&r.pkt.Data); err != nil {
+			t.Fatal("unexpected error:", err)
+		}
+
+		t.Fatal("unexpected status packet:", status)
+
+	default:
+		t.Fatal("unexpected type:", r.pkt.PacketType)
+	}
+
 	checkServerAllocator(t, server)
 }
 

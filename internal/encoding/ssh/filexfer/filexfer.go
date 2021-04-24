@@ -34,6 +34,10 @@ type Packet interface {
 
 	// UnmarshalPacketBody decodes a packet body from the given Buffer.
 	// It is assumed that the common header values of the length, type and request-id have already been consumed.
+	//
+	// Implementations should not alias the given Buffer,
+	// instead they can consider prepopulating an internal buffer as a hint,
+	// and copying into that buffer if it has sufficient length.
 	UnmarshalPacketBody(buf *Buffer) error
 }
 

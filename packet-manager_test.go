@@ -16,7 +16,7 @@ func newTestSender() *_testSender {
 	return &_testSender{make(chan encoding.BinaryMarshaler)}
 }
 
-func (s _testSender) sendPacket(p encoding.BinaryMarshaler) error {
+func (s _testSender) writeBinary(p encoding.BinaryMarshaler) error {
 	s.sent <- p
 	return nil
 }

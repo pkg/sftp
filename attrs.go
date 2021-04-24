@@ -6,17 +6,8 @@ package sftp
 import (
 	"os"
 	"time"
-)
 
-const (
-	sshFileXferAttrSize        = 0x00000001
-	sshFileXferAttrUIDGID      = 0x00000002
-	sshFileXferAttrPermissions = 0x00000004
-	sshFileXferAttrACmodTime   = 0x00000008
-	sshFileXferAttrExtended    = 0x80000000
-
-	sshFileXferAttrAll = sshFileXferAttrSize | sshFileXferAttrUIDGID | sshFileXferAttrPermissions |
-		sshFileXferAttrACmodTime | sshFileXferAttrExtended
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 // fileInfo is an artificial type designed to satisfy os.FileInfo.
@@ -45,6 +36,16 @@ func (fi *fileInfo) IsDir() bool { return fi.Mode().IsDir() }
 
 func (fi *fileInfo) Sys() interface{} { return fi.sys }
 
+func fileInfoFromAttributes(name string, attrs sshfx.Attributes) os.FileInfo {
+	return &fileInfo{
+		name:  name,
+		size:  int64(attrs.Size),
+		mode:  toFileMode(attrs.Permissions),
+		mtime: time.Unix(int64(attrs.MTime), 0),
+		sys:   &attrs,
+	}
+}
+
 // FileStat holds the original unmarshalled values from a call to READDIR or
 // *STAT. It is exported for the purposes of accessing the raw values via
 // os.FileInfo.Sys(). It is also used server side to store the unmarshalled
@@ -65,109 +66,51 @@ type StatExtended struct {
 	ExtData string
 }
 
-func fileInfoFromStat(st *FileStat, name string) os.FileInfo {
-	fs := &fileInfo{
-		name:  name,
-		size:  int64(st.Size),
-		mode:  toFileMode(st.Mode),
-		mtime: time.Unix(int64(st.Mtime), 0),
-		sys:   st,
-	}
-	return fs
-}
-
-func fileStatFromInfo(fi os.FileInfo) (uint32, FileStat) {
-	mtime := fi.ModTime().Unix()
-	atime := mtime
-	var flags uint32 = sshFileXferAttrSize |
-		sshFileXferAttrPermissions |
-		sshFileXferAttrACmodTime
-
-	fileStat := FileStat{
-		Size:  uint64(fi.Size()),
-		Mode:  fromFileMode(fi.Mode()),
-		Mtime: uint32(mtime),
-		Atime: uint32(atime),
+func (stat *FileStat) toAttributes(flags uint32) sshfx.Attributes {
+	attrs := sshfx.Attributes{
+		Flags:       flags,
+		Size:        stat.Size,
+		UID:         stat.UID,
+		GID:         stat.GID,
+		Permissions: sshfx.FileMode(stat.Mode),
+		ATime:       stat.Atime,
+		MTime:       stat.Mtime,
 	}
 
-	// os specific file stat decoding
-	fileStatFromInfoOs(fi, &flags, &fileStat)
+	if len(stat.Extended) > 0 {
+		attrs.ExtendedAttributes = make([]sshfx.ExtendedAttribute, len(stat.Extended))
 
-	return flags, fileStat
-}
-
-func unmarshalAttrs(b []byte) (*FileStat, []byte) {
-	flags, b := unmarshalUint32(b)
-	return getFileStat(flags, b)
-}
-
-func getFileStat(flags uint32, b []byte) (*FileStat, []byte) {
-	var fs FileStat
-	if flags&sshFileXferAttrSize == sshFileXferAttrSize {
-		fs.Size, b, _ = unmarshalUint64Safe(b)
-	}
-	if flags&sshFileXferAttrUIDGID == sshFileXferAttrUIDGID {
-		fs.UID, b, _ = unmarshalUint32Safe(b)
-	}
-	if flags&sshFileXferAttrUIDGID == sshFileXferAttrUIDGID {
-		fs.GID, b, _ = unmarshalUint32Safe(b)
-	}
-	if flags&sshFileXferAttrPermissions == sshFileXferAttrPermissions {
-		fs.Mode, b, _ = unmarshalUint32Safe(b)
-	}
-	if flags&sshFileXferAttrACmodTime == sshFileXferAttrACmodTime {
-		fs.Atime, b, _ = unmarshalUint32Safe(b)
-		fs.Mtime, b, _ = unmarshalUint32Safe(b)
-	}
-	if flags&sshFileXferAttrExtended == sshFileXferAttrExtended {
-		var count uint32
-		count, b, _ = unmarshalUint32Safe(b)
-		ext := make([]StatExtended, count)
-		for i := uint32(0); i < count; i++ {
-			var typ string
-			var data string
-			typ, b, _ = unmarshalStringSafe(b)
-			data, b, _ = unmarshalStringSafe(b)
-			ext[i] = StatExtended{typ, data}
+		for i, ext := range stat.Extended {
+			attrs.ExtendedAttributes[i] = sshfx.ExtendedAttribute{
+				Type: ext.ExtType,
+				Data: ext.ExtData,
+			}
 		}
-		fs.Extended = ext
 	}
-	return &fs, b
+
+	return attrs
 }
 
-func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
-	// attributes variable struct, and also variable per protocol version
-	// spec version 3 attributes:
-	// uint32   flags
-	// uint64   size           present only if flag SSH_FILEXFER_ATTR_SIZE
-	// uint32   uid            present only if flag SSH_FILEXFER_ATTR_UIDGID
-	// uint32   gid            present only if flag SSH_FILEXFER_ATTR_UIDGID
-	// uint32   permissions    present only if flag SSH_FILEXFER_ATTR_PERMISSIONS
-	// uint32   atime          present only if flag SSH_FILEXFER_ACMODTIME
-	// uint32   mtime          present only if flag SSH_FILEXFER_ACMODTIME
-	// uint32   extended_count present only if flag SSH_FILEXFER_ATTR_EXTENDED
-	// string   extended_type
-	// string   extended_data
-	// ...      more extended data (extended_type - extended_data pairs),
-	// 	   so that number of pairs equals extended_count
-
-	flags, fileStat := fileStatFromInfo(fi)
-
-	b = marshalUint32(b, flags)
-	if flags&sshFileXferAttrSize != 0 {
-		b = marshalUint64(b, fileStat.Size)
-	}
-	if flags&sshFileXferAttrUIDGID != 0 {
-		b = marshalUint32(b, fileStat.UID)
-		b = marshalUint32(b, fileStat.GID)
-	}
-	if flags&sshFileXferAttrPermissions != 0 {
-		b = marshalUint32(b, fileStat.Mode)
-	}
-	if flags&sshFileXferAttrACmodTime != 0 {
-		b = marshalUint32(b, fileStat.Atime)
-		b = marshalUint32(b, fileStat.Mtime)
+func fromAttributes(attrs sshfx.Attributes) FileStat {
+	stat := FileStat{
+		Size:  attrs.Size,
+		UID:   attrs.UID,
+		GID:   attrs.GID,
+		Mode:  uint32(attrs.Permissions),
+		Atime: attrs.ATime,
+		Mtime: attrs.MTime,
 	}
 
-	return b
+	if len(attrs.ExtendedAttributes) > 0 {
+		stat.Extended = make([]StatExtended, len(attrs.ExtendedAttributes))
+
+		for i, ext := range attrs.ExtendedAttributes {
+			stat.Extended[i] = StatExtended{
+				ExtType: ext.Type,
+				ExtData: ext.Data,
+			}
+		}
+	}
+
+	return stat
 }

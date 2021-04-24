@@ -15,18 +15,18 @@ type packetManager struct {
 	fini        chan struct{}
 	incoming    orderedPackets
 	outgoing    orderedPackets
-	sender      packetSender // connection object
+	sender      binaryWriter // connection object
 	working     *sync.WaitGroup
 	packetCount uint32
 	// it is not nil if the allocator is enabled
 	alloc *allocator
 }
 
-type packetSender interface {
-	sendPacket(encoding.BinaryMarshaler) error
+type binaryWriter interface {
+	writeBinary(encoding.BinaryMarshaler) error
 }
 
-func newPktMgr(sender packetSender) *packetManager {
+func newPktMgr(sender binaryWriter) *packetManager {
 	s := &packetManager{
 		requests:  make(chan orderedPacket, SftpServerWorkerCount),
 		responses: make(chan orderedPacket, SftpServerWorkerCount),
@@ -70,8 +70,7 @@ type orderedResponse struct {
 	orderid uint32
 }
 
-func (s *packetManager) newOrderedResponse(p responsePacket, id uint32,
-) orderedResponse {
+func (s *packetManager) newOrderedResponse(p responsePacket, id uint32) orderedResponse {
 	return orderedResponse{responsePacket: p, orderid: id}
 }
 func (p orderedResponse) orderID() uint32       { return p.orderid }
@@ -112,8 +111,7 @@ func (s *packetManager) close() {
 // Passed a worker function, returns a channel for incoming packets.
 // Keep process packet responses in the order they are received while
 // maximizing throughput of file transfers.
-func (s *packetManager) workerChan(runWorker func(chan orderedRequest),
-) chan orderedRequest {
+func (s *packetManager) workerChan(runWorker func(chan orderedRequest)) chan orderedRequest {
 	// multiple workers for faster read/writes
 	rwChan := make(chan orderedRequest, SftpServerWorkerCount)
 	for i := 0; i < SftpServerWorkerCount; i++ {
@@ -132,11 +130,13 @@ func (s *packetManager) workerChan(runWorker func(chan orderedRequest),
 				s.incomingPacket(pkt)
 				rwChan <- pkt
 				continue
+
 			case *sshFxpClosePacket:
 				// wait for reads/writes to finish when file is closed
 				// incomingPacket() call must occur after this
 				s.working.Wait()
 			}
+
 			s.incomingPacket(pkt)
 			// all non-RW use sequential cmdChan
 			cmdChan <- pkt
@@ -157,13 +157,16 @@ func (s *packetManager) controller() {
 			debug("incoming id (oid): %v (%v)", pkt.id(), pkt.orderID())
 			s.incoming = append(s.incoming, pkt)
 			s.incoming.Sort()
+
 		case pkt := <-s.responses:
 			debug("outgoing id (oid): %v (%v)", pkt.id(), pkt.orderID())
 			s.outgoing = append(s.outgoing, pkt)
 			s.outgoing.Sort()
+
 		case <-s.fini:
 			return
 		}
+
 		s.maybeSendPackets()
 	}
 }
@@ -176,27 +179,31 @@ func (s *packetManager) maybeSendPackets() {
 				len(s.outgoing), len(s.incoming))
 			break
 		}
+
 		out := s.outgoing[0]
 		in := s.incoming[0]
 		// debug("incoming: %v", ids(s.incoming))
 		// debug("outgoing: %v", ids(s.outgoing))
-		if in.orderID() == out.orderID() {
-			debug("Sending packet: %v", out.id())
-			s.sender.sendPacket(out.(encoding.BinaryMarshaler))
-			if s.alloc != nil {
-				// mark for reuse the slices allocated for this request
-				s.alloc.ReleasePages(in.orderID())
-			}
-			// pop off heads
-			copy(s.incoming, s.incoming[1:])            // shift left
-			s.incoming[len(s.incoming)-1] = nil         // clear last
-			s.incoming = s.incoming[:len(s.incoming)-1] // remove last
-			copy(s.outgoing, s.outgoing[1:])            // shift left
-			s.outgoing[len(s.outgoing)-1] = nil         // clear last
-			s.outgoing = s.outgoing[:len(s.outgoing)-1] // remove last
-		} else {
+
+		if in.orderID() != out.orderID() {
 			break
 		}
+
+		debug("Sending packet: %v", out.id())
+		s.sender.writeBinary(out.(encoding.BinaryMarshaler))
+		if s.alloc != nil {
+			// mark for reuse the slices allocated for this request
+			s.alloc.ReleasePages(in.orderID())
+		}
+
+		// pop off heads
+		copy(s.incoming, s.incoming[1:])            // shift left
+		s.incoming[len(s.incoming)-1] = nil         // clear last
+		s.incoming = s.incoming[:len(s.incoming)-1] // remove last
+
+		copy(s.outgoing, s.outgoing[1:])            // shift left
+		s.outgoing[len(s.outgoing)-1] = nil         // clear last
+		s.outgoing = s.outgoing[:len(s.outgoing)-1] // remove last
 	}
 }
 

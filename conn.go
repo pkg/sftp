@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
-	"github.com/pkg/sftp/internal/encoding/ssh/filexfer"
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 // conn implements a bidirectional channel on which client and server
@@ -18,8 +18,9 @@ type conn struct {
 	// this is the same allocator used in packet manager
 	alloc *allocator
 
-	sync.Mutex // used to serialise writes to sendPacket
-	io.WriteCloser
+	sync.Mutex // used to serialise writes, and closes.
+	io.Writer
+	io.Closer
 }
 
 // the orderID is used in server mode if the allocator is enabled.
@@ -28,15 +29,15 @@ func (c *conn) recvPacket(orderID uint32) (uint8, []byte, error) {
 	return recvPacket(c, c.alloc, orderID)
 }
 
-func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
+func (c *conn) writeBinary(m encoding.BinaryMarshaler) error {
 	c.Lock()
 	defer c.Unlock()
 
-	return sendPacket(c.WriteCloser, m)
+	return sendPacket(c.Writer, m)
 }
 
-func (c *conn) sendFXPacket(id uint32, p filexfer.Packet) error {
-	header, payload, err := p.MarshalPacket(id, nil)
+func (c *conn) writePacket(id uint32, p sshfx.PacketMarshaller, b []byte) error {
+	header, payload, err := p.MarshalPacket(id, b)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -61,20 +62,34 @@ func (c *conn) Close() error {
 	c.Lock()
 	defer c.Unlock()
 
-	return c.WriteCloser.Close()
+	return c.Closer.Close()
 }
 
 type clientConn struct {
-	conn
+	*conn
 	wg sync.WaitGroup
 
-	nextid uint32
+	nextid  uint32
+	resPool resChanPool
+	bufPool *bufPool
 
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
 
 	closed chan struct{}
 	err    error
+}
+
+func newClientConn(rd io.Reader, wr io.WriteCloser) *clientConn {
+	return &clientConn{
+		conn: &conn{
+			Reader: rd,
+			Writer: wr,
+			Closer: wr,
+		},
+		inflight: make(map[uint32]chan<- result),
+		closed:   make(chan struct{}),
+	}
 }
 
 // returns the next value of c.nextid
@@ -106,10 +121,9 @@ func (c *clientConn) loop() {
 
 // result captures the result of receiving the a packet from the server
 type result struct {
-	typ  byte
-	sid  uint32
-	data []byte
-	err  error
+	pkt sshfx.RawPacket
+	buf []byte // return it after you’re done with it.
+	err error
 }
 
 // recv continuously reads from the server and forwards responses to the
@@ -118,25 +132,22 @@ func (c *clientConn) recv() error {
 	defer c.conn.Close()
 
 	for {
-		typ, data, err := c.recvPacket(0)
-		if err != nil {
+		var pkt sshfx.RawPacket
+		buf := c.bufPool.Get()
+
+		if err := pkt.ReadFrom(c.conn.Reader, buf, 64*1024); err != nil {
 			return err
 		}
 
-		sid, _, err := unmarshalUint32Safe(data)
-		if err != nil {
-			return err
-		}
-
-		ch, ok := c.getChannel(sid)
+		ch, ok := c.getChannel(pkt.RequestID)
 		if !ok {
 			// This is an unexpected occurrence. Send the error
 			// back to all listeners so that they terminate
 			// gracefully.
-			return errors.Errorf("sid not found: %d", sid)
+			return errors.Errorf("sid not found: %d", pkt.RequestID)
 		}
 
-		ch <- result{typ: typ, sid: sid, data: data}
+		ch <- result{pkt: pkt, buf: buf}
 	}
 }
 
@@ -171,40 +182,39 @@ type idmarshaler interface {
 	encoding.BinaryMarshaler
 }
 
-func (c *clientConn) sendPacket(ch chan result, p idmarshaler) (byte, []byte, error) {
-	if cap(ch) < 1 {
-		ch = make(chan result, 1)
-	}
-
-	c.dispatchRequest(ch, p)
-	s := <-ch
-	return s.typ, s.data, s.err
-}
-
-func (c *clientConn) sendFXPacket(req, resp filexfer.Packet) error {
+func (c *clientConn) sendPacket(req sshfx.PacketMarshaller, resp sshfx.Packet) error {
 	id := c.nextID()
-	ch := make(chan result, 1)
 
-	c.dispatchFXPacket(ch, id, req)
+	ch := c.resPool.Get()
+	defer c.resPool.Put(ch)
 
-	s := <-ch
-	if s.err != nil {
-		return s.err
+	c.dispatchPacket(ch, id, req)
+
+	r := <-ch
+	if r.err != nil {
+		// sendPacket should never return an io.EOF except through a StatusError.
+		if errors.Is(r.err, io.EOF) {
+			return ErrSSHFxConnectionLost
+		}
+
+		return r.err
 	}
 
-	if s.sid != id {
+	// Because DataPacket shall not alias r.pkt.Buffer,
+	// we are safe to return this buffer to the pool in all cases.
+	defer c.bufPool.Put(r.buf)
+
+	if r.pkt.RequestID != id {
 		return &unexpectedIDErr{
 			want: id,
-			got:  s.sid,
+			got:  r.pkt.RequestID,
 		}
 	}
 
-	body := filexfer.NewBuffer(s.data[4:]) // skip the ID.
+	if r.pkt.PacketType == sshfx.PacketTypeStatus {
+		var status sshfx.StatusPacket
 
-	if filexfer.PacketType(s.typ) == filexfer.PacketTypeStatus {
-		var status filexfer.StatusPacket
-
-		if err := status.UnmarshalPacketBody(body); err != nil {
+		if err := status.UnmarshalPacketBody(&r.pkt.Data); err != nil {
 			return err
 		}
 
@@ -217,46 +227,32 @@ func (c *clientConn) sendFXPacket(req, resp filexfer.Packet) error {
 
 	if resp == nil {
 		return &unexpectedPacketErr{
-			want: uint8(filexfer.PacketTypeStatus),
-			got:  s.typ,
+			want: uint8(sshfx.PacketTypeStatus),
+			got:  uint8(r.pkt.PacketType),
 		}
 	}
 
-	if filexfer.PacketType(s.typ) != resp.Type() {
+	if r.pkt.PacketType != resp.Type() {
 		return &unexpectedPacketErr{
 			want: uint8(resp.Type()),
-			got:  s.typ,
+			got:  uint8(r.pkt.PacketType),
 		}
 	}
 
-	return resp.UnmarshalPacketBody(body)
+	return resp.UnmarshalPacketBody(&r.pkt.Data)
 }
 
-func (c *clientConn) dispatchFXPacket(ch chan<- result, id uint32, req filexfer.Packet) {
+func (c *clientConn) dispatchPacket(ch chan<- result, id uint32, req sshfx.PacketMarshaller) {
 	if !c.putChannel(ch, id) {
 		// already closed.
 		return
 	}
 
-	if err := c.conn.sendFXPacket(id, req); err != nil {
+	buf := c.bufPool.Get()
+	defer c.bufPool.Put(buf)
+
+	if err := c.conn.writePacket(id, req, buf); err != nil {
 		if ch, ok := c.getChannel(id); ok {
-			ch <- result{err: err}
-		}
-	}
-}
-
-// dispatchRequest should ideally only be called by race-detection tests outside of this file,
-// where you have to ensure two packets are in flight sequentially after each other.
-func (c *clientConn) dispatchRequest(ch chan<- result, p idmarshaler) {
-	sid := p.id()
-
-	if !c.putChannel(ch, sid) {
-		// already closed.
-		return
-	}
-
-	if err := c.conn.sendPacket(p); err != nil {
-		if ch, ok := c.getChannel(sid); ok {
 			ch <- result{err: err}
 		}
 	}
@@ -286,5 +282,5 @@ type serverConn struct {
 }
 
 func (s *serverConn) sendError(id uint32, err error) error {
-	return s.sendPacket(statusFromError(id, err))
+	return s.writeBinary(statusFromError(id, err))
 }

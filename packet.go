@@ -10,11 +10,13 @@ import (
 	"reflect"
 
 	"github.com/pkg/errors"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 var (
-	errLongPacket            = errors.New("packet too long")
-	errShortPacket           = errors.New("packet too short")
+	errLongPacket            = sshfx.ErrLongPacket
+	errShortPacket           = sshfx.ErrShortPacket
 	errUnknownExtendedPacket = errors.New("unknown extended packet")
 )
 
@@ -36,6 +38,14 @@ func marshalUint64(b []byte, v uint64) []byte {
 
 func marshalString(b []byte, v string) []byte {
 	return append(marshalUint32(b, uint32(len(v))), v...)
+}
+
+func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
+	attrs := attributesFromFileInfo(fi)
+
+	data, _ := attrs.MarshalBinary()
+
+	return append(b, data...)
 }
 
 func marshal(b []byte, v interface{}) []byte {
@@ -639,12 +649,17 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 const dataHeaderLen = 4 + 1 + 4 + 4
 
 func (p *sshFxpReadPacket) getDataSlice(alloc *allocator, orderID uint32) []byte {
-	dataLen := clamp(p.Len, maxTxPacket)
+	dataLen := p.Len
+	if dataLen > maxTxPacket {
+		dataLen = maxTxPacket
+	}
+
 	if alloc != nil {
 		// GetPage returns a slice with capacity = maxMsgLength this is enough to avoid new allocations in
 		// sshFxpDataPacket.MarshalBinary
 		return alloc.GetPage(orderID)[:dataLen]
 	}
+
 	// allocate with extra space for the header
 	return make([]byte, dataLen, dataLen+dataHeaderLen)
 }

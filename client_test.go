@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/kr/fs"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 // assert that *Client implements fs.FileSystem
@@ -243,13 +245,24 @@ func TestClientShortPacket(t *testing.T) {
 // Issue #418: panic in clientConn.recv when the sid is incomplete.
 func TestClientNoSid(t *testing.T) {
 	stream := new(bytes.Buffer)
-	sendPacket(stream, &sshFxVersionPacket{Version: sftpProtocolVersion})
+
+	p := &sshfx.VersionPacket{
+		Version: sftpProtocolVersion,
+	}
+
+	data, err := p.MarshalBinary()
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+
+	stream.Write(data)
+
 	// Next packet has the sid cut short after two bytes.
 	stream.Write([]byte{0, 0, 0, 10, 0, 0})
 
 	c, err := NewClientPipe(stream, &sink{})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("unexpected error:", err)
 	}
 
 	_, err = c.Stat("anything")

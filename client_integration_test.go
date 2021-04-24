@@ -28,6 +28,8 @@ import (
 	"github.com/kr/fs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 const (
@@ -899,19 +901,23 @@ func TestClientSetuid(t *testing.T) {
 	f.Close()
 
 	const allPerm = os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky |
-		s_ISUID | s_ISGID | s_ISVTX
+		os.FileMode(sshfx.ModeSetUID|sshfx.ModeSetGID|sshfx.ModeSticky)
 
-	for _, c := range []struct {
+	type test struct {
 		goPerm    os.FileMode
-		posixPerm uint32
-	}{
-		{os.ModeSetuid, s_ISUID},
-		{os.ModeSetgid, s_ISGID},
-		{os.ModeSticky, s_ISVTX},
-		{os.ModeSetuid | os.ModeSticky, s_ISUID | s_ISVTX},
-	} {
+		sshfxPerm sshfx.FileMode
+	}
+
+	tests := []test{
+		{os.ModeSetuid, sshfx.ModeSetUID},
+		{os.ModeSetgid, sshfx.ModeSetGID},
+		{os.ModeSticky, sshfx.ModeSticky},
+		{os.ModeSetuid | os.ModeSticky, sshfx.ModeSetUID | sshfx.ModeSticky},
+	}
+
+	for _, c := range tests {
 		goPerm := 0700 | c.goPerm
-		posixPerm := 0700 | c.posixPerm
+		sshfxPerm := 0700 | c.sshfxPerm
 
 		err = sftp.Chmod(f.Name(), goPerm)
 		require.NoError(t, err)
@@ -925,7 +931,7 @@ func TestClientSetuid(t *testing.T) {
 
 		// For historical reasons, we also support literal POSIX mode bits in
 		// Chmod. Stat should still translate these to Go os.FileMode bits.
-		err = sftp.Chmod(f.Name(), os.FileMode(posixPerm))
+		err = sftp.Chmod(f.Name(), os.FileMode(sshfxPerm))
 		require.NoError(t, err)
 
 		info, err = sftp.Stat(f.Name())
@@ -1357,7 +1363,7 @@ func TestClientRead(t *testing.T) {
 			defer f2.Close()
 			hash2, n := readHash(t, f2)
 			if hash != hash2 || tt.n != n {
-				t.Errorf("Read: hash: want: %q, got %q, read: want: %v, got %v", hash, hash2, tt.n, n)
+				t.Errorf("Read: hash: want: %X, got %X, read: want: %v, got %v", hash, hash2, tt.n, n)
 			}
 		}
 	}
@@ -1525,7 +1531,7 @@ func TestClientWriteDeadlock(t *testing.T) {
 
 type timeBombWriter struct {
 	count int
-	w     io.WriteCloser
+	w     io.Writer
 }
 
 func (w *timeBombWriter) Write(b []byte) (int, error) {
@@ -1535,10 +1541,6 @@ func (w *timeBombWriter) Write(b []byte) (int, error) {
 
 	w.count--
 	return w.w.Write(b)
-}
-
-func (w *timeBombWriter) Close() error {
-	return w.w.Close()
 }
 
 // shared body for both previous tests
@@ -1565,8 +1567,8 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 
 	// Override the clienConn Writer with a failing version
 	// Replicates network error/drop part way through (after N good writes)
-	wrap := sftp.clientConn.conn.WriteCloser
-	sftp.clientConn.conn.WriteCloser = &timeBombWriter{
+	wrap := sftp.clientConn.conn.Writer
+	sftp.clientConn.conn.Writer = &timeBombWriter{
 		count: N,
 		w:     wrap,
 	}
@@ -1639,8 +1641,8 @@ func clientReadDeadlock(t *testing.T, N int, badfunc func(*File)) {
 
 	// Override the clienConn Writer with a failing version
 	// Replicates network error/drop part way through (after N good writes)
-	wrap := sftp.clientConn.conn.WriteCloser
-	sftp.clientConn.conn.WriteCloser = &timeBombWriter{
+	wrap := sftp.clientConn.conn.Writer
+	sftp.clientConn.conn.Writer = &timeBombWriter{
 		count: N,
 		w:     wrap,
 	}
@@ -2313,7 +2315,12 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 		}
 
 		for offset < size {
-			n, err := f2.Write(data[offset:min(len(data), offset+bufsize)])
+			buf := data[offset:]
+			if len(buf) > bufsize {
+				buf = buf[:bufsize]
+			}
+
+			n, err := f2.Write(buf)
 			if err != nil {
 				b.Fatal(err)
 			}

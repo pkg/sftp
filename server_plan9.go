@@ -1,11 +1,14 @@
-// +build !cgo windows android
+// +build plan9
+// +build cgo
 
 package sftp
 
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"strconv"
+	"syscall"
 	"time"
 
 	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
@@ -13,6 +16,24 @@ import (
 
 func formatID(id uint32) string {
 	return strconv.FormatUint(uint64(id), 10)
+}
+
+func getUsername(uid string) string {
+	u, err := user.LookupId(uid)
+	if err != nil {
+		return uid
+	}
+
+	return u.Username
+}
+
+func getGroupName(gid string) string {
+	g, err := user.LookupGroupId(gid)
+	if err != nil {
+		return gid
+	}
+
+	return g.Name
 }
 
 // ls -l style output for a file, which is in the 'long output' section of a readdir response packet
@@ -29,6 +50,9 @@ func runLs(dirname string, dirent os.FileInfo) string {
 	uid, gid := "0", "0"
 
 	switch sys := dirent.Sys().(type) {
+	case *syscall.Dir:
+		uid = getUsername(sys.Uid)
+		gid = getGroupName(sys.Gid)
 	case *sshfx.Attributes:
 		uid = formatID(sys.UID)
 		gid = formatID(sys.GID)
