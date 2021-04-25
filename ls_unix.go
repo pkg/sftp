@@ -1,5 +1,4 @@
 // +build aix darwin dragonfly freebsd !android,linux netbsd openbsd solaris
-// +build cgo
 
 package sftp
 
@@ -14,7 +13,7 @@ func lsLinksUIDGID(fi os.FileInfo) (numLinks uint64, uid, gid string) {
 
 	switch sys := fi.Sys().(type) {
 	case *syscall.Stat_t:
-		numLinks = sys.Nlink
+		numLinks = uint64(sys.Nlink)
 		uid = lsUsername(lsFormatID(sys.Uid))
 		gid = lsGroupName(lsFormatID(sys.Gid))
 	default:

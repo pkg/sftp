@@ -1,5 +1,4 @@
 // +build darwin freebsd netbsd
-// +build cgo
 
 package sftp
 

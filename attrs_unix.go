@@ -1,5 +1,4 @@
 // +build aix dragonfly !android,linux openbsd solaris
-// +build cgo
 
 package sftp
 

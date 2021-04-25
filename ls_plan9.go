@@ -1,5 +1,4 @@
 // +build plan9
-// +build cgo
 
 package sftp
 
