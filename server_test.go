@@ -28,14 +28,14 @@ const (
 func TestRunLsWithExamplesDirectory(t *testing.T) {
 	path := "examples"
 	item, _ := os.Stat(path)
-	result := runLs(path, item)
+	result := lsFormat(item)
 	runLsTestHelper(t, result, typeDirectory, path)
 }
 
 func TestRunLsWithLicensesFile(t *testing.T) {
 	path := "LICENSE"
 	item, _ := os.Stat(path)
-	result := runLs(path, item)
+	result := lsFormat(item)
 	runLsTestHelper(t, result, typeFile, path)
 }
 

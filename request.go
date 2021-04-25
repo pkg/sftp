@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -414,13 +412,12 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if err == io.EOF && n == 0 {
 			return statusFromError(pkt.id(), io.EOF)
 		}
-		dirname := filepath.ToSlash(path.Base(r.Filepath))
 		ret := &sshFxpNamePacket{ID: pkt.id()}
 
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, &sshFxpNameAttr{
 				Name:     fi.Name(),
-				LongName: runLs(dirname, fi),
+				LongName: lsFormat(fi),
 				Attrs:    []interface{}{fi},
 			})
 		}
