@@ -177,11 +177,6 @@ func (c *clientConn) getChannel(sid uint32) (chan<- result, bool) {
 	return ch, ok
 }
 
-type idmarshaler interface {
-	id() uint32
-	encoding.BinaryMarshaler
-}
-
 func (c *clientConn) sendPacket(req sshfx.PacketMarshaller, resp sshfx.Packet) error {
 	id := c.nextID()
 
