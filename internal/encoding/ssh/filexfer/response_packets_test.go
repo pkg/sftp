@@ -2,8 +2,30 @@ package filexfer
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 )
+
+func TestStatusPacketIs(t *testing.T) {
+	status := &StatusPacket{
+		StatusCode:   StatusFailure,
+		ErrorMessage: "error message",
+		LanguageTag:  "language tag",
+	}
+
+	if !errors.Is(status, StatusFailure) {
+		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
+	}
+	if !errors.Is(status, &StatusPacket{ StatusCode: StatusFailure }) {
+		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
+	}
+	if errors.Is(status, StatusOK) {
+		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
+	}
+	if errors.Is(status, &StatusPacket{ StatusCode: StatusOK }) {
+		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
+	}
+}
 
 var _ Packet = &StatusPacket{}
 

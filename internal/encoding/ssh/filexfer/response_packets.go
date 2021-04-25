@@ -1,5 +1,9 @@
 package filexfer
 
+import (
+	"fmt"
+)
+
 // StatusPacket defines the SSH_FXP_STATUS packet.
 //
 // Specified in https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-7
@@ -7,6 +11,25 @@ type StatusPacket struct {
 	StatusCode   Status
 	ErrorMessage string
 	LanguageTag  string
+}
+
+// Error makes StatusPacket an error type.
+func (p *StatusPacket) Error() string {
+	if p.ErrorMessage == "" {
+		return "sftp: " + p.StatusCode.String()
+	}
+
+	return fmt.Sprintf("sftp: %q (%s)", p.ErrorMessage, p.StatusCode)
+}
+
+// Is returns true if target is a StatusPacket with the same StatusCode,
+// or target is a Status code which is the same as SatusCode.
+func (p *StatusPacket) Is(target error) bool {
+	if target, ok := target.(*StatusPacket); ok {
+		return p.StatusCode == target.StatusCode
+	}
+
+	return p.StatusCode == target
 }
 
 // Type returns the SSH_FXP_xy value associated with this packet type.
