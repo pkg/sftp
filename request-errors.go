@@ -1,5 +1,9 @@
 package sftp
 
+import (
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
+)
+
 type fxerr uint32
 
 // Error types that match the SFTP's SSH_FXP_STATUS codes. Gives you more
@@ -51,4 +55,21 @@ func (e fxerr) Error() string {
 	default:
 		return "failure"
 	}
+}
+
+// Is returns true if target represents the same SSH_FX_code as this fxerr.
+func (e fxerr) Is(target error) bool {
+	switch target := target.(type) {
+	case fxerr:
+		return e == target
+	case *StatusError:
+		return e == fxerr(target.Code)
+	// The errors below cannot be commutatively equivalent.
+	case sshfx.Status:
+		return sshfx.Status(e) == target
+	case *sshfx.StatusPacket:
+		return sshfx.Status(e) == target.StatusCode
+	}
+
+	return false
 }

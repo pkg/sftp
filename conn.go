@@ -3,6 +3,7 @@ package sftp
 import (
 	"encoding"
 	"io"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -177,6 +178,36 @@ func (c *clientConn) getChannel(sid uint32) (chan<- result, bool) {
 	return ch, ok
 }
 
+var errUnexpectedOK = errors.New("sftp: unexpected SSH_FX_OK")
+
+// statusToError normalises a sshfx.StatusPacket into a more standard form,
+// so that it can be checked against stdlib errors like io.EOF or os.ErrNotExist.
+func statusToError(status *sshfx.StatusPacket) error {
+	switch status.StatusCode {
+	case sshfx.StatusOK:
+		return nil
+	case sshfx.StatusEOF:
+		return io.EOF
+	case sshfx.StatusNoSuchFile:
+		return os.ErrNotExist
+	case sshfx.StatusPermissionDenied:
+		return os.ErrPermission
+	}
+
+	// Historical behavior is that we return a *StatusError in this case.
+	// As the sshfx.StatusPacket is internal right now, we shouldn’t return that anyways.
+	// Type-aliasing StatusError to sshfx.StatusPacket is structurally compatible,
+	// but the types of Code and StatusCode are different; it is unclear how compatible this would be.
+	return &StatusError{
+		Code: uint32(status.StatusCode),
+		msg:  status.ErrorMessage,
+		lang: status.LanguageTag,
+	}
+}
+
+// sendPacket sends the req packet to the remove server, and marshals a matching-type response in resp.
+// If an SSH_FXP_STATUS packet is received, then it returns an SSH_FXP_STATUS as an error.
+// If the expected response is an SSH_FXP_STATUS then resp should be nil.
 func (c *clientConn) sendPacket(req sshfx.PacketMarshaller, resp sshfx.Packet) error {
 	id := c.nextID()
 
@@ -187,7 +218,7 @@ func (c *clientConn) sendPacket(req sshfx.PacketMarshaller, resp sshfx.Packet) e
 
 	r := <-ch
 	if r.err != nil {
-		// sendPacket should never return an io.EOF except through a StatusError.
+		// sendPacket should never return an io.EOF except through an SSH_FX_EOF.
 		if errors.Is(r.err, io.EOF) {
 			return ErrSSHFxConnectionLost
 		}
@@ -213,11 +244,11 @@ func (c *clientConn) sendPacket(req sshfx.PacketMarshaller, resp sshfx.Packet) e
 			return err
 		}
 
-		return &StatusError{
-			Code: uint32(status.StatusCode),
-			msg:  status.ErrorMessage,
-			lang: status.LanguageTag,
+		if resp != nil && status.StatusCode == sshfx.StatusOK {
+			return errUnexpectedOK
 		}
+
+		return statusToError(&status)
 	}
 
 	if resp == nil {

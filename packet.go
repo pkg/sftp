@@ -48,6 +48,13 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 	return append(b, data...)
 }
 
+func marshalStatus(b []byte, err StatusError) []byte {
+	b = marshalUint32(b, err.Code)
+	b = marshalString(b, err.msg)
+	b = marshalString(b, err.lang)
+	return b
+}
+
 func marshal(b []byte, v interface{}) []byte {
 	if v == nil {
 		return b

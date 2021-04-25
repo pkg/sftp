@@ -258,7 +258,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 
 	statusErr, ok := err.(*StatusError)
 	if !ok {
-		t.Fatalf("failed to convert error from sendPacket to *StatusError: %T: %v", err, err)
+		t.Fatalf("failed to convert error from sendPacket to *StatusError: %#v", err)
 	}
 
 	if code := sshfx.Status(statusErr.Code); code != sshfx.StatusOPUnsupported {

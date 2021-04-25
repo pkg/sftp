@@ -303,12 +303,8 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 
 	var resp sshfx.NamePacket
 	for {
-		err := c.sendPacket(&sshfx.ReadDirPacket{
-			Handle: handle,
-		}, &resp)
+		err := c.sendPacket(&sshfx.ReadDirPacket{Handle: handle}, &resp)
 		if err != nil {
-			err := normaliseError(err)
-
 			if errors.Is(err, io.EOF) {
 				return attrs, nil
 			}
@@ -330,11 +326,9 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 func (c *Client) opendir(path string) (string, error) {
 	var resp sshfx.HandlePacket
 
-	err := c.sendPacket(&sshfx.OpenDirPacket{
-		Path: path,
-	}, &resp)
+	err := c.sendPacket(&sshfx.OpenDirPacket{Path: path}, &resp)
 	if err != nil {
-		return "", normaliseError(err)
+		return "", err
 	}
 
 	return resp.Handle, nil
@@ -344,12 +338,12 @@ func (c *Client) opendir(path string) (string, error) {
 // If 'p' is a symbolic link, the returned FileInfo structure describes the referent file.
 func (c *Client) Stat(p string) (os.FileInfo, error) {
 	var resp sshfx.AttrsPacket
-	err := c.sendPacket(&sshfx.StatPacket{
-		Path: p,
-	}, &resp)
+
+	err := c.sendPacket(&sshfx.StatPacket{Path: p}, &resp)
 	if err != nil {
-		return nil, normaliseError(err)
+		return nil, err
 	}
+
 	return fileInfoFromAttributes(path.Base(p), resp.Attrs), nil
 }
 
@@ -357,24 +351,24 @@ func (c *Client) Stat(p string) (os.FileInfo, error) {
 // If 'p' is a symbolic link, the returned FileInfo structure describes the symbolic link.
 func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	var resp sshfx.AttrsPacket
-	err := c.sendPacket(&sshfx.LStatPacket{
-		Path: p,
-	}, &resp)
+
+	err := c.sendPacket(&sshfx.LStatPacket{Path: p}, &resp)
 	if err != nil {
-		return nil, normaliseError(err)
+		return nil, err
 	}
+
 	return fileInfoFromAttributes(path.Base(p), resp.Attrs), nil
 }
 
 // ReadLink reads the target of a symbolic link.
 func (c *Client) ReadLink(p string) (string, error) {
 	var resp sshfx.NamePacket
-	err := c.sendPacket(&sshfx.ReadLinkPacket{
-		Path: p,
-	}, &resp)
+
+	err := c.sendPacket(&sshfx.ReadLinkPacket{Path: p}, &resp)
 	if err != nil {
-		return "", normaliseError(err)
+		return "", err
 	}
+
 	if len(resp.Entries) != 1 {
 		return "", unexpectedCount(1, uint32(len(resp.Entries)))
 	}
@@ -384,36 +378,32 @@ func (c *Client) ReadLink(p string) (string, error) {
 
 // Link creates a hard link at 'newname', pointing at the same inode as 'oldname'
 func (c *Client) Link(oldname, newname string) error {
-	err := c.sendPacket(&openssh.HardlinkExtendedPacket{
+	return c.sendPacket(&openssh.HardlinkExtendedPacket{
 		OldPath: oldname,
 		NewPath: newname,
 	}, nil)
-	return normaliseError(err)
 }
 
 // Symlink creates a symbolic link at 'newname', pointing at target 'oldname'
 func (c *Client) Symlink(oldname, newname string) error {
-	err := c.sendPacket(&sshfx.SymlinkPacket{
+	return c.sendPacket(&sshfx.SymlinkPacket{
 		TargetPath: oldname,
 		LinkPath:   newname,
 	}, nil)
-	return normaliseError(err)
 }
 
 func (c *Client) setstat(path string, attrs sshfx.Attributes) error {
-	err := c.sendPacket(&sshfx.SetstatPacket{
+	return c.sendPacket(&sshfx.SetstatPacket{
 		Path:  path,
 		Attrs: attrs,
 	}, nil)
-	return normaliseError(err)
 }
 
 func (c *Client) fsetstat(handle string, attrs sshfx.Attributes) error {
-	err := c.sendPacket(&sshfx.FSetstatPacket{
+	return c.sendPacket(&sshfx.FSetstatPacket{
 		Handle: handle,
 		Attrs:  attrs,
 	}, nil)
-	return normaliseError(err)
 }
 
 // Chtimes changes the access and modification times of the named file.
@@ -480,12 +470,9 @@ func (c *Client) OpenFile(path string, f int) (*File, error) {
 func (c *Client) open(path string, pflags uint32) (*File, error) {
 	var resp sshfx.HandlePacket
 
-	err := c.sendPacket(&sshfx.OpenPacket{
-		Filename: path,
-		PFlags:   pflags,
-	}, &resp)
+	err := c.sendPacket(&sshfx.OpenPacket{Filename: path, PFlags: pflags}, &resp)
 	if err != nil {
-		return nil, normaliseError(err)
+		return nil, err
 	}
 
 	return &File{
@@ -500,18 +487,13 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 // to SSH_FXP_OPEN or SSH_FXP_OPENDIR. The handle becomes invalid
 // immediately after this request has been sent.
 func (c *Client) close(handle string) error {
-	err := c.sendPacket(&sshfx.ClosePacket{
-		Handle: handle,
-	}, nil)
-
-	return normaliseError(err)
+	return c.sendPacket(&sshfx.ClosePacket{Handle: handle}, nil)
 }
 
 func (c *Client) fstat(handle string) (sshfx.Attributes, error) {
 	var resp sshfx.AttrsPacket
-	err := c.sendPacket(&sshfx.FStatPacket{
-		Handle: handle,
-	}, &resp)
+
+	err := c.sendPacket(&sshfx.FStatPacket{Handle: handle}, &resp)
 	if err != nil {
 		return sshfx.Attributes{}, err
 	}
@@ -526,11 +508,9 @@ func (c *Client) fstat(handle string) (sshfx.Attributes, error) {
 func (c *Client) StatVFS(path string) (*StatVFS, error) {
 	var resp openssh.StatVFSExtendedReplyPacket
 
-	err := c.sendPacket(&openssh.StatVFSExtendedPacket{
-		Path: path,
-	}, &resp)
+	err := c.sendPacket(&openssh.StatVFSExtendedPacket{Path: path}, &resp)
 	if err != nil {
-		return nil, normaliseError(err)
+		return nil, err
 	}
 
 	return &StatVFS{
@@ -553,51 +533,48 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 // empty strings are ignored.
 func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 
-// Remove removes the specified file or directory. An error will be returned if no
-// file or directory with the specified path exists, or if the specified directory
-// is not empty.
+// Remove removes the specified file or directory.
+// An error will be returned if no file or directory with the specified path exists,
+// or if the specified directory is not empty.
 func (c *Client) Remove(path string) error {
-	err := c.sendPacket(&sshfx.RemovePacket{
-		Path: path,
-	}, nil)
+	err := c.sendPacket(&sshfx.RemovePacket{Path: path}, nil)
 
 	// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
+	if err == os.ErrPermission {
+		return c.RemoveDirectory(path)
+	}
+
 	// serv-u returns SSH_FX_FILE_IS_A_DIRECTORY
 	if err, ok := err.(*StatusError); ok {
-		switch err.Code {
-		case sshFxFailure, sshFxFileIsADirectory, sshFxPermissionDenied:
+		switch sshfx.Status(err.Code) {
+		case sshfx.StatusFailure, sshfx.StatusV6FileIsADirectory:
 			return c.RemoveDirectory(path)
 		}
 	}
 
-	return normaliseError(err)
+	return err
 }
 
 // RemoveDirectory removes a directory path.
 func (c *Client) RemoveDirectory(path string) error {
-	err := c.sendPacket(&sshfx.RmdirPacket{
-		Path: path,
-	}, nil)
-	return normaliseError(err)
+	return c.sendPacket(&sshfx.RmdirPacket{Path: path}, nil)
 }
 
 // Rename renames a file.
 func (c *Client) Rename(oldname, newname string) error {
-	err := c.sendPacket(&sshfx.RenamePacket{
+	return c.sendPacket(&sshfx.RenamePacket{
 		OldPath: oldname,
 		NewPath: newname,
 	}, nil)
-	return normaliseError(err)
 }
 
 // PosixRename renames a file using the posix-rename@openssh.com extension
 // which will replace newname if it already exists.
 func (c *Client) PosixRename(oldname, newname string) error {
-	err := c.sendPacket(&openssh.PosixRenameExtendedPacket{
+	return c.sendPacket(&openssh.PosixRenameExtendedPacket{
 		OldPath: oldname,
 		NewPath: newname,
 	}, nil)
-	return normaliseError(err)
 }
 
 // RealPath can be used to have the server canonicalize any given path name to an absolute path.
@@ -606,11 +583,10 @@ func (c *Client) PosixRename(oldname, newname string) error {
 // or relative pathnames without a leading slash into absolute paths.
 func (c *Client) RealPath(path string) (string, error) {
 	var resp sshfx.NamePacket
-	err := c.sendPacket(&sshfx.RealPathPacket{
-		Path: path,
-	}, &resp)
+
+	err := c.sendPacket(&sshfx.RealPathPacket{Path: path}, &resp)
 	if err != nil {
-		return "", normaliseError(err)
+		return "", err
 	}
 
 	if len(resp.Entries) != 1 {
@@ -630,10 +606,7 @@ func (c *Client) Getwd() (string, error) {
 // directory with the specified path already exists, or if the directory's
 // parent folder does not exist (the method cannot create complete paths).
 func (c *Client) Mkdir(path string) error {
-	err := c.sendPacket(&sshfx.MkdirPacket{
-		Path: path,
-	}, nil)
-	return normaliseError(err)
+	return c.sendPacket(&sshfx.MkdirPacket{Path: path}, nil)
 }
 
 // MkdirAll creates a directory named path, along with any necessary parents,
@@ -737,8 +710,9 @@ func (f *File) readChunkAt(b []byte, off int64) (n int, err error) {
 			Offset: uint64(off) + uint64(n),
 			Len:    uint32(len(b) - n),
 		}, &resp)
+
 		if err != nil {
-			return n, normaliseError(err)
+			return n, err
 		}
 
 		// When resp.Data and b coincide, this copy gets short-circuited.
@@ -1116,7 +1090,6 @@ func (f *File) writeChunkAt(b []byte, off int64) (int, error) {
 		Data:   b,
 	}, nil)
 
-	err = normaliseError(err)
 	if err != nil {
 		return 0, err
 	}
@@ -1495,10 +1468,7 @@ func (f *File) Chmod(mode os.FileMode) error {
 //
 // Sync requires the server to support the fsync@openssh.com extension.
 func (f *File) Sync() error {
-	err := f.c.sendPacket(&openssh.FSyncExtendedPacket{
-		Handle: f.handle,
-	}, nil)
-	return normaliseError(err)
+	return f.c.sendPacket(&openssh.FSyncExtendedPacket{Handle: f.handle}, nil)
 }
 
 // Truncate sets the size of the current file. Although it may be safely assumed
@@ -1510,50 +1480,6 @@ func (f *File) Truncate(size int64) error {
 	var attrs sshfx.Attributes
 	attrs.SetSize(uint64(size))
 	return f.c.fsetstat(f.handle, attrs)
-}
-
-// normaliseError normalises an error into a more standard form that can be
-// checked against stdlib errors like io.EOF or os.ErrNotExist.
-func normaliseError(err error) error {
-	switch err := err.(type) {
-	case *StatusError:
-		switch err.Code {
-		case sshFxEOF:
-			return io.EOF
-		case sshFxNoSuchFile:
-			return os.ErrNotExist
-		case sshFxPermissionDenied:
-			return os.ErrPermission
-		case sshFxOk:
-			return nil
-		default:
-			return err
-		}
-	default:
-		return err
-	}
-}
-
-func unmarshalStatus(id uint32, data []byte) error {
-	sid, data := unmarshalUint32(data)
-	if sid != id {
-		return &unexpectedIDErr{id, sid}
-	}
-	code, data := unmarshalUint32(data)
-	msg, data, _ := unmarshalStringSafe(data)
-	lang, _, _ := unmarshalStringSafe(data)
-	return &StatusError{
-		Code: code,
-		msg:  msg,
-		lang: lang,
-	}
-}
-
-func marshalStatus(b []byte, err StatusError) []byte {
-	b = marshalUint32(b, err.Code)
-	b = marshalString(b, err.msg)
-	b = marshalString(b, err.lang)
-	return b
 }
 
 // flags converts the flags passed to OpenFile into ssh flags.

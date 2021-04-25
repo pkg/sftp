@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 const (
@@ -226,6 +228,23 @@ type StatusError struct {
 
 func (s *StatusError) Error() string {
 	return fmt.Sprintf("sftp: %q (%v)", s.msg, fx(s.Code))
+}
+
+// Is returns true if target represents the same SSH_FX_code as this StatusError.
+func (s *StatusError) Is(target error) bool {
+	switch target := target.(type) {
+	case fxerr:
+		return fxerr(s.Code) == target
+	case *StatusError:
+		return s.Code == target.Code
+	// The errors below cannot be commutatively equivalent.
+	case sshfx.Status:
+		return sshfx.Status(s.Code) == target
+	case *sshfx.StatusPacket:
+		return sshfx.Status(s.Code) == target.StatusCode
+	}
+
+	return false
 }
 
 // FxCode returns the error code typed to match against the exported codes
