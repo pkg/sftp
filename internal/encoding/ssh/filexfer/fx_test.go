@@ -90,13 +90,13 @@ func TestStatusIs(t *testing.T) {
 	if !errors.Is(status, StatusFailure) {
 		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
 	}
-	if !errors.Is(status, &StatusPacket{ StatusCode: StatusFailure }) {
+	if !errors.Is(status, &StatusPacket{StatusCode: StatusFailure}) {
 		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
 	}
 	if errors.Is(status, StatusOK) {
 		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
 	}
-	if errors.Is(status, &StatusPacket{ StatusCode: StatusOK }) {
+	if errors.Is(status, &StatusPacket{StatusCode: StatusOK}) {
 		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
 	}
 }
