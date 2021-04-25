@@ -518,13 +518,20 @@ func BenchmarkMarshalInit(b *testing.B) {
 	})
 }
 
-func benchMarshalFX(b *testing.B, packet sshfx.PacketMarshaller) {
+const (
+	PreallocYes = true
+	PreallocNo  = false
+)
+
+func benchMarshalFX(b *testing.B, prealloc bool, packet sshfx.PacketMarshaller) {
 	conn := &conn{
 		Writer: ioutil.Discard,
 	}
 
-	// Intentionally set to the default value in client.go.
-	buf := make([]byte, 1<<15)
+	var buf []byte
+	if prealloc {
+		buf = make([]byte, 64)
+	}
 
 	b.ResetTimer()
 
@@ -534,7 +541,14 @@ func benchMarshalFX(b *testing.B, packet sshfx.PacketMarshaller) {
 }
 
 func BenchmarkMarshalOpen(b *testing.B) {
-	benchMarshalFX(b, &sshfx.OpenPacket{
+	benchMarshalFX(b, PreallocNo, &sshfx.OpenPacket{
+		Filename: "/home/test/some/random/path",
+		PFlags:   flags(os.O_RDONLY),
+	})
+}
+
+func BenchmarkMarshalOpenPrealloc(b *testing.B) {
+	benchMarshalFX(b, PreallocYes, &sshfx.OpenPacket{
 		Filename: "/home/test/some/random/path",
 		PFlags:   flags(os.O_RDONLY),
 	})
@@ -543,7 +557,17 @@ func BenchmarkMarshalOpen(b *testing.B) {
 func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 	data := make([]byte, 32*1024)
 
-	benchMarshalFX(b, &sshfx.WritePacket{
+	benchMarshalFX(b, PreallocNo, &sshfx.WritePacket{
+		Handle: "someopaquehandle",
+		Offset: 0,
+		Data:   data,
+	})
+}
+
+func BenchmarkMarshalWriteWorstCasePrealloc(b *testing.B) {
+	data := make([]byte, 32*1024)
+
+	benchMarshalFX(b, PreallocYes, &sshfx.WritePacket{
 		Handle: "someopaquehandle",
 		Offset: 0,
 		Data:   data,
@@ -553,7 +577,17 @@ func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 func BenchmarkMarshalWrite1k(b *testing.B) {
 	data := make([]byte, 1025)
 
-	benchMarshalFX(b, &sshfx.WritePacket{
+	benchMarshalFX(b, PreallocNo, &sshfx.WritePacket{
+		Handle: "someopaquehandle",
+		Offset: 0,
+		Data:   data,
+	})
+}
+
+func BenchmarkMarshalWrite1kPrealloc(b *testing.B) {
+	data := make([]byte, 1025)
+
+	benchMarshalFX(b, PreallocYes, &sshfx.WritePacket{
 		Handle: "someopaquehandle",
 		Offset: 0,
 		Data:   data,
