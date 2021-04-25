@@ -24,7 +24,7 @@ func TestRawPacket(t *testing.T) {
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	buf, err := p.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -38,13 +38,13 @@ func TestRawPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 2, 'e', 'n',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Errorf("RawPacket.Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Errorf("RawPacket.MarshalBinary() = %X, but wanted %X", buf, want)
 	}
 
 	*p = RawPacket{}
 
-	if err := p.ReadFrom(bytes.NewReader(data), nil, DefaultMaxPacketLength); err != nil {
+	if err := p.ReadFrom(bytes.NewReader(buf), nil, DefaultMaxPacketLength); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -70,15 +70,15 @@ func TestRawPacket(t *testing.T) {
 	resp.UnmarshalPacketBody(&p.Data)
 
 	if resp.StatusCode != StatusEOF {
-		t.Errorf("UnmarshalPacketBody(RawPacket.Data): StatusCode was %v, but expected %v", resp.StatusCode, StatusEOF)
+		t.Errorf("UnmarshalPacketBody(): StatusCode was %v, but expected %v", resp.StatusCode, StatusEOF)
 	}
 
 	if resp.ErrorMessage != errMsg {
-		t.Errorf("UnmarshalPacketBody(RawPacket.Data): ErrorMessage was %q, but expected %q", resp.ErrorMessage, errMsg)
+		t.Errorf("UnmarshalPacketBody(): ErrorMessage was %q, but expected %q", resp.ErrorMessage, errMsg)
 	}
 
 	if resp.LanguageTag != langTag {
-		t.Errorf("UnmarshalPacketBody(RawPacket.Data): LanguageTag was %q, but expected %q", resp.LanguageTag, langTag)
+		t.Errorf("UnmarshalPacketBody(): LanguageTag was %q, but expected %q", resp.LanguageTag, langTag)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestRequestPacket(t *testing.T) {
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	buf, err := p.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -107,13 +107,13 @@ func TestRequestPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 3, 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Errorf("RequestPacket.Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Errorf("RequestPacket.MarshalBinary() = %X, but wanted %X", buf, want)
 	}
 
 	*p = RequestPacket{}
 
-	if err := p.ReadFrom(bytes.NewReader(data), nil, DefaultMaxPacketLength); err != nil {
+	if err := p.ReadFrom(bytes.NewReader(buf), nil, DefaultMaxPacketLength); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

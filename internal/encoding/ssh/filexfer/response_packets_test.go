@@ -43,7 +43,7 @@ func TestStatusPacket(t *testing.T) {
 		LanguageTag:  languageTag,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -57,14 +57,14 @@ func TestStatusPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 9, 'x', '-', 'e', 'x', 'a', 'm', 'p', 'l', 'e',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = StatusPacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -93,7 +93,7 @@ func TestHandlePacket(t *testing.T) {
 		Handle: "somehandle",
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -105,14 +105,14 @@ func TestHandlePacket(t *testing.T) {
 		0x00, 0x00, 0x00, 10, 's', 'o', 'm', 'e', 'h', 'a', 'n', 'd', 'l', 'e',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = HandlePacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -134,7 +134,7 @@ func TestDataPacket(t *testing.T) {
 		Data: payload,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -146,14 +146,14 @@ func TestDataPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 6, 'f', 'o', 'o', 'b', 'a', 'r',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = DataPacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -193,7 +193,7 @@ func TestNamePacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -213,14 +213,14 @@ func TestNamePacket(t *testing.T) {
 		0x87, 0x65, 0x43, 0x02,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = NamePacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -262,7 +262,7 @@ func TestAttrsPacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -275,14 +275,14 @@ func TestAttrsPacket(t *testing.T) {
 		0x87, 0x65, 0x43, 0x21,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = AttrsPacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

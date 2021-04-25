@@ -37,7 +37,7 @@ func TestFSyncExtendedPacket(t *testing.T) {
 	}
 
 	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", data, want)
 	}
 
 	var p sshfx.ExtendedPacket
