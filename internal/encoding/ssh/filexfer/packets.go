@@ -232,7 +232,7 @@ type RequestPacket struct {
 	Request Packet
 }
 
-// Type returns the SSH_FXP_xyI value associated with the underlying packet.
+// Type returns the SSH_FXP_xy value associated with the underlying packet.
 func (p *RequestPacket) Type() PacketType {
 	return p.Request.Type()
 }
