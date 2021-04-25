@@ -14,6 +14,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 var _ = fmt.Print
@@ -433,6 +435,35 @@ func TestRequestRenameFail(t *testing.T) {
 	checkRequestServerAllocator(t, p)
 }
 
+func testFileInfoSys(sys interface{}) error {
+	switch sys := sys.(type) {
+	case *sshfx.Attributes:
+		uid, gid, ok := sys.GetUIDGID()
+		if !ok {
+			return nil
+		}
+		if uid != 65534 {
+			return fmt.Errorf("UID failed to match: %d", uid)
+		}
+		if gid != 65534 {
+			return fmt.Errorf("GID failed to match: %d", gid)
+		}
+
+	case *FileStat:
+		if sys.UID != 65534 {
+			return fmt.Errorf("UID failed to match: %d", sys.UID)
+		}
+		if sys.GID != 65534 {
+			return fmt.Errorf("GID failed to match: %d", sys.GID)
+		}
+
+	default:
+		return testFileInfoSysOS(sys)
+	}
+
+	return nil
+}
+
 func TestRequestStat(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -443,7 +474,7 @@ func TestRequestStat(t *testing.T) {
 	assert.Equal(t, "foo", fi.Name())
 	assert.Equal(t, int64(5), fi.Size())
 	assert.Equal(t, os.FileMode(0644), fi.Mode())
-	assert.NoError(t, testOsSys(fi.Sys()))
+	assert.NoError(t, testFileInfoSys(fi.Sys()))
 	checkRequestServerAllocator(t, p)
 }
 
@@ -462,7 +493,7 @@ func TestRequestSetstat(t *testing.T) {
 	assert.Equal(t, "foo", fi.Name())
 	assert.Equal(t, int64(5), fi.Size())
 	assert.Equal(t, os.FileMode(0644), fi.Mode())
-	assert.NoError(t, testOsSys(fi.Sys()))
+	assert.NoError(t, testFileInfoSys(fi.Sys()))
 	checkRequestServerAllocator(t, p)
 }
 
@@ -478,7 +509,7 @@ func TestRequestFstat(t *testing.T) {
 	assert.Equal(t, "foo", fi.Name())
 	assert.Equal(t, int64(5), fi.Size())
 	assert.Equal(t, os.FileMode(0644), fi.Mode())
-	assert.NoError(t, testOsSys(fi.Sys()))
+	assert.NoError(t, testFileInfoSys(fi.Sys()))
 	checkRequestServerAllocator(t, p)
 }
 
