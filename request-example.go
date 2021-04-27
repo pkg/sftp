@@ -469,7 +469,7 @@ func (fs *root) Realpath(p string) string {
 	if fs.startDirectory == "" || fs.startDirectory == "/" {
 		return cleanPath(p)
 	}
-	return cleanPathWithBase(p, fs.startDirectory)
+	return cleanPathWithBase(fs.startDirectory, p)
 }
 
 // In memory file-system-y thing that the Hanlders live on

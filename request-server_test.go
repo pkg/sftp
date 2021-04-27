@@ -816,15 +816,15 @@ func TestRealPath(t *testing.T) {
 	}
 
 	p := root.Realpath(".")
-	require.Equal(t, root.startDirectory, p)
+	assert.Equal(t, root.startDirectory, p)
 	p = root.Realpath("/")
-	require.Equal(t, "/", p)
+	assert.Equal(t, "/", p)
 	p = root.Realpath("..")
-	require.Equal(t, "/", p)
+	assert.Equal(t, "/", p)
 	p = root.Realpath("../../..")
-	require.Equal(t, "/", p)
+	assert.Equal(t, "/", p)
 	p = root.Realpath("relpath")
-	require.Equal(t, path.Join(root.startDirectory, "relpath"), p)
+	assert.Equal(t, path.Join(root.startDirectory, "relpath"), p)
 }
 
 func TestCleanPath(t *testing.T) {

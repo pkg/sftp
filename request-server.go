@@ -199,8 +199,8 @@ func (rs *RequestServer) packetWorker(
 			rpkt = statusFromError(pkt.ID, rs.closeRequest(handle))
 		case *sshFxpRealpathPacket:
 			var realPath string
-			if realPather, ok := rs.Handlers.FileList.(RealpathFileLister); ok {
-				realPath = realPather.Realpath(pkt.getPath())
+			if realPather, ok := rs.Handlers.FileList.(RealPathFileLister); ok {
+				realPath = realPather.RealPath(pkt.getPath())
 			} else {
 				realPath = cleanPath(pkt.getPath())
 			}
@@ -284,10 +284,10 @@ func cleanPacketPath(pkt *sshFxpRealpathPacket, realPath string) responsePacket 
 
 // Makes sure we have a clean POSIX (/) absolute path to work with
 func cleanPath(p string) string {
-	return cleanPathWithBase(p, "/")
+	return cleanPathWithBase("/", p)
 }
 
-func cleanPathWithBase(p, base string) string {
+func cleanPathWithBase(base, p string) string {
 	p = filepath.ToSlash(p)
 	if !path.IsAbs(p) {
 		return path.Join(base, p)

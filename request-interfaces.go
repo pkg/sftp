@@ -86,13 +86,13 @@ type LstatFileLister interface {
 	Lstat(*Request) (ListerAt, error)
 }
 
-// RealpathFileLister is a FileLister that implements the Realpath method.
+// RealPathFileLister is a FileLister that implements the Realpath method.
 // We use "/" as start directory for relative paths, implementing this
 // interface you can customize the start directory.
 // You have to return an absolute POSIX path.
-type RealpathFileLister interface {
+type RealPathFileLister interface {
 	FileLister
-	Realpath(string) string
+	RealPath(string) string
 }
 
 // ListerAt does for file lists what io.ReaderAt does for files.
