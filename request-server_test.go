@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path"
 	"runtime"
 	"testing"
 	"time"
@@ -805,6 +806,25 @@ func TestUncleanDisconnect(t *testing.T) {
 	err = <-p.svrResult
 	require.EqualError(t, err, io.ErrUnexpectedEOF.Error())
 	checkRequestServerAllocator(t, p)
+}
+
+func TestRealPath(t *testing.T) {
+	root := &root{
+		rootFile:       &memFile{name: "/", modtime: time.Now(), isdir: true},
+		files:          make(map[string]*memFile),
+		startDirectory: "/apath",
+	}
+
+	p := root.Realpath(".")
+	assert.Equal(t, root.startDirectory, p)
+	p = root.Realpath("/")
+	assert.Equal(t, "/", p)
+	p = root.Realpath("..")
+	assert.Equal(t, "/", p)
+	p = root.Realpath("../../..")
+	assert.Equal(t, "/", p)
+	p = root.Realpath("relpath")
+	assert.Equal(t, path.Join(root.startDirectory, "relpath"), p)
 }
 
 func TestCleanPath(t *testing.T) {
