@@ -26,6 +26,11 @@ type StatVFSExtendedPacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_EXTENDED packet type.
+func (ep *StatVFSExtendedPacket) Type() sshfx.PacketType {
+	return sshfx.PacketTypeExtended
+}
+
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
 func (ep *StatVFSExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
@@ -47,7 +52,7 @@ func (ep *StatVFSExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 func (ep *StatVFSExtendedPacket) MarshalBinary() ([]byte, error) {
 	size := 4 + len(ep.Path) // string(path)
 
-	buf := sshfx.NewBuffer(make([]byte, size))
+	buf := sshfx.NewBuffer(make([]byte, 0, size))
 
 	ep.MarshalInto(buf)
 
@@ -90,6 +95,11 @@ type FStatVFSExtendedPacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_EXTENDED packet type.
+func (ep *FStatVFSExtendedPacket) Type() sshfx.PacketType {
+	return sshfx.PacketTypeExtended
+}
+
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
 func (ep *FStatVFSExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
@@ -111,7 +121,7 @@ func (ep *FStatVFSExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 func (ep *FStatVFSExtendedPacket) MarshalBinary() ([]byte, error) {
 	size := 4 + len(ep.Path) // string(path)
 
-	buf := sshfx.NewBuffer(make([]byte, size))
+	buf := sshfx.NewBuffer(make([]byte, 0, size))
 
 	ep.MarshalInto(buf)
 
@@ -154,12 +164,25 @@ type StatVFSExtendedReplyPacket struct {
 	MaxNameLength uint64 /* f_namemax: maximum filename length */
 }
 
+// Type returns the SSH_FXP_EXTENDED_REPLY packet type.
+func (ep *StatVFSExtendedReplyPacket) Type() sshfx.PacketType {
+	return sshfx.PacketTypeExtendedReply
+}
+
 // MarshalPacket returns ep as a two-part binary encoding of the full extended reply packet.
 func (ep *StatVFSExtendedReplyPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedReplyPacket{
 		Data: ep,
 	}
 	return p.MarshalPacket(reqid, b)
+}
+
+// UnmarshalPacketBody returns ep as a two-part binary encoding of the full extended reply packet.
+func (ep *StatVFSExtendedReplyPacket) UnmarshalPacketBody(buf *sshfx.Buffer) (err error) {
+	p := &sshfx.ExtendedReplyPacket{
+		Data: ep,
+	}
+	return p.UnmarshalPacketBody(buf)
 }
 
 // MarshalInto encodes ep into the binary encoding of the (f)statvfs@openssh.com extended reply packet-specific data.
@@ -183,7 +206,7 @@ func (ep *StatVFSExtendedReplyPacket) MarshalInto(buf *sshfx.Buffer) {
 func (ep *StatVFSExtendedReplyPacket) MarshalBinary() ([]byte, error) {
 	size := 11 * 8 // 11 × uint64(various)
 
-	b := sshfx.NewBuffer(make([]byte, size))
+	b := sshfx.NewBuffer(make([]byte, 0, size))
 	ep.MarshalInto(b)
 	return b.Bytes(), nil
 }

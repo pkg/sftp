@@ -22,7 +22,7 @@ func (e *ExtensionPair) MarshalInto(buf *Buffer) {
 
 // MarshalBinary returns e as the binary encoding of e.
 func (e *ExtensionPair) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.Len()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

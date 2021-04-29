@@ -27,6 +27,11 @@ type PosixRenameExtendedPacket struct {
 	NewPath string
 }
 
+// Type returns the SSH_FXP_EXTENDED packet type.
+func (ep *PosixRenameExtendedPacket) Type() sshfx.PacketType {
+	return sshfx.PacketTypeExtended
+}
+
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
 func (ep *PosixRenameExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
@@ -50,7 +55,7 @@ func (ep *PosixRenameExtendedPacket) MarshalBinary() ([]byte, error) {
 	// string(oldpath) + string(newpath)
 	size := 4 + len(ep.OldPath) + 4 + len(ep.NewPath)
 
-	buf := sshfx.NewBuffer(make([]byte, size))
+	buf := sshfx.NewBuffer(make([]byte, 0, size))
 	ep.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

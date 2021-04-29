@@ -2,6 +2,7 @@ package filexfer
 
 import (
 	"bufio"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -80,5 +81,22 @@ func TestFxNames(t *testing.T) {
 
 	if err := scan.Err(); err != nil {
 		t.Fatal("unexpected error:", err)
+	}
+}
+
+func TestStatusIs(t *testing.T) {
+	status := StatusFailure
+
+	if !errors.Is(status, StatusFailure) {
+		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
+	}
+	if !errors.Is(status, &StatusPacket{StatusCode: StatusFailure}) {
+		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
+	}
+	if errors.Is(status, StatusOK) {
+		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
+	}
+	if errors.Is(status, &StatusPacket{StatusCode: StatusOK}) {
+		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
 	}
 }

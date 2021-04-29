@@ -1,11 +1,13 @@
-// +build !cgo plan9 windows android
+// +build plan9 windows android
 
 package sftp
 
 import (
 	"os"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
-func fileStatFromInfoOs(fi os.FileInfo, flags *uint32, fileStat *FileStat) {
-	// todo
+func attributesFromFileInfo(fi os.FileInfo) sshfx.Attributes {
+	return attributesFromGenericFileInfo(fi)
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -68,17 +66,22 @@ func requestFromPacket(ctx context.Context, pkt hasPath) *Request {
 
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
-	return &Request{Method: method, Filepath: cleanPath(path),
-		state: state{RWMutex: new(sync.RWMutex)}}
+	return &Request{
+		Method:   method,
+		Filepath: cleanPath(path),
+		state: state{
+			RWMutex: new(sync.RWMutex),
+		},
+	}
 }
 
 // shallow copy of existing request
 func (r *Request) copy() *Request {
 	r.state.Lock()
 	defer r.state.Unlock()
-	r2 := new(Request)
-	*r2 = *r
-	return r2
+	var r2 Request
+	r2 = *r
+	return &r2
 }
 
 // Context returns the request's context. To change the context,
@@ -219,8 +222,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 	case "Stat", "Lstat", "Readlink":
 		return filestat(handlers.FileList, r, pkt)
 	default:
-		return statusFromError(pkt.id(),
-			errors.Errorf("unexpected method: %s", r.Method))
+		return statusFromError(pkt.id(), errors.Errorf("unexpected method: %s", r.Method))
 	}
 }
 
@@ -410,13 +412,12 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if err == io.EOF && n == 0 {
 			return statusFromError(pkt.id(), io.EOF)
 		}
-		dirname := filepath.ToSlash(path.Base(r.Filepath))
 		ret := &sshFxpNamePacket{ID: pkt.id()}
 
 		for _, fi := range finfo {
 			ret.NameAttrs = append(ret.NameAttrs, &sshFxpNameAttr{
 				Name:     fi.Name(),
-				LongName: runLs(dirname, fi),
+				LongName: lsFormat(fi),
 				Attrs:    []interface{}{fi},
 			})
 		}
@@ -455,8 +456,11 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			return statusFromError(pkt.id(), err)
 		}
 		if n == 0 {
-			err = &os.PathError{Op: strings.ToLower(r.Method), Path: r.Filepath,
-				Err: syscall.ENOENT}
+			err = &os.PathError{
+				Op:   strings.ToLower(r.Method),
+				Path: r.Filepath,
+				Err:  syscall.ENOENT,
+			}
 			return statusFromError(pkt.id(), err)
 		}
 		return &sshFxpStatResponse{
@@ -468,8 +472,11 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			return statusFromError(pkt.id(), err)
 		}
 		if n == 0 {
-			err = &os.PathError{Op: "readlink", Path: r.Filepath,
-				Err: syscall.ENOENT}
+			err = &os.PathError{
+				Op:   "readlink",
+				Path: r.Filepath,
+				Err:  syscall.ENOENT,
+			}
 			return statusFromError(pkt.id(), err)
 		}
 		filename := finfo[0].Name()

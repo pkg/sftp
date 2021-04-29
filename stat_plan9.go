@@ -3,6 +3,8 @@ package sftp
 import (
 	"os"
 	"syscall"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 var EBADF = syscall.NewError("fd out of range or not open")
@@ -42,63 +44,53 @@ func translateSyscallError(err error) (uint32, bool) {
 }
 
 // toFileMode converts sftp filemode bits to the os.FileMode specification
-func toFileMode(mode uint32) os.FileMode {
-	var fm = os.FileMode(mode & 0777)
-	switch mode & S_IFMT {
-	case syscall.S_IFBLK:
-		fm |= os.ModeDevice
-	case syscall.S_IFCHR:
-		fm |= os.ModeDevice | os.ModeCharDevice
-	case syscall.S_IFDIR:
-		fm |= os.ModeDir
-	case syscall.S_IFIFO:
-		fm |= os.ModeNamedPipe
-	case syscall.S_IFLNK:
-		fm |= os.ModeSymlink
-	case syscall.S_IFREG:
+func toFileMode(mode sshfx.FileMode) os.FileMode {
+	var ret = os.FileMode(mode & sshfx.ModePerm)
+
+	switch mode & sshfx.ModeType {
+	case sshfx.ModeNamedPipe:
+		ret |= os.ModeNamedPipe
+	case sshfx.ModeCharDevice:
+		ret |= os.ModeDevice | os.ModeCharDevice
+	case sshfx.ModeDir:
+		ret |= os.ModeDir
+	case sshfx.ModeDevice:
+		ret |= os.ModeDevice
+	case sshfx.ModeRegular:
 		// nothing to do
-	case syscall.S_IFSOCK:
-		fm |= os.ModeSocket
+	case sshfx.ModeSymlink:
+		ret |= os.ModeSymlink
+	case sshfx.ModeSocket:
+		ret |= os.ModeSocket
+	default:
+		ret |= os.ModeIrregular
 	}
-	return fm
-}
-
-// fromFileMode converts from the os.FileMode specification to sftp filemode bits
-func fromFileMode(mode os.FileMode) uint32 {
-	ret := uint32(0)
-
-	if mode&os.ModeDevice != 0 {
-		if mode&os.ModeCharDevice != 0 {
-			ret |= syscall.S_IFCHR
-		} else {
-			ret |= syscall.S_IFBLK
-		}
-	}
-	if mode&os.ModeDir != 0 {
-		ret |= syscall.S_IFDIR
-	}
-	if mode&os.ModeSymlink != 0 {
-		ret |= syscall.S_IFLNK
-	}
-	if mode&os.ModeNamedPipe != 0 {
-		ret |= syscall.S_IFIFO
-	}
-	if mode&os.ModeSocket != 0 {
-		ret |= syscall.S_IFSOCK
-	}
-
-	if mode&os.ModeType == 0 {
-		ret |= syscall.S_IFREG
-	}
-	ret |= uint32(mode & os.ModePerm)
 
 	return ret
 }
 
-// Plan 9 doesn't have setuid, setgid or sticky, but a Plan 9 client should
-// be able to send these bits to a POSIX server.
-const (
-	s_ISUID = 04000
-	s_ISGID = 02000
-	S_ISVTX = 01000
-)
+// fromFileMode converts from the os.FileMode specification to sftp filemode bits
+func fromFileMode(mode os.FileMode) sshfx.FileMode {
+	ret := sshfx.FileMode(mode & os.ModePerm)
+
+	switch {
+	case mode&os.ModeType == 0:
+		ret |= sshfx.ModeRegular
+	case mode&os.ModeDir != 0:
+		ret |= sshfx.ModeDir
+	case mode&os.ModeSymlink != 0:
+		ret |= sshfx.ModeSymlink
+	case mode&os.ModeDevice != 0:
+		if mode&os.ModeCharDevice != 0 {
+			ret |= sshfx.ModeCharDevice
+		} else {
+			ret |= sshfx.ModeDevice
+		}
+	case mode&os.ModeNamedPipe != 0:
+		ret |= sshfx.ModeNamedPipe
+	case mode&os.ModeSocket != 0:
+		ret |= sshfx.ModeSocket
+	}
+
+	return ret
+}

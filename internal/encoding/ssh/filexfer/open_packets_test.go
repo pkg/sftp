@@ -23,7 +23,7 @@ func TestOpenPacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -38,14 +38,14 @@ func TestOpenPacket(t *testing.T) {
 		0x87, 0x65, 0x43, 0x21,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = OpenPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -78,7 +78,7 @@ func TestOpenDirPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -90,14 +90,14 @@ func TestOpenDirPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = OpenDirPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

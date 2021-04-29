@@ -1,4 +1,4 @@
-// +build aix dragonfly !android,linux openbsd solaris
+// +build darwin freebsd netbsd
 
 package sftp
 
@@ -16,7 +16,7 @@ func attributesFromFileInfo(fi os.FileInfo) sshfx.Attributes {
 		attrs.SetSize(uint64(sys.Size))
 		attrs.SetUIDGID(sys.Uid, sys.Gid)
 		attrs.SetPermissions(sshfx.FileMode(sys.Mode))
-		attrs.SetACModTime(uint32(sys.Atim.Sec), uint32(sys.Mtim.Sec))
+		attrs.SetACModTime(uint32(sys.Atimespec.Sec), uint32(sys.Mtimespec.Sec))
 
 		return attrs
 	}

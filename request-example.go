@@ -6,6 +6,7 @@ package sftp
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -14,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 const maxSymlinkFollows = 5
@@ -59,7 +62,7 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	return fs.openfile(r.Filepath, r.Flags)
+	return fs.openfile(r.Filepath, r.Pflags())
 }
 
 func (fs *root) putfile(pathname string, file *memFile) error {
@@ -82,9 +85,7 @@ func (fs *root) putfile(pathname string, file *memFile) error {
 	return nil
 }
 
-func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
-	pflags := newFileOpenFlags(flags)
-
+func (fs *root) openfile(pathname string, pflags FileOpenFlags) (*memFile, error) {
 	file, err := fs.fetch(pathname)
 	if err == os.ErrNotExist {
 		if !pflags.Creat {
@@ -151,7 +152,7 @@ func (fs *root) Filecmd(r *Request) error {
 
 	switch r.Method {
 	case "Setstat":
-		file, err := fs.openfile(r.Filepath, sshFxfWrite)
+		file, err := fs.openfile(r.Filepath, FileOpenFlags{Write: true})
 		if err != nil {
 			return err
 		}
@@ -316,7 +317,7 @@ func (fs *root) link(oldpath, newpath string) error {
 	}
 
 	if file.IsDir() {
-		return errors.New("hard link not allowed for directory")
+		return fmt.Errorf("hard link not allowed for directory: %s", oldpath)
 	}
 
 	return fs.putfile(newpath, file)
@@ -593,7 +594,24 @@ func (f *memFile) Mode() os.FileMode {
 func (f *memFile) ModTime() time.Time { return f.modtime }
 func (f *memFile) IsDir() bool        { return f.isdir }
 func (f *memFile) Sys() interface{} {
-	return fakeFileInfoSys()
+	var attrs sshfx.Attributes
+
+	attrs.SetSize(uint64(f.size()))
+	attrs.SetUIDGID(65534, 65534)
+
+	switch {
+	case f.isdir:
+		attrs.SetPermissions(0755 | sshfx.ModeDir)
+	case f.symlink != "":
+		attrs.SetPermissions(0777 | sshfx.ModeSymlink)
+	default:
+		attrs.SetPermissions(0644 | sshfx.ModeRegular)
+	}
+
+	mtime := f.modtime.Unix()
+	attrs.SetACModTime(uint32(mtime), uint32(mtime))
+
+	return &attrs
 }
 
 func (f *memFile) ReadAt(b []byte, off int64) (int, error) {

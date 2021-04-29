@@ -113,48 +113,50 @@ func TestAttributes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			attr.Flags = tt.flags
 
-			buf := new(Buffer)
-			attr.MarshalInto(buf)
+			buf, err := attr.MarshalBinary()
+			if err != nil {
+				t.Fatal("unexpected error:", err)
+			}
 
-			if got, want := buf.Bytes(), tt.encoded; !bytes.Equal(got, want) {
-				t.Fatalf("MarshalInto() = %X, but wanted %X", got, want)
+			if !bytes.Equal(buf, tt.encoded) {
+				t.Fatalf("MarshalBinary() = %X, but wanted %X", buf, tt.encoded)
 			}
 
 			attr = Attributes{}
 
-			if err := attr.UnmarshalFrom(buf); err != nil {
+			if err := attr.UnmarshalBinary(buf); err != nil {
 				t.Fatal("unexpected error:", err)
 			}
 
 			if attr.Flags != tt.flags {
-				t.Errorf("UnmarshalFrom(): Flags was %x, but wanted %x", attr.Flags, tt.flags)
+				t.Errorf("UnmarshalBinary(): Flags was %x, but wanted %x", attr.Flags, tt.flags)
 			}
 
 			if attr.Flags&AttrSize != 0 && attr.Size != size {
-				t.Errorf("UnmarshalFrom(): Size was %x, but wanted %x", attr.Size, size)
+				t.Errorf("UnmarshalBinary(): Size was %x, but wanted %x", attr.Size, size)
 			}
 
 			if attr.Flags&AttrUIDGID != 0 {
 				if attr.UID != uid {
-					t.Errorf("UnmarshalFrom(): UID was %x, but wanted %x", attr.UID, uid)
+					t.Errorf("UnmarshalBinary(): UID was %x, but wanted %x", attr.UID, uid)
 				}
 
 				if attr.GID != gid {
-					t.Errorf("UnmarshalFrom(): GID was %x, but wanted %x", attr.GID, gid)
+					t.Errorf("UnmarshalBinary(): GID was %x, but wanted %x", attr.GID, gid)
 				}
 			}
 
 			if attr.Flags&AttrPermissions != 0 && attr.Permissions != perms {
-				t.Errorf("UnmarshalFrom(): Permissions was %#v, but wanted %#v", attr.Permissions, perms)
+				t.Errorf("UnmarshalBinary(): Permissions was %#v, but wanted %#v", attr.Permissions, perms)
 			}
 
 			if attr.Flags&AttrACModTime != 0 {
 				if attr.ATime != atime {
-					t.Errorf("UnmarshalFrom(): ATime was %x, but wanted %x", attr.ATime, atime)
+					t.Errorf("UnmarshalBinary(): ATime was %x, but wanted %x", attr.ATime, atime)
 				}
 
 				if attr.MTime != mtime {
-					t.Errorf("UnmarshalFrom(): MTime was %x, but wanted %x", attr.MTime, mtime)
+					t.Errorf("UnmarshalBinary(): MTime was %x, but wanted %x", attr.MTime, mtime)
 				}
 			}
 
@@ -162,11 +164,11 @@ func TestAttributes(t *testing.T) {
 				extAttrs := attr.ExtendedAttributes
 
 				if count := len(extAttrs); count != 1 {
-					t.Fatalf("UnmarshalFrom(): len(ExtendedAttributes) was %d, but wanted %d", count, 1)
+					t.Fatalf("UnmarshalBinary(): len(ExtendedAttributes) was %d, but wanted %d", count, 1)
 				}
 
 				if got := extAttrs[0]; got != extAttr {
-					t.Errorf("UnmarshalFrom(): ExtendedAttributes[0] was %#v, but wanted %#v", got, extAttr)
+					t.Errorf("UnmarshalBinary(): ExtendedAttributes[0] was %#v, but wanted %#v", got, extAttr)
 				}
 			}
 		})
@@ -189,8 +191,10 @@ func TestNameEntry(t *testing.T) {
 		},
 	}
 
-	buf := new(Buffer)
-	e.MarshalInto(buf)
+	buf, err := e.MarshalBinary()
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
 
 	want := []byte{
 		0x00, 0x00, 0x00, 0x03, 'f', 'o', 'o',
@@ -199,13 +203,13 @@ func TestNameEntry(t *testing.T) {
 		0x87, 0x65, 0x43, 0x21,
 	}
 
-	if got := buf.Bytes(); !bytes.Equal(got, want) {
-		t.Fatalf("MarshalInto() = %X, but wanted %X", got, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalBinary() = %X, but wanted %X", buf, want)
 	}
 
 	*e = NameEntry{}
 
-	if err := e.UnmarshalFrom(buf); err != nil {
+	if err := e.UnmarshalBinary(buf); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

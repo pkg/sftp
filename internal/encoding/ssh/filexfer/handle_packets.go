@@ -5,6 +5,11 @@ type ClosePacket struct {
 	Handle string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ClosePacket) Type() PacketType {
+	return PacketTypeClose
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ClosePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -34,6 +39,11 @@ type ReadPacket struct {
 	Handle string
 	Offset uint64
 	Len    uint32
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ReadPacket) Type() PacketType {
+	return PacketTypeRead
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -78,6 +88,11 @@ type WritePacket struct {
 	Data   []byte
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *WritePacket) Type() PacketType {
+	return PacketTypeWrite
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *WritePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -97,6 +112,14 @@ func (p *WritePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []b
 
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
+//
+// If p.Data is already populated, and of sufficient length to hold the data,
+// then this will copy the data into that byte slice.
+//
+// If p.Data has a length insufficient to hold the data,
+// then this will make a new slice of sufficient length, and copy the data into that.
+//
+// This means this _does not_ alias any of the data buffer that is passed in.
 func (p *WritePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	if p.Handle, err = buf.ConsumeString(); err != nil {
 		return err
@@ -106,16 +129,28 @@ func (p *WritePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 		return err
 	}
 
-	if p.Data, err = buf.ConsumeByteSlice(); err != nil {
+	data, err := buf.ConsumeByteSlice()
+	if err != nil {
 		return err
 	}
 
+	if len(p.Data) < len(data) {
+		p.Data = make([]byte, len(data))
+	}
+
+	n := copy(p.Data, data)
+	p.Data = p.Data[:n]
 	return nil
 }
 
 // FStatPacket defines the SSH_FXP_FSTAT packet.
 type FStatPacket struct {
 	Handle string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *FStatPacket) Type() PacketType {
+	return PacketTypeFStat
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -148,6 +183,11 @@ type FSetstatPacket struct {
 	Attrs  Attributes
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *FSetstatPacket) Type() PacketType {
+	return PacketTypeFSetstat
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *FSetstatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -177,6 +217,11 @@ func (p *FSetstatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // ReadDirPacket defines the SSH_FXP_READDIR packet.
 type ReadDirPacket struct {
 	Handle string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ReadDirPacket) Type() PacketType {
+	return PacketTypeReadDir
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.

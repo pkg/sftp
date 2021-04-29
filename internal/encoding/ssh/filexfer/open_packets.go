@@ -17,6 +17,11 @@ type OpenPacket struct {
 	Attrs    Attributes
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *OpenPacket) Type() PacketType {
+	return PacketTypeOpen
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *OpenPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -52,6 +57,11 @@ func (p *OpenPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // OpenDirPacket defines the SSH_FXP_OPENDIR packet.
 type OpenDirPacket struct {
 	Path string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *OpenDirPacket) Type() PacketType {
+	return PacketTypeOpenDir
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.

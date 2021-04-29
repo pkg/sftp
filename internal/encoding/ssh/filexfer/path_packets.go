@@ -5,6 +5,11 @@ type LStatPacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *LStatPacket) Type() PacketType {
+	return PacketTypeLStat
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *LStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -33,6 +38,11 @@ func (p *LStatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 type SetstatPacket struct {
 	Path  string
 	Attrs Attributes
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *SetstatPacket) Type() PacketType {
+	return PacketTypeSetstat
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -66,6 +76,11 @@ type RemovePacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *RemovePacket) Type() PacketType {
+	return PacketTypeRemove
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RemovePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -94,6 +109,11 @@ func (p *RemovePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 type MkdirPacket struct {
 	Path  string
 	Attrs Attributes
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *MkdirPacket) Type() PacketType {
+	return PacketTypeMkdir
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -127,6 +147,11 @@ type RmdirPacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *RmdirPacket) Type() PacketType {
+	return PacketTypeRmdir
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RmdirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -154,6 +179,11 @@ func (p *RmdirPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // RealPathPacket defines the SSH_FXP_REALPATH packet.
 type RealPathPacket struct {
 	Path string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *RealPathPacket) Type() PacketType {
+	return PacketTypeRealPath
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -185,6 +215,11 @@ type StatPacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *StatPacket) Type() PacketType {
+	return PacketTypeStat
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *StatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -213,6 +248,11 @@ func (p *StatPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 type RenamePacket struct {
 	OldPath string
 	NewPath string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *RenamePacket) Type() PacketType {
+	return PacketTypeRename
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -250,6 +290,11 @@ type ReadLinkPacket struct {
 	Path string
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ReadLinkPacket) Type() PacketType {
+	return PacketTypeReadLink
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ReadLinkPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
@@ -282,6 +327,11 @@ func (p *ReadLinkPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 type SymlinkPacket struct {
 	LinkPath   string
 	TargetPath string
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *SymlinkPacket) Type() PacketType {
+	return PacketTypeSymlink
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
