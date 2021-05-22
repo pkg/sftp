@@ -16,9 +16,10 @@ func TestExtensionPair(t *testing.T) {
 		Data: data,
 	}
 
-	buf := new(Buffer)
-
-	pair.MarshalInto(buf)
+	buf, err := pair.MarshalBinary()
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
 
 	want := []byte{
 		0x00, 0x00, 0x00, 3,
@@ -27,18 +28,18 @@ func TestExtensionPair(t *testing.T) {
 		'1',
 	}
 
-	if got := buf.Bytes(); !bytes.Equal(got, want) {
-		t.Errorf("ExtensionPair.MarshalInto() = %X, but wanted %X", got, want)
+	if !bytes.Equal(buf, want) {
+		t.Errorf("ExtensionPair.MarshalBinary() = %X, but wanted %X", buf, want)
 	}
 
 	*pair = ExtensionPair{}
 
-	if err := pair.UnmarshalFrom(buf); err != nil {
+	if err := pair.UnmarshalBinary(buf); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
 	if pair.Name != name {
-		t.Errorf("ExtensionPair.UnmarshalFrom(): Name was %q, but expected %q", pair.Name, name)
+		t.Errorf("ExtensionPair.UnmarshalBinary(): Name was %q, but expected %q", pair.Name, name)
 	}
 
 	if pair.Data != data {

@@ -17,7 +17,7 @@ func TestLStatPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -29,14 +29,14 @@ func TestLStatPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = LStatPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -62,7 +62,7 @@ func TestSetstatPacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -76,14 +76,14 @@ func TestSetstatPacket(t *testing.T) {
 		0x87, 0x65, 0x43, 0x21,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = SetstatPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -112,7 +112,7 @@ func TestRemovePacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -124,14 +124,14 @@ func TestRemovePacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = RemovePacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -157,7 +157,7 @@ func TestMkdirPacket(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -171,14 +171,14 @@ func TestMkdirPacket(t *testing.T) {
 		0x87, 0x65, 0x43, 0x21,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = MkdirPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -207,7 +207,7 @@ func TestRmdirPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -219,14 +219,14 @@ func TestRmdirPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = RmdirPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -247,7 +247,7 @@ func TestRealPathPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -259,14 +259,14 @@ func TestRealPathPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = RealPathPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -287,7 +287,7 @@ func TestStatPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -299,14 +299,14 @@ func TestStatPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = StatPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -329,7 +329,7 @@ func TestRenamePacket(t *testing.T) {
 		NewPath: newpath,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -342,14 +342,14 @@ func TestRenamePacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'b', 'a', 'r',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = RenamePacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -374,7 +374,7 @@ func TestReadLinkPacket(t *testing.T) {
 		Path: path,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -386,14 +386,14 @@ func TestReadLinkPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = ReadLinkPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -416,7 +416,7 @@ func TestSymlinkPacket(t *testing.T) {
 		TargetPath: targetpath,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -429,14 +429,14 @@ func TestSymlinkPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = SymlinkPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

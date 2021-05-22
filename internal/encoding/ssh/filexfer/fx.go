@@ -61,12 +61,22 @@ const (
 	StatusV6NoMatchingByteRangeLock
 )
 
-func (f Status) Error() string {
-	return f.String()
+func (s Status) Error() string {
+	return s.String()
 }
 
-func (f Status) String() string {
-	switch f {
+// Is returns true if the target is the same Status code,
+// or target is a StatusPacket with the same Status code.
+func (s Status) Is(target error) bool {
+	if target, ok := target.(*StatusPacket); ok {
+		return target.StatusCode == s
+	}
+
+	return s == target
+}
+
+func (s Status) String() string {
+	switch s {
 	case StatusOK:
 		return "SSH_FX_OK"
 	case StatusEOF:
@@ -132,6 +142,6 @@ func (f Status) String() string {
 	case StatusV6NoMatchingByteRangeLock:
 		return "SSH_FX_NO_MATCHING_BYTE_RANGE_LOCK"
 	default:
-		return fmt.Sprintf("SSH_FX_UNKNOWN(%d)", f)
+		return fmt.Sprintf("SSH_FX_UNKNOWN(%d)", s)
 	}
 }

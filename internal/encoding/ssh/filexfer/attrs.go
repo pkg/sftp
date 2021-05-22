@@ -34,6 +34,57 @@ type Attributes struct {
 	ExtendedAttributes []ExtendedAttribute
 }
 
+// GetSize returns the Size field and a bool that is true if and only if the value is valid/defined.
+func (a *Attributes) GetSize() (size uint64, ok bool) {
+	return a.Size, a.Flags&AttrSize != 0
+}
+
+// SetSize is a convenience function that sets the Size field,
+// and marks the field as valid/defined in Flags.
+func (a *Attributes) SetSize(size uint64) {
+	a.Flags |= AttrSize
+	a.Size = size
+}
+
+// GetUIDGID returns the UID and GID fields and a bool that is true if and only if the values are valid/defined.
+func (a *Attributes) GetUIDGID() (uid, gid uint32, ok bool) {
+	return a.UID, a.GID, a.Flags&AttrUIDGID != 0
+}
+
+// SetUIDGID is a convenience function that sets the UID and GID fields,
+// and marks the fields as valid/defined in Flags.
+func (a *Attributes) SetUIDGID(uid, gid uint32) {
+	a.Flags |= AttrUIDGID
+	a.UID = uid
+	a.GID = gid
+}
+
+// GetPermissions returns the Permissions field and a bool that is true if and only if the value is valid/defined.
+func (a *Attributes) GetPermissions() (perms FileMode, ok bool) {
+	return a.Permissions, a.Flags&AttrPermissions != 0
+}
+
+// SetPermissions is a convenience function that sets the Permissions field,
+// and marks the field as valid/defined in Flags.
+func (a *Attributes) SetPermissions(perms FileMode) {
+	a.Flags |= AttrPermissions
+	a.Permissions = perms
+}
+
+// GetACModTime returns the ATime and MTime fields and a bool that is true if and only if the values are valid/defined.
+func (a *Attributes) GetACModTime() (atime, mtime uint32, ok bool) {
+	return a.ATime, a.MTime, a.Flags&AttrACModTime != 0
+	return a.ATime, a.MTime, a.Flags&AttrACModTime != 0
+}
+
+// SetACModTime is a convenience function that sets the ATime and MTime fields,
+// and marks the fields as valid/defined in Flags.
+func (a *Attributes) SetACModTime(atime, mtime uint32) {
+	a.Flags |= AttrACModTime
+	a.ATime = atime
+	a.MTime = mtime
+}
+
 // Len returns the number of bytes a would marshal into.
 func (a *Attributes) Len() int {
 	length := 4
@@ -98,7 +149,7 @@ func (a *Attributes) MarshalInto(b *Buffer) {
 
 // MarshalBinary returns a as the binary encoding of a.
 func (a *Attributes) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, a.Len()))
+	buf := NewBuffer(make([]byte, 0, a.Len()))
 	a.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -107,9 +158,19 @@ func (a *Attributes) MarshalBinary() ([]byte, error) {
 //
 // NOTE: The values of fields not covered in the a.Flags are explicitly undefined.
 func (a *Attributes) UnmarshalFrom(b *Buffer) (err error) {
-	if a.Flags, err = b.ConsumeUint32(); err != nil {
+	flags, err := b.ConsumeUint32()
+	if err != nil {
 		return err
 	}
+
+	return a.XXX_UnmarshalByFlags(flags, b)
+}
+
+// XXX_UnmarshalByFlags uses the pre-existing a.Flags field to determine which fields to decode.
+// DO NOT USE THIS: it is an anti-corruption function to implement existing internal usage in pkg/sftp.
+// This function is not a part of any compatibility promise.
+func (a *Attributes) XXX_UnmarshalByFlags(flags uint32, b *Buffer) (err error) {
+	a.Flags = flags
 
 	// Short-circuit dummy attributes.
 	if a.Flags == 0 {
@@ -192,7 +253,7 @@ func (e *ExtendedAttribute) MarshalInto(b *Buffer) {
 
 // MarshalBinary returns e as the binary encoding of e.
 func (e *ExtendedAttribute) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.Len()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -239,7 +300,7 @@ func (e *NameEntry) MarshalInto(b *Buffer) {
 
 // MarshalBinary returns e as the binary encoding of e.
 func (e *NameEntry) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.Len()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

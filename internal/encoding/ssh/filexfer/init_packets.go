@@ -64,7 +64,7 @@ func (p *VersionPacket) MarshalBinary() ([]byte, error) {
 	}
 
 	b := NewBuffer(make([]byte, 4, 4+size))
-	b.AppendUint8(uint8(PacketTypeInit))
+	b.AppendUint8(uint8(PacketTypeVersion))
 	b.AppendUint32(p.Version)
 
 	for _, ext := range p.Extensions {
