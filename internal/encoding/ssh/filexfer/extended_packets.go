@@ -51,6 +51,11 @@ type ExtendedPacket struct {
 	Data ExtendedData
 }
 
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ExtendedPacket) Type() PacketType {
+	return PacketTypeExtended
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
@@ -95,6 +100,11 @@ func (p *ExtendedPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 // ExtendedReplyPacket defines the SSH_FXP_CLOSE packet.
 type ExtendedReplyPacket struct {
 	Data ExtendedData
+}
+
+// Type returns the SSH_FXP_xy value associated with this packet type.
+func (p *ExtendedReplyPacket) Type() PacketType {
+	return PacketTypeExtendedReply
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.

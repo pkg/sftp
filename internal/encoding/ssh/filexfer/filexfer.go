@@ -1,8 +1,11 @@
 // Package filexfer implements the wire encoding for secsh-filexfer as described in https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 package filexfer
 
-// Packet defines the behavior of an SFTP packet.
-type Packet interface {
+// PacketMarshaller narrowly defines packets that will only be transmitted.
+//
+// ExtendedPacket types will often only implement this interface,
+// since decoding the whole packet body of an ExtendedPacket can only be done dependent on the ExtendedRequest field.
+type PacketMarshaller interface {
 	// MarshalPacket is the primary intended way to encode a packet.
 	// The request-id for the packet is set from reqid.
 	//
@@ -15,9 +18,26 @@ type Packet interface {
 	//
 	// It shall encode in the first 4-bytes of the header the proper length of the rest of the header+payload.
 	MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error)
+}
+
+// Packet defines the behavior of a full generic SFTP packet.
+//
+// InitPacket, and VersionPacket are not generic SFTP packets, and instead implement (Un)MarshalBinary.
+//
+// ExtendedPacket types should not iplement this interface,
+// since decoding the whole packet body of an ExtendedPacket can only be done dependent on the ExtendedRequest field.
+type Packet interface {
+	PacketMarshaller
+
+	// Type returns the SSH_FXP_xy value associated with the specific packet.
+	Type() PacketType
 
 	// UnmarshalPacketBody decodes a packet body from the given Buffer.
 	// It is assumed that the common header values of the length, type and request-id have already been consumed.
+	//
+	// Implementations should not alias the given Buffer,
+	// instead they can consider prepopulating an internal buffer as a hint,
+	// and copying into that buffer if it has sufficient length.
 	UnmarshalPacketBody(buf *Buffer) error
 }
 

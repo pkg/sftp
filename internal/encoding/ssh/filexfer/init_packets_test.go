@@ -18,7 +18,7 @@ func TestInitPacket(t *testing.T) {
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	buf, err := p.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -31,14 +31,14 @@ func TestInitPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 1, '1',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalBinary() = %X, but wanted %X", buf, want)
 	}
 
 	*p = InitPacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	if err := p.UnmarshalBinary(buf[5:]); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -72,27 +72,27 @@ func TestVersionPacket(t *testing.T) {
 		},
 	}
 
-	data, err := p.MarshalBinary()
+	buf, err := p.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
 	want := []byte{
 		0x00, 0x00, 0x00, 17,
-		1,
+		2,
 		0x00, 0x00, 0x00, version,
 		0x00, 0x00, 0x00, 3, 'f', 'o', 'o',
 		0x00, 0x00, 0x00, 1, '1',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalBinary() = %X, but wanted %X", buf, want)
 	}
 
 	*p = VersionPacket{}
 
 	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
-	if err := p.UnmarshalBinary(data[5:]); err != nil {
+	if err := p.UnmarshalBinary(buf[5:]); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

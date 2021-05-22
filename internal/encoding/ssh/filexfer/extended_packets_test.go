@@ -42,7 +42,7 @@ func TestExtendedPacketNoData(t *testing.T) {
 		ExtendedRequest: extendedRequest,
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -54,14 +54,14 @@ func TestExtendedPacketNoData(t *testing.T) {
 		0x00, 0x00, 0x00, 11, 'f', 'o', 'o', '@', 'e', 'x', 'a', 'm', 'p', 'l', 'e',
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = ExtendedPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -86,7 +86,7 @@ func TestExtendedPacketTestData(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -99,8 +99,8 @@ func TestExtendedPacketTestData(t *testing.T) {
 		0x27,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = ExtendedPacket{
@@ -108,7 +108,7 @@ func TestExtendedPacketTestData(t *testing.T) {
 	}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -116,17 +116,17 @@ func TestExtendedPacketTestData(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
 	}
 
-	if data, ok := p.Data.(*testExtendedData); !ok {
-		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, data)
+	if buf, ok := p.Data.(*testExtendedData); !ok {
+		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if data.value != value {
-		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", data.value, value)
+	} else if buf.value != value {
+		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", buf.value, value)
 	}
 
 	*p = ExtendedPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -136,11 +136,11 @@ func TestExtendedPacketTestData(t *testing.T) {
 
 	wantBuffer := []byte{0x27}
 
-	if data, ok := p.Data.(*Buffer); !ok {
-		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, data)
+	if buf, ok := p.Data.(*Buffer); !ok {
+		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if !bytes.Equal(data.b, wantBuffer) {
-		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", data.b, wantBuffer)
+	} else if !bytes.Equal(buf.b, wantBuffer) {
+		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", buf.b, wantBuffer)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestExtendedReplyNoData(t *testing.T) {
 
 	p := &ExtendedReplyPacket{}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -164,14 +164,14 @@ func TestExtendedReplyNoData(t *testing.T) {
 		0x00, 0x00, 0x00, 42,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = ExtendedReplyPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestExtendedReplyPacketTestData(t *testing.T) {
 		},
 	}
 
-	data, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -202,8 +202,8 @@ func TestExtendedReplyPacketTestData(t *testing.T) {
 		0x27,
 	}
 
-	if !bytes.Equal(data, want) {
-		t.Fatalf("Marshal() = %X, but wanted %X", data, want)
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
 	*p = ExtendedReplyPacket{
@@ -211,30 +211,30 @@ func TestExtendedReplyPacketTestData(t *testing.T) {
 	}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if data, ok := p.Data.(*testExtendedData); !ok {
-		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, data)
+	if buf, ok := p.Data.(*testExtendedData); !ok {
+		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if data.value != value {
-		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", data.value, value)
+	} else if buf.value != value {
+		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", buf.value, value)
 	}
 
 	*p = ExtendedReplyPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
-	if err := p.UnmarshalPacketBody(NewBuffer(data[9:])); err != nil {
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
 	wantBuffer := []byte{0x27}
 
-	if data, ok := p.Data.(*Buffer); !ok {
-		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, data)
+	if buf, ok := p.Data.(*Buffer); !ok {
+		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if !bytes.Equal(data.b, wantBuffer) {
-		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", data.b, wantBuffer)
+	} else if !bytes.Equal(buf.b, wantBuffer) {
+		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", buf.b, wantBuffer)
 	}
 }
