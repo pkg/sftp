@@ -2,6 +2,8 @@ package sftp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -9,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-
-	"github.com/pkg/errors"
 )
 
 // MaxFilelist is the max number of files to return in a readdir batch.
@@ -220,7 +220,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 		return filestat(handlers.FileList, r, pkt)
 	default:
 		return statusFromError(pkt.id(),
-			errors.Errorf("unexpected method: %s", r.Method))
+			fmt.Errorf("unexpected method: %s", r.Method))
 	}
 }
 
@@ -422,7 +422,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		}
 		return ret
 	default:
-		err = errors.Errorf("unexpected method: %s", r.Method)
+		err = fmt.Errorf("unexpected method: %s", r.Method)
 		return statusFromError(pkt.id(), err)
 	}
 }
@@ -484,7 +484,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			},
 		}
 	default:
-		err = errors.Errorf("unexpected method: %s", r.Method)
+		err = fmt.Errorf("unexpected method: %s", r.Method)
 		return statusFromError(pkt.id(), err)
 	}
 }

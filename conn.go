@@ -2,10 +2,9 @@ package sftp
 
 import (
 	"encoding"
+	"fmt"
 	"io"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 // conn implements a bidirectional channel on which client and server
@@ -90,7 +89,7 @@ func (c *clientConn) recv() error {
 			// This is an unexpected occurrence. Send the error
 			// back to all listeners so that they terminate
 			// gracefully.
-			return errors.Errorf("sid not found: %d", sid)
+			return fmt.Errorf("sid not found: %d", sid)
 		}
 
 		ch <- result{typ: typ, data: data}

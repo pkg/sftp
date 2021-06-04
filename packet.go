@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
-
-	"github.com/pkg/errors"
 )
 
 var (
@@ -133,7 +132,7 @@ func marshalPacket(m encoding.BinaryMarshaler) (header, payload []byte, err erro
 func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	header, payload, err := marshalPacket(m)
 	if err != nil {
-		return errors.Wrap(err, "binary marshaller failed")
+		return fmt.Errorf("binary marshaller failed: %w", err)
 	}
 
 	length := len(header) + len(payload) - 4 // subtract the uint32(length) from the start
@@ -146,12 +145,12 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	binary.BigEndian.PutUint32(header[:4], uint32(length))
 
 	if _, err := w.Write(header); err != nil {
-		return errors.Wrap(err, "failed to send packet")
+		return fmt.Errorf("failed to send packet: %w", err)
 	}
 
 	if len(payload) > 0 {
 		if _, err := w.Write(payload); err != nil {
-			return errors.Wrap(err, "failed to send packet payload")
+			return fmt.Errorf("failed to send packet payload: %w", err)
 		}
 	}
 
@@ -1086,7 +1085,7 @@ func (p *sshFxpExtendedPacket) UnmarshalBinary(b []byte) error {
 	case "hardlink@openssh.com":
 		p.SpecificPacket = &sshFxpExtendedPacketHardlink{}
 	default:
-		return errors.Wrapf(errUnknownExtendedPacket, "packet type %v", p.SpecificPacket)
+		return fmt.Errorf("packet type %v: %w", p.SpecificPacket, errUnknownExtendedPacket)
 	}
 
 	return p.SpecificPacket.UnmarshalBinary(bOrig)
