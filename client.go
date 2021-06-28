@@ -1112,6 +1112,13 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 						} else {
 							l, data := unmarshalUint32(data)
 							n = copy(packet.b, data[:l])
+
+							// For normal disk files, it is guaranteed that this will read
+							// the specified number of bytes, or up to end of file.
+							// This implies, if we have a short read, that means EOF.
+							if n < len(packet.b) {
+								err = io.EOF
+							}
 						}
 
 					default:
