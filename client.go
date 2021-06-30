@@ -1503,7 +1503,7 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 	return len(b), nil
 }
 
-// WriteAt writess up to len(b) byte to the File at a given offset `off`. It returns
+// WriteAt writes up to len(b) byte to the File at a given offset `off`. It returns
 // the number of bytes written and an error, if any. WriteAt follows io.WriterAt semantics,
 // so the file offset is not altered during the write.
 func (f *File) WriteAt(b []byte, off int64) (written int, err error) {
