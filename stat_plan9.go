@@ -105,5 +105,5 @@ func fromFileMode(mode os.FileMode) uint32 {
 const (
 	s_ISUID = 04000
 	s_ISGID = 02000
-	S_ISVTX = 01000
+	s_ISVTX = 01000
 )

@@ -288,9 +288,9 @@ func cleanPath(p string) string {
 }
 
 func cleanPathWithBase(base, p string) string {
-	p = filepath.ToSlash(p)
+	p = filepath.ToSlash(filepath.Clean(p))
 	if !path.IsAbs(p) {
 		return path.Join(base, p)
 	}
-	return path.Clean(p)
+	return p
 }
