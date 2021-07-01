@@ -17,7 +17,7 @@ func newBufPool(depth, bufLen int) *bufPool {
 func (p *bufPool) Get() []byte {
 	if p == nil {
 		// functional default: no reuse.
-		return make([]byte, p.blen)
+		return nil
 	}
 
 	for {
