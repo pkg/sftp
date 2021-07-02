@@ -15,6 +15,10 @@ func newBufPool(depth, bufLen int) *bufPool {
 }
 
 func (p *bufPool) Get() []byte {
+	if p.blen <= 0 {
+		panic("bufPool: new buffer creation length must be greater than zero")
+	}
+
 	for {
 		select {
 		case b := <-p.ch:
