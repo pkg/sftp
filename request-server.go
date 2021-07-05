@@ -2,13 +2,12 @@ package sftp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 var maxTxPacket uint32 = 1 << 15
@@ -122,8 +121,8 @@ func (rs *RequestServer) serveLoop(pktChan chan<- orderedRequest) error {
 
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
-			switch errors.Cause(err) {
-			case errUnknownExtendedPacket:
+			switch {
+			case errors.Is(err, errUnknownExtendedPacket):
 				// do nothing
 			default:
 				debug("makePacket err: %v", err)

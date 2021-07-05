@@ -1,11 +1,11 @@
 package sftp
 
 import (
+	"errors"
 	"io"
 	"syscall"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 

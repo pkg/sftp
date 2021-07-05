@@ -4,6 +4,7 @@ package sftp
 
 import (
 	"encoding"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,8 +14,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -308,7 +307,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 	case serverRespondablePacket:
 		rpkt = p.respond(s)
 	default:
-		return errors.Errorf("unexpected packet type %T", p)
+		return fmt.Errorf("unexpected packet type %T", p)
 	}
 
 	s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, orderID))
@@ -348,8 +347,8 @@ func (svr *Server) Serve() error {
 
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
-			switch errors.Cause(err) {
-			case errUnknownExtendedPacket:
+			switch {
+			case errors.Is(err, errUnknownExtendedPacket):
 				//if err := svr.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
 				//	debug("failed to send err packet: %v", err)
 				//	svr.conn.Close() // shuts down recvPacket

@@ -3,6 +3,7 @@ package sftp
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/kr/fs"
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 )
 
