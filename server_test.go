@@ -78,7 +78,7 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 
 	// permissions (len 10, "drwxr-xr-x")
 	got := result[0:10]
-	if ok, err := regexp.MatchString("^"+expectedType+"[rwx-]{9}$", got); !ok {
+	if ok, err := regexp.MatchString("^"+expectedType+"[rwxs-]{9}$", got); !ok {
 		t.Errorf("runLs(%#v, *FileInfo): permission field mismatch, expected dir, got: %#v, err: %#v", path, got, err)
 	}
 

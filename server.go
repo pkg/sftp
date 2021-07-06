@@ -446,7 +446,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(toLocalPath(p.Path), osFlags, 0644)
+	f, err := os.OpenFile(toLocalPath(p.Path), osFlags, p.Perms)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
