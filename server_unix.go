@@ -28,7 +28,9 @@ func runLs(dirname string, dirent os.FileInfo) string {
 	var uid, gid uint32
 
 	if statt, ok := dirent.Sys().(*syscall.Stat_t); ok {
-		numLinks = statt.Nlink
+		// The type of Nlink varies form int16 (aix-ppc64) to uint64 (linux-amd64),
+		// we cast up to uint64 to make all OS/ARCH combos source compatible.
+		numLinks = uint64(statt.Nlink)
 		uid = statt.Uid
 		gid = statt.Gid
 	}
