@@ -1892,28 +1892,6 @@ func normaliseError(err error) error {
 	}
 }
 
-func unmarshalStatus(id uint32, data []byte) error {
-	sid, data := unmarshalUint32(data)
-	if sid != id {
-		return &unexpectedIDErr{id, sid}
-	}
-	code, data := unmarshalUint32(data)
-	msg, data, _ := unmarshalStringSafe(data)
-	lang, _, _ := unmarshalStringSafe(data)
-	return &StatusError{
-		Code: code,
-		msg:  msg,
-		lang: lang,
-	}
-}
-
-func marshalStatus(b []byte, err StatusError) []byte {
-	b = marshalUint32(b, err.Code)
-	b = marshalString(b, err.msg)
-	b = marshalString(b, err.lang)
-	return b
-}
-
 // flags converts the flags passed to OpenFile into ssh flags.
 // Unsupported flags are ignored.
 func flags(f int) uint32 {

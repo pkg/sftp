@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/kr/fs"
@@ -85,64 +84,6 @@ func TestFlags(t *testing.T) {
 		got := flags(tt.flags)
 		if got != tt.want {
 			t.Errorf("test %v: flags(%x): want: %x, got: %x", i, tt.flags, tt.want, got)
-		}
-	}
-}
-
-func TestUnmarshalStatus(t *testing.T) {
-	requestID := uint32(1)
-
-	id := marshalUint32([]byte{}, requestID)
-	idCode := marshalUint32(id, sshFxFailure)
-	idCodeMsg := marshalString(idCode, "err msg")
-	idCodeMsgLang := marshalString(idCodeMsg, "lang tag")
-
-	var tests = []struct {
-		desc   string
-		reqID  uint32
-		status []byte
-		want   error
-	}{
-		{
-			desc:   "well-formed status",
-			reqID:  1,
-			status: idCodeMsgLang,
-			want: &StatusError{
-				Code: sshFxFailure,
-				msg:  "err msg",
-				lang: "lang tag",
-			},
-		},
-		{
-			desc:   "missing error message and language tag",
-			reqID:  1,
-			status: idCode,
-			want: &StatusError{
-				Code: sshFxFailure,
-			},
-		},
-		{
-			desc:   "missing language tag",
-			reqID:  1,
-			status: idCodeMsg,
-			want: &StatusError{
-				Code: sshFxFailure,
-				msg:  "err msg",
-			},
-		},
-		{
-			desc:   "request identifier mismatch",
-			reqID:  2,
-			status: idCodeMsgLang,
-			want:   &unexpectedIDErr{2, requestID},
-		},
-	}
-
-	for _, tt := range tests {
-		got := unmarshalStatus(tt.reqID, tt.status)
-		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("unmarshalStatus(%v, %v), test %q\n- want: %#v\n-  got: %#v",
-				requestID, tt.status, tt.desc, tt.want, got)
 		}
 	}
 }
