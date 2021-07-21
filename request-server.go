@@ -22,12 +22,14 @@ type Handlers struct {
 
 // RequestServer abstracts the sftp protocol with an http request-like protocol
 type RequestServer struct {
+	Handlers Handlers
+
 	*serverConn
-	Handlers        Handlers
-	pktMgr          *packetManager
-	openRequests    map[string]*Request
-	openRequestLock sync.RWMutex
-	handleCount     int
+	pktMgr *packetManager
+
+	mu           sync.RWMutex
+	handleCount  int
+	openRequests map[string]*Request
 }
 
 // A RequestServerOption is a function which applies configuration to a RequestServer.
@@ -55,9 +57,11 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers, options ...RequestServ
 		},
 	}
 	rs := &RequestServer{
-		serverConn:   svrConn,
-		Handlers:     h,
-		pktMgr:       newPktMgr(svrConn),
+		Handlers: h,
+
+		serverConn: svrConn,
+		pktMgr:     newPktMgr(svrConn),
+
 		openRequests: make(map[string]*Request),
 	}
 
@@ -69,13 +73,15 @@ func NewRequestServer(rwc io.ReadWriteCloser, h Handlers, options ...RequestServ
 
 // New Open packet/Request
 func (rs *RequestServer) nextRequest(r *Request) string {
-	rs.openRequestLock.Lock()
-	defer rs.openRequestLock.Unlock()
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
 	rs.handleCount++
-	handle := strconv.Itoa(rs.handleCount)
-	r.handle = handle
-	rs.openRequests[handle] = r
-	return handle
+
+	r.handle = strconv.Itoa(rs.handleCount)
+	rs.openRequests[r.handle] = r
+
+	return r.handle
 }
 
 // Returns Request from openRequests, bool is false if it is missing.
@@ -84,20 +90,23 @@ func (rs *RequestServer) nextRequest(r *Request) string {
 // you can do different things with. What you are doing with it are denoted by
 // the first packet of that type (read/write/etc).
 func (rs *RequestServer) getRequest(handle string) (*Request, bool) {
-	rs.openRequestLock.RLock()
-	defer rs.openRequestLock.RUnlock()
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+
 	r, ok := rs.openRequests[handle]
 	return r, ok
 }
 
 // Close the Request and clear from openRequests map
 func (rs *RequestServer) closeRequest(handle string) error {
-	rs.openRequestLock.Lock()
-	defer rs.openRequestLock.Unlock()
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
 	if r, ok := rs.openRequests[handle]; ok {
 		delete(rs.openRequests, handle)
 		return r.close()
 	}
+
 	return EBADF
 }
 
@@ -142,8 +151,10 @@ func (rs *RequestServer) Serve() error {
 			rs.pktMgr.alloc.Free()
 		}
 	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	var wg sync.WaitGroup
 	runWorker := func(ch chan orderedRequest) {
 		wg.Add(1)
@@ -160,8 +171,8 @@ func (rs *RequestServer) Serve() error {
 
 	wg.Wait() // wait for all workers to exit
 
-	rs.openRequestLock.Lock()
-	defer rs.openRequestLock.Unlock()
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
 
 	// make sure all open requests are properly closed
 	// (eg. possible on dropped connections, client crashes, etc.)
@@ -178,9 +189,7 @@ func (rs *RequestServer) Serve() error {
 	return err
 }
 
-func (rs *RequestServer) packetWorker(
-	ctx context.Context, pktChan chan orderedRequest,
-) error {
+func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedRequest) error {
 	for pkt := range pktChan {
 		orderID := pkt.orderID()
 		if epkt, ok := pkt.requestPacket.(*sshFxpExtendedPacket); ok {
