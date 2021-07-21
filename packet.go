@@ -739,7 +739,10 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 const dataHeaderLen = 4 + 1 + 4 + 4
 
 func (p *sshFxpReadPacket) getDataSlice(alloc *allocator, orderID uint32) []byte {
-	dataLen := clamp(p.Len, maxTxPacket)
+	dataLen := p.Len
+	if dataLen > maxTxPacket {
+		dataLen = maxTxPacket
+	}
 
 	if alloc != nil {
 		// GetPage returns a slice with capacity = maxMsgLength this is enough to avoid new allocations in

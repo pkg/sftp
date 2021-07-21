@@ -613,13 +613,6 @@ func statusFromError(id uint32, err error) *sshFxpStatusPacket {
 	return ret
 }
 
-func clamp(v, max uint32) uint32 {
-	if v > max {
-		return max
-	}
-	return v
-}
-
 func runLsTypeWord(dirent os.FileInfo) string {
 	// find first character, the type char
 	// b     Block special file.
