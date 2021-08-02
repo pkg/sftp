@@ -503,7 +503,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			return statusFromError(pkt.id(), err)
 		}
 
-		var nameAttrs []sshFxpNameAttr
+		nameAttrs := make([]*sshFxpNameAttr, 0, len(finfo))
 
 		for _, fi := range finfo {
 			nameAttrs = append(nameAttrs, &sshFxpNameAttr{
