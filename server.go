@@ -461,7 +461,6 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 		return statusFromError(p.ID, EBADF)
 	}
 
-	dirname := f.Name()
 	dirents, err := f.Readdir(128)
 	if err != nil {
 		return statusFromError(p.ID, err)
@@ -471,7 +470,7 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 	for _, dirent := range dirents {
 		ret.NameAttrs = append(ret.NameAttrs, &sshFxpNameAttr{
 			Name:     dirent.Name(),
-			LongName: runLs(dirname, dirent),
+			LongName: runLs(dirent),
 			Attrs:    []interface{}{dirent},
 		})
 	}

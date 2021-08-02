@@ -12,7 +12,7 @@ import (
 
 // ls -l style output for a file, which is in the 'long output' section of a readdir response packet
 // this is a very simple (lazy) implementation, just enough to look almost like openssh in a few basic cases
-func runLs(dirname string, dirent os.FileInfo) string {
+func runLs(dirent os.FileInfo) string {
 	// example from openssh sftp server:
 	// crw-rw-rw-    1 root     wheel           0 Jul 31 20:52 ttyvd
 	// format:

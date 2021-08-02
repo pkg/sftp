@@ -25,14 +25,14 @@ const (
 func TestRunLsWithExamplesDirectory(t *testing.T) {
 	path := "examples"
 	item, _ := os.Stat(path)
-	result := runLs(path, item)
+	result := runLs(item)
 	runLsTestHelper(t, result, typeDirectory, path)
 }
 
 func TestRunLsWithLicensesFile(t *testing.T) {
 	path := "LICENSE"
 	item, _ := os.Stat(path)
-	result := runLs(path, item)
+	result := runLs(item)
 	runLsTestHelper(t, result, typeFile, path)
 }
 
@@ -79,61 +79,61 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 	// permissions (len 10, "drwxr-xr-x")
 	got := result[0:10]
 	if ok, err := regexp.MatchString("^"+expectedType+"[rwx-]{9}$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): permission field mismatch, expected dir, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): permission field mismatch, expected dir, got: %#v, err: %#v", got, err)
 	}
 
 	// space
 	got = result[10:11]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 1 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): spacer 1 mismatch, expected whitespace, got: %#v, err: %#v", got, err)
 	}
 
 	// link count (len 3, number)
 	got = result[12:15]
 	if ok, err := regexp.MatchString("^\\s*[0-9]+$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): link count field mismatch, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): link count field mismatch, got: %#v, err: %#v", got, err)
 	}
 
 	// spacer
 	got = result[15:16]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 2 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): spacer 2 mismatch, expected whitespace, got: %#v, err: %#v", got, err)
 	}
 
 	// username / uid (len 8, number or string)
 	got = result[16:24]
 	if ok, err := regexp.MatchString("^[^\\s]{1,8}\\s*$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): username / uid mismatch, expected user, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): username / uid mismatch, expected user, got: %#v, err: %#v", got, err)
 	}
 
 	// spacer
 	got = result[24:25]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 3 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): spacer 3 mismatch, expected whitespace, got: %#v, err: %#v", got, err)
 	}
 
 	// groupname / gid (len 8, number or string)
 	got = result[25:33]
 	if ok, err := regexp.MatchString("^[^\\s]{1,8}\\s*$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): groupname / gid mismatch, expected group, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): groupname / gid mismatch, expected group, got: %#v, err: %#v", got, err)
 	}
 
 	// spacer
 	got = result[33:34]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 4 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): spacer 4 mismatch, expected whitespace, got: %#v, err: %#v", got, err)
 	}
 
 	// filesize (len 8)
 	got = result[34:42]
 	if ok, err := regexp.MatchString("^\\s*[0-9]+$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): filesize field mismatch, expected size in bytes, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): filesize field mismatch, expected size in bytes, got: %#v, err: %#v", got, err)
 	}
 
 	// spacer
 	got = result[42:43]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 5 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): spacer 5 mismatch, expected whitespace, got: %#v, err: %#v", got, err)
 	}
 
 	// mod time (len 12, e.g. Aug  9 19:46)
@@ -146,19 +146,19 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 		_, err = time.Parse(layout, got)
 	}
 	if err != nil {
-		t.Errorf("runLs(%#v, *FileInfo): mod time field mismatch, expected date layout %s, got: %#v, err: %#v", path, layout, got, err)
+		t.Errorf("runLs(*FileInfo): mod time field mismatch, expected date layout %s, got: %#v, err: %#v", layout, got, err)
 	}
 
 	// spacer
 	got = result[55:56]
 	if ok, err := regexp.MatchString("^\\s$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): spacer 6 mismatch, expected whitespace, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): spacer 6 mismatch, expected whitespace, got: %#v, err: %#v", got, err)
 	}
 
 	// filename
 	got = result[56:]
 	if ok, err := regexp.MatchString("^"+path+"$", got); !ok {
-		t.Errorf("runLs(%#v, *FileInfo): name field mismatch, expected examples, got: %#v, err: %#v", path, got, err)
+		t.Errorf("runLs(*FileInfo): name field mismatch, expected examples, got: %#v, err: %#v", got, err)
 	}
 }
 
