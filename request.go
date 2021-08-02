@@ -503,18 +503,20 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			return statusFromError(pkt.id(), err)
 		}
 
-		ret := &sshFxpNamePacket{
-			ID: pkt.id(),
-		}
+		var nameAttrs []sshFxpNameAttr
 
 		for _, fi := range finfo {
-			ret.NameAttrs = append(ret.NameAttrs, &sshFxpNameAttr{
+			nameAttrs = append(nameAttrs, &sshFxpNameAttr{
 				Name:     fi.Name(),
 				LongName: runLs(fi),
 				Attrs:    []interface{}{fi},
 			})
 		}
-		return ret
+
+		return &sshFxpNamePacket{
+			ID:        pkt.id(),
+			NameAttrs: nameAttrs,
+		}
 
 	default:
 		err = fmt.Errorf("unexpected method: %s", r.Method)
