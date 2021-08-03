@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func runLs(dirname string, dirent os.FileInfo) string {
+func runLs(dirent os.FileInfo) string {
 	typeword := runLsTypeWord(dirent)
 	numLinks := 1
 	if dirent.IsDir() {

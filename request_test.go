@@ -1,15 +1,13 @@
 package sftp
 
 import (
-	"sync"
-
-	"github.com/stretchr/testify/assert"
-
 	"bytes"
 	"errors"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type testHandler struct {
@@ -75,7 +73,6 @@ func testRequest(method string) *Request {
 		Attrs:    []byte("foo"),
 		Flags:    flags,
 		Target:   "foo",
-		state:    state{RWMutex: new(sync.RWMutex)},
 	}
 	return request
 }
