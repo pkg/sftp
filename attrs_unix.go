@@ -1,4 +1,4 @@
-// +build darwin dragonfly freebsd !android,linux netbsd openbsd solaris aix
+// +build darwin dragonfly freebsd !android,linux netbsd openbsd solaris aix js
 
 package sftp
 
