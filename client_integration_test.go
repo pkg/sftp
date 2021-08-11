@@ -2313,7 +2313,12 @@ func benchmarkWrite(b *testing.B, bufsize int, delay time.Duration) {
 		}
 
 		for offset < size {
-			n, err := f2.Write(data[offset:min(len(data), offset+bufsize)])
+			buf := data[offset:]
+			if len(buf) > bufsize {
+				buf = buf[:bufsize]
+			}
+
+			n, err := f2.Write(buf)
 			if err != nil {
 				b.Fatal(err)
 			}

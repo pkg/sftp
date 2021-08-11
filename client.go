@@ -1863,13 +1863,6 @@ func (f *File) Truncate(size int64) error {
 	return f.c.setfstat(f.handle, sshFileXferAttrSize, uint64(size))
 }
 
-func min(a, b int) int {
-	if a > b {
-		return b
-	}
-	return a
-}
-
 // normaliseError normalises an error into a more standard form that can be
 // checked against stdlib errors like io.EOF or os.ErrNotExist.
 func normaliseError(err error) error {
