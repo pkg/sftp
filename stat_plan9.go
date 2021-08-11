@@ -49,6 +49,7 @@ func isRegular(mode uint32) bool {
 // toFileMode converts sftp filemode bits to the os.FileMode specification
 func toFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
+
 	switch mode & S_IFMT {
 	case syscall.S_IFBLK:
 		fm |= os.ModeDevice
@@ -65,37 +66,30 @@ func toFileMode(mode uint32) os.FileMode {
 	case syscall.S_IFSOCK:
 		fm |= os.ModeSocket
 	}
+
 	return fm
 }
 
 // fromFileMode converts from the os.FileMode specification to sftp filemode bits
 func fromFileMode(mode os.FileMode) uint32 {
-	ret := uint32(0)
+	ret := uint32(mode & os.ModePerm)
 
-	if mode&os.ModeDevice != 0 {
-		if mode&os.ModeCharDevice != 0 {
-			ret |= syscall.S_IFCHR
-		} else {
-			ret |= syscall.S_IFBLK
-		}
-	}
-	if mode&os.ModeDir != 0 {
+	switch mode & os.ModeType {
+	case os.ModeDevice | os.ModeCharDevice:
+		ret |= syscall.S_IFCHR
+	case os.ModeDevice:
+		ret |= syscall.S_IFBLK
+	case os.ModeDir:
 		ret |= syscall.S_IFDIR
-	}
-	if mode&os.ModeSymlink != 0 {
-		ret |= syscall.S_IFLNK
-	}
-	if mode&os.ModeNamedPipe != 0 {
+	case os.ModeNamedPipe:
 		ret |= syscall.S_IFIFO
-	}
-	if mode&os.ModeSocket != 0 {
+	case os.ModeSymlink:
+		ret |= syscall.S_IFLNK
+	case 0:
+		ret |= syscall.S_IFREG
+	case os.ModeSocket:
 		ret |= syscall.S_IFSOCK
 	}
-
-	if mode&os.ModeType == 0 {
-		ret |= syscall.S_IFREG
-	}
-	ret |= uint32(mode & os.ModePerm)
 
 	return ret
 }
