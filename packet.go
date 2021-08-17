@@ -1122,6 +1122,7 @@ func (p *StatVFS) marshalPacket() ([]byte, []byte, error) {
 	return header, buf.Bytes(), err
 }
 
+// MarshalBinary encodes the StatVFS as an SSH_FXP_EXTENDED_REPLY packet.
 func (p *StatVFS) MarshalBinary() ([]byte, error) {
 	header, payload, err := p.marshalPacket()
 	return append(header, payload...), err
