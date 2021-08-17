@@ -505,10 +505,14 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 
 		nameAttrs := make([]*sshFxpNameAttr, 0, len(finfo))
 
+		// If the type conversion fails, we get untyped `nil`,
+		// which is handled by not looking up any names.
+		idLookup, _ := h.(NameLookupFileLister)
+
 		for _, fi := range finfo {
 			nameAttrs = append(nameAttrs, &sshFxpNameAttr{
 				Name:     fi.Name(),
-				LongName: runLs(fi),
+				LongName: runLs(idLookup, fi),
 				Attrs:    []interface{}{fi},
 			})
 		}

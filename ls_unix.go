@@ -14,8 +14,8 @@ func lsLinksUIDGID(fi os.FileInfo) (numLinks uint64, uid, gid string) {
 	switch sys := fi.Sys().(type) {
 	case *syscall.Stat_t:
 		numLinks = uint64(sys.Nlink)
-		uid = lsUsername(lsFormatID(sys.Uid))
-		gid = lsGroupName(lsFormatID(sys.Gid))
+		uid = lsFormatID(sys.Uid)
+		gid = lsFormatID(sys.Gid)
 	default:
 	}
 

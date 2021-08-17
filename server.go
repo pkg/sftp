@@ -466,11 +466,13 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 		return statusFromError(p.ID, err)
 	}
 
+	idLookup := osIDLookup{}
+
 	ret := &sshFxpNamePacket{ID: p.ID}
 	for _, dirent := range dirents {
 		ret.NameAttrs = append(ret.NameAttrs, &sshFxpNameAttr{
 			Name:     dirent.Name(),
-			LongName: runLs(dirent),
+			LongName: runLs(idLookup, dirent),
 			Attrs:    []interface{}{dirent},
 		})
 	}

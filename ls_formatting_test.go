@@ -16,14 +16,28 @@ const (
 func TestRunLsWithExamplesDirectory(t *testing.T) {
 	path := "examples"
 	item, _ := os.Stat(path)
-	result := runLs(item)
+	result := runLs(nil, item)
 	runLsTestHelper(t, result, typeDirectory, path)
 }
 
 func TestRunLsWithLicensesFile(t *testing.T) {
 	path := "LICENSE"
 	item, _ := os.Stat(path)
-	result := runLs(item)
+	result := runLs(nil, item)
+	runLsTestHelper(t, result, typeFile, path)
+}
+
+func TestRunLsWithExamplesDirectoryWithOSLookup(t *testing.T) {
+	path := "examples"
+	item, _ := os.Stat(path)
+	result := runLs(osIDLookup{}, item)
+	runLsTestHelper(t, result, typeDirectory, path)
+}
+
+func TestRunLsWithLicensesFileWithOSLookup(t *testing.T) {
+	path := "LICENSE"
+	item, _ := os.Stat(path)
+	result := runLs(osIDLookup{}, item)
 	runLsTestHelper(t, result, typeFile, path)
 }
 

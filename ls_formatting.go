@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -14,7 +15,13 @@ func lsFormatID(id uint32) string {
 	return strconv.FormatUint(uint64(id), 10)
 }
 
-func lsUsername(uid string) string {
+type osIDLookup struct{}
+
+func (osIDLookup) Filelist(*Request) (ListerAt, error) {
+	return nil, errors.New("unimplemented stub")
+}
+
+func (osIDLookup) LookupUserName(uid string) string {
 	u, err := user.LookupId(uid)
 	if err != nil {
 		return uid
@@ -23,7 +30,7 @@ func lsUsername(uid string) string {
 	return u.Username
 }
 
-func lsGroupName(gid string) string {
+func (osIDLookup) LookupGroupName(gid string) string {
 	g, err := user.LookupGroupId(gid)
 	if err != nil {
 		return gid
@@ -34,7 +41,7 @@ func lsGroupName(gid string) string {
 
 // runLs formats the FileInfo as per `ls -l` style, which is in the 'longname' field of a SSH_FXP_NAME entry.
 // This is a fairly simple implementation, just enough to look close to openssh in simple cases.
-func runLs(dirent os.FileInfo) string {
+func runLs(idLookup NameLookupFileLister, dirent os.FileInfo) string {
 	// example from openssh sftp server:
 	// crw-rw-rw-    1 root     wheel           0 Jul 31 20:52 ttyvd
 	// format:
@@ -54,6 +61,10 @@ func runLs(dirent os.FileInfo) string {
 		gid = lsFormatID(sys.GID)
 	default:
 		numLinks, uid, gid = lsLinksUIDGID(dirent)
+	}
+
+	if idLookup != nil {
+		uid, gid = idLookup.LookupUserName(uid), idLookup.LookupGroupName(gid)
 	}
 
 	mtime := dirent.ModTime()
