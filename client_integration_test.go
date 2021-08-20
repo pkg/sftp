@@ -1492,7 +1492,7 @@ func TestClientReadFrom(t *testing.T) {
 // Issue #145 in github
 // Deadlock in ReadFrom when network drops after 1 good packet.
 // Deadlock would occur anytime desiredInFlight-inFlight==2 and 2 errors
-// occured in a row. The channel to report the errors only had a buffer
+// occurred in a row. The channel to report the errors only had a buffer
 // of 1 and 2 would be sent.
 var errFakeNet = errors.New("Fake network issue")
 
@@ -1503,7 +1503,7 @@ func TestClientReadFromDeadlock(t *testing.T) {
 			content := bytes.NewReader(b)
 			_, err := f.ReadFrom(content)
 			if !errors.Is(err, errFakeNet) {
-				t.Fatal("Didn't recieve correct error:", err)
+				t.Fatal("Didn't receive correct error:", err)
 			}
 		})
 	}
@@ -1517,7 +1517,7 @@ func TestClientWriteDeadlock(t *testing.T) {
 
 			_, err := f.Write(b)
 			if !errors.Is(err, errFakeNet) {
-				t.Fatal("Didn't recieve correct error:", err)
+				t.Fatal("Didn't receive correct error:", err)
 			}
 		})
 	}
@@ -1583,7 +1583,7 @@ func TestClientReadDeadlock(t *testing.T) {
 
 			_, err := f.Read(b)
 			if !errors.Is(err, errFakeNet) {
-				t.Fatal("Didn't recieve correct error:", err)
+				t.Fatal("Didn't receive correct error:", err)
 			}
 		})
 	}
@@ -1598,7 +1598,7 @@ func TestClientWriteToDeadlock(t *testing.T) {
 
 			_, err := f.WriteTo(buf)
 			if !errors.Is(err, errFakeNet) {
-				t.Fatal("Didn't recieve correct error:", err)
+				t.Fatal("Didn't receive correct error:", err)
 			}
 		})
 	}
