@@ -70,5 +70,6 @@ func TestExtensions(t *testing.T) {
 	assert.Equal(t, expectedSFTPExtensions, sftpExtensions)
 
 	err = SetSFTPExtensions(supportedExtensions...)
+	assert.NoError(t, err)
 	assert.Equal(t, supportedSFTPExtensions, sftpExtensions)
 }

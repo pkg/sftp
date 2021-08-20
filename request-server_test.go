@@ -490,6 +490,7 @@ func TestRequestFsetstat(t *testing.T) {
 	fp, err := p.cli.OpenFile("/foo", os.O_WRONLY)
 	require.NoError(t, err)
 	err = fp.Truncate(2)
+	require.NoError(t, err)
 	fi, err := fp.Stat()
 	require.NoError(t, err)
 	assert.Equal(t, fi.Name(), "foo")
