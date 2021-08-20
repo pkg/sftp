@@ -44,7 +44,7 @@ type Server struct {
 	uploadPath     string
 	fileSizeLimit  int64
 	fileNameMapper func(string) (string, bool, error)
-	uploadNotifier func(string)
+	uploadNotifier func(string) error
 	opendirHook    func()
 	readdirHook    func() ([]os.FileInfo, error)
 }
@@ -73,7 +73,7 @@ func (svr *Server) closeHandle(handle string) error {
 		fileName := f.Name()
 		err := f.Close()
 		if svr.uploadNotifier != nil && !isDir {
-			svr.uploadNotifier(fileName)
+			err = svr.uploadNotifier(fileName)
 		}
 		return err
 	}
@@ -180,7 +180,7 @@ func FileNameMapper(f func(string) (string, bool, error)) ServerOption {
 	}
 }
 
-func UploadNotifier(f func(string)) ServerOption {
+func UploadNotifier(f func(string) error) ServerOption {
 	return func(s *Server) error {
 		s.uploadNotifier = f
 		return nil
@@ -226,7 +226,7 @@ func (svr *Server) sftpServerWorker() error {
 			encoding.BinaryUnmarshaler
 			id() uint32
 		}
-		var readonly = true
+		readonly := true
 		switch p.pktType {
 		case ssh_FXP_INIT:
 			pkt = &sshFxInitPacket{}
