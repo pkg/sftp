@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -214,6 +215,138 @@ func TestUnmarshalString(t *testing.T) {
 
 		i++
 		testBuffer = rest
+	}
+}
+
+func TestUnmarshalAttrs(t *testing.T) {
+	var tests = []struct {
+		b    []byte
+		want *FileStat
+	}{
+		{
+			b:    []byte{0x00, 0x00, 0x00, 0x00},
+			want: &FileStat{},
+		},
+		{
+			b: []byte{
+				0x00, 0x00, 0x00, byte(sshFileXferAttrSize),
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 20,
+			},
+			want: &FileStat{
+				Size: 20,
+			},
+		},
+		{
+			b: []byte{
+				0x00, 0x00, 0x00, byte(sshFileXferAttrSize | sshFileXferAttrPermissions),
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 20,
+				0x00, 0x00, 0x01, 0xA4,
+			},
+			want: &FileStat{
+				Size: 20,
+				Mode: 0644,
+			},
+		},
+		{
+			b: []byte{
+				0x00, 0x00, 0x00, byte(sshFileXferAttrSize | sshFileXferAttrPermissions | sshFileXferAttrUIDGID),
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 20,
+				0x00, 0x00, 0x03, 0xE8,
+				0x00, 0x00, 0x03, 0xE9,
+				0x00, 0x00, 0x01, 0xA4,
+			},
+			want: &FileStat{
+				Size: 20,
+				Mode: 0644,
+				UID:  1000,
+				GID:  1001,
+			},
+		},
+		{
+			b: []byte{
+				0x00, 0x00, 0x00, byte(sshFileXferAttrSize | sshFileXferAttrPermissions | sshFileXferAttrUIDGID | sshFileXferAttrACmodTime),
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 20,
+				0x00, 0x00, 0x03, 0xE8,
+				0x00, 0x00, 0x03, 0xE9,
+				0x00, 0x00, 0x01, 0xA4,
+				0x00, 0x00, 0x00, 42,
+				0x00, 0x00, 0x00, 13,
+			},
+			want: &FileStat{
+				Size:  20,
+				Mode:  0644,
+				UID:   1000,
+				GID:   1001,
+				Atime: 42,
+				Mtime: 13,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		got, _ := unmarshalAttrs(tt.b)
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("unmarshalAttrs(% X):\n-  got: %#v\n- want: %#v", tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestUnmarshalStatus(t *testing.T) {
+	var requestID uint32 = 1
+
+	id := marshalUint32(nil, requestID)
+	idCode := marshalUint32(id, sshFxFailure)
+	idCodeMsg := marshalString(idCode, "err msg")
+	idCodeMsgLang := marshalString(idCodeMsg, "lang tag")
+
+	var tests = []struct {
+		desc   string
+		reqID  uint32
+		status []byte
+		want   error
+	}{
+		{
+			desc:   "well-formed status",
+			status: idCodeMsgLang,
+			want: &StatusError{
+				Code: sshFxFailure,
+				msg:  "err msg",
+				lang: "lang tag",
+			},
+		},
+		{
+			desc:   "missing language tag",
+			status: idCodeMsg,
+			want: &StatusError{
+				Code: sshFxFailure,
+				msg:  "err msg",
+			},
+		},
+		{
+			desc:   "missing error message and language tag",
+			status: idCode,
+			want: &StatusError{
+				Code: sshFxFailure,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			got := unmarshalStatus(1, tt.status)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("unmarshalStatus(1, % X):\n-  got: %#v\n- want: %#v", tt.status, got, tt.want)
+			}
+		})
+	}
+
+	got := unmarshalStatus(2, idCodeMsgLang)
+	want := &unexpectedIDErr{
+		want: 2,
+		got:  1,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("unmarshalStatus(2, % X):\n-  got: %#v\n- want: %#v", idCodeMsgLang, got, want)
 	}
 }
 

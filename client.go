@@ -1863,13 +1863,6 @@ func (f *File) Truncate(size int64) error {
 	return f.c.setfstat(f.handle, sshFileXferAttrSize, uint64(size))
 }
 
-func min(a, b int) int {
-	if a > b {
-		return b
-	}
-	return a
-}
-
 // normaliseError normalises an error into a more standard form that can be
 // checked against stdlib errors like io.EOF or os.ErrNotExist.
 func normaliseError(err error) error {
@@ -1890,28 +1883,6 @@ func normaliseError(err error) error {
 	default:
 		return err
 	}
-}
-
-func unmarshalStatus(id uint32, data []byte) error {
-	sid, data := unmarshalUint32(data)
-	if sid != id {
-		return &unexpectedIDErr{id, sid}
-	}
-	code, data := unmarshalUint32(data)
-	msg, data, _ := unmarshalStringSafe(data)
-	lang, _, _ := unmarshalStringSafe(data)
-	return &StatusError{
-		Code: code,
-		msg:  msg,
-		lang: lang,
-	}
-}
-
-func marshalStatus(b []byte, err StatusError) []byte {
-	b = marshalUint32(b, err.Code)
-	b = marshalString(b, err.msg)
-	b = marshalString(b, err.lang)
-	return b
 }
 
 // flags converts the flags passed to OpenFile into ssh flags.

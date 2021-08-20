@@ -95,6 +95,14 @@ type RealPathFileLister interface {
 	RealPath(string) string
 }
 
+// NameLookupFileLister is a FileLister that implmeents the LookupUsername and LookupGroupName methods.
+// If this interface is implemented, then longname ls formatting will use these to convert usernames and groupnames.
+type NameLookupFileLister interface {
+	FileLister
+	LookupUserName(string) string
+	LookupGroupName(string) string
+}
+
 // ListerAt does for file lists what io.ReaderAt does for files.
 // ListAt should return the number of entries copied and an io.EOF
 // error if at end of list. This is testable by comparing how many you
