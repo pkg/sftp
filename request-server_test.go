@@ -636,7 +636,7 @@ func TestRequestSymlinkDanglingFiles(t *testing.T) {
 	err := p.cli.Symlink("/foo", "/bar")
 	require.NoError(t, err)
 
-	// creating a symlink in a non-existant directory should fail.
+	// creating a symlink in a non-existent directory should fail.
 	err = p.cli.Symlink("/dangle", "/foo/bar")
 	require.Error(t, err)
 

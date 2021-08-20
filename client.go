@@ -1696,7 +1696,7 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 		// * the offset of the first error from writing,
 		// * the last successfully read offset.
 		//
-		// This could be less than the last succesfully written offset,
+		// This could be less than the last successfully written offset,
 		// which is the whole reason for the UseConcurrentWrites() ClientOption.
 		//
 		// Callers are responsible for truncating any SFTP files to a safe length.

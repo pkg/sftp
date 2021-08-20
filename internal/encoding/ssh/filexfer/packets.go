@@ -201,7 +201,7 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 // If the read packet length is longer than cap(b),
 // then a throw-away slice will allocated to meet the exact packet length.
 // This can be used to limit the length of reused buffers,
-// while still allowing reception of occassional large packets.
+// while still allowing reception of occasional large packets.
 //
 // The Data field may alias the passed in byte slice,
 // so the byte slice passed in should not be reused before RawPacket.Reset().
@@ -309,7 +309,7 @@ func (p *RequestPacket) UnmarshalBinary(data []byte) error {
 // If the read packet length is longer than cap(b),
 // then a throw-away slice will allocated to meet the exact packet length.
 // This can be used to limit the length of reused buffers,
-// while still allowing reception of occassional large packets.
+// while still allowing reception of occasional large packets.
 //
 // The Request field may alias the passed in byte slice,
 // so the byte slice passed in should not be reused before RawPacket.Reset().
