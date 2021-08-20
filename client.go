@@ -316,17 +316,17 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	}
 	defer c.close(handle) // this has to defer earlier than the lock below
 	var attrs []os.FileInfo
-	var done = false
-	for !done {
+	for {
 		id := c.nextID()
-		typ, data, err1 := c.sendPacket(nil, &sshFxpReaddirPacket{
+		typ, data, err := c.sendPacket(nil, &sshFxpReaddirPacket{
 			ID:     id,
 			Handle: handle,
 		})
-		if err1 != nil {
-			err = err1
-			done = true
-			break
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return attrs, err
 		}
 		switch typ {
 		case sshFxpName:
@@ -341,23 +341,20 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 				_, data = unmarshalString(data) // discard longname
 				var attr *FileStat
 				attr, data = unmarshalAttrs(data)
-				if filename == "." || filename == ".." {
-					continue
+				if filename != "." && filename != ".." {
+					attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)))
 				}
-				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)))
 			}
 		case sshFxpStatus:
 			// TODO(dfc) scope warning!
-			err = normaliseError(unmarshalStatus(id, data))
-			done = true
+			if err = normaliseError(unmarshalStatus(id, data)); err == io.EOF {
+				err = nil
+			}
+			return attrs, err
 		default:
 			return nil, unimplementedPacketErr(typ)
 		}
 	}
-	if err == io.EOF {
-		err = nil
-	}
-	return attrs, err
 }
 
 func (c *Client) opendir(path string) (string, error) {
