@@ -174,7 +174,7 @@ func TestNamePacket(t *testing.T) {
 
 	p := &NamePacket{
 		Entries: []*NameEntry{
-			&NameEntry{
+			{
 				Filename: filename + "1",
 				Longname: longname + "1",
 				Attrs: Attributes{
@@ -182,7 +182,7 @@ func TestNamePacket(t *testing.T) {
 					Permissions: perms | 1,
 				},
 			},
-			&NameEntry{
+			{
 				Filename: filename + "2",
 				Longname: longname + "2",
 				Attrs: Attributes{
