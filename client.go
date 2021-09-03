@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -749,6 +750,16 @@ func (c *Client) removeFile(path string) error {
 
 // RemoveDirectory removes a directory path.
 func (c *Client) RemoveDirectory(path string) error {
+	files, err := c.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for i := range files {
+		err = c.Remove(filepath.Join(path, files[i].Name()))
+		if err != nil {
+			return err
+		}
+	}
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpRmdirPacket{
 		ID:   id,
