@@ -9,9 +9,9 @@ var _ Packet = &OpenPacket{}
 
 func TestOpenPacket(t *testing.T) {
 	const (
-		id       = 42
-		filename = "/foo"
-		perms    = 0x87654321
+		id                = 42
+		filename          = "/foo"
+		perms    FileMode = 0x87654321
 	)
 
 	p := &OpenPacket{

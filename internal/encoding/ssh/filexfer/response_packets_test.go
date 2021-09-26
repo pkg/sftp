@@ -166,10 +166,10 @@ var _ Packet = &NamePacket{}
 
 func TestNamePacket(t *testing.T) {
 	const (
-		id       = 42
-		filename = "foo"
-		longname = "bar"
-		perms    = 0x87654300
+		id                = 42
+		filename          = "foo"
+		longname          = "bar"
+		perms    FileMode = 0x87654300
 	)
 
 	p := &NamePacket{
@@ -241,7 +241,7 @@ func TestNamePacket(t *testing.T) {
 			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Flags was %#x, but expected %#x", i, got, want)
 		}
 
-		if got, want := e.Attrs.Permissions, FileMode(perms|(i+1)); got != want {
+		if got, want := e.Attrs.Permissions, perms|FileMode(i+1); got != want {
 			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Permissions was %#v, but expected %#v", i, got, want)
 		}
 	}
@@ -251,8 +251,8 @@ var _ Packet = &AttrsPacket{}
 
 func TestAttrsPacket(t *testing.T) {
 	const (
-		id    = 42
-		perms = 0x87654321
+		id             = 42
+		perms FileMode = 0x87654321
 	)
 
 	p := &AttrsPacket{

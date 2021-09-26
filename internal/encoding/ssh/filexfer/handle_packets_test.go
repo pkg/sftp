@@ -49,10 +49,10 @@ var _ Packet = &ReadPacket{}
 
 func TestReadPacket(t *testing.T) {
 	const (
-		id     = 42
-		handle = "somehandle"
-		offset = 0x123456789ABCDEF0
-		length = 0xFEDCBA98
+		id            = 42
+		handle        = "somehandle"
+		offset uint64 = 0x123456789ABCDEF0
+		length uint32 = 0xFEDCBA98
 	)
 
 	p := &ReadPacket{
@@ -103,9 +103,9 @@ var _ Packet = &WritePacket{}
 
 func TestWritePacket(t *testing.T) {
 	const (
-		id     = 42
-		handle = "somehandle"
-		offset = 0x123456789ABCDEF0
+		id            = 42
+		handle        = "somehandle"
+		offset uint64 = 0x123456789ABCDEF0
 	)
 
 	var payload = []byte(`foobar`)

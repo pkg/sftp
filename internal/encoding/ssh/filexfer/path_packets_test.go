@@ -49,9 +49,9 @@ var _ Packet = &SetstatPacket{}
 
 func TestSetstatPacket(t *testing.T) {
 	const (
-		id    = 42
-		path  = "/foo"
-		perms = 0x87654321
+		id             = 42
+		path           = "/foo"
+		perms FileMode = 0x87654321
 	)
 
 	p := &SetstatPacket{
@@ -144,9 +144,9 @@ var _ Packet = &MkdirPacket{}
 
 func TestMkdirPacket(t *testing.T) {
 	const (
-		id    = 42
-		path  = "/foo"
-		perms = 0x87654321
+		id             = 42
+		path           = "/foo"
+		perms FileMode = 0x87654321
 	)
 
 	p := &MkdirPacket{
