@@ -7,12 +7,12 @@ import (
 
 func TestAttributes(t *testing.T) {
 	const (
-		size  = 0x123456789ABCDEF0
-		uid   = 1000
-		gid   = 100
-		perms = 0x87654321
-		atime = 0x2A2B2C2D
-		mtime = 0x42434445
+		size  uint64   = 0x123456789ABCDEF0
+		uid            = 1000
+		gid            = 100
+		perms FileMode = 0x87654321
+		atime          = 0x2A2B2C2D
+		mtime          = 0x42434445
 	)
 
 	extAttr := ExtendedAttribute{
@@ -177,9 +177,9 @@ func TestAttributes(t *testing.T) {
 
 func TestNameEntry(t *testing.T) {
 	const (
-		filename = "foo"
-		longname = "bar"
-		perms    = 0x87654321
+		filename          = "foo"
+		longname          = "bar"
+		perms    FileMode = 0x87654321
 	)
 
 	e := &NameEntry{
