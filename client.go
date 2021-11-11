@@ -1424,16 +1424,21 @@ func (f *File) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
-	typ, data, err := f.c.sendPacket(ch, &sshFxpWritePacket{
+func (f *File) startWriteChunkAt(ch chan result, b []byte, off int64) {
+	f.c.dispatchRequest(ch, &sshFxpWritePacket{
 		ID:     f.c.nextID(),
 		Handle: f.handle,
 		Offset: uint64(off),
 		Length: uint32(len(b)),
 		Data:   b,
 	})
+}
+
+func (f *File) finishWriteChunkAt(ch chan result) error {
+	s := <-ch
+	typ, data, err := s.typ, s.data, s.err
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	switch typ {
@@ -1441,14 +1446,22 @@ func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
 		id, _ := unmarshalUint32(data)
 		err := normaliseError(unmarshalStatus(id, data))
 		if err != nil {
-			return 0, err
+			return err
 		}
 
 	default:
-		return 0, unimplementedPacketErr(typ)
+		return unimplementedPacketErr(typ)
 	}
 
-	return len(b), nil
+	return nil
+}
+
+func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
+	if cap(ch) < 1 {
+		ch = make(chan result, 1)
+	}
+	f.startWriteChunkAt(ch, b, off)
+	return len(b), f.finishWriteChunkAt(ch)
 }
 
 // writeAtConcurrent implements WriterAt, but works concurrently rather than sequentially.
@@ -1601,6 +1614,7 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 		b   []byte
 		n   int
 		off int64
+		ch  chan result
 	}
 	workCh := make(chan work)
 
@@ -1628,9 +1642,11 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 			n, err := r.Read(b)
 			if n > 0 {
 				read += int64(n)
+				ch := make(chan result, 1)
+				f.startWriteChunkAt(ch, b[:n], off)
 
 				select {
-				case workCh <- work{b, n, off}:
+				case workCh <- work{b, n, off, ch}:
 					// We need the pool.Put(b) to put the whole slice, not just trunced.
 				case <-cancel:
 					return
@@ -1655,13 +1671,11 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 		go func() {
 			defer wg.Done()
 
-			ch := make(chan result, 1) // reusable channel per mapper.
-
 			for packet := range workCh {
-				n, err := f.writeChunkAt(ch, packet.b[:packet.n], packet.off)
+				err := f.finishWriteChunkAt(packet.ch)
 				if err != nil {
 					// return the offset as the start + how much we wrote before the error.
-					errCh <- rwErr{packet.off + int64(n), err}
+					errCh <- rwErr{packet.off + int64(0), err}
 				}
 				pool.Put(packet.b)
 			}
