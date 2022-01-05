@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/fs"
+	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -15,10 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func clientServerPair(t *testing.T) (*Client, *Server) {
+func clientServerPair(t *testing.T, options ...ServerOption) (*Client, *Server) {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
-	var options []ServerOption
 	if *testAllocator {
 		options = append(options, WithAllocator())
 	}
@@ -248,4 +251,209 @@ func TestServerWithBrokenClient(t *testing.T) {
 		assert.Error(t, err)
 		srv.Close()
 	}
+}
+
+func TestChroot(t *testing.T) {
+	tmpFolder := "/var/tmp"
+	if runtime.GOOS == "plan9" {
+		tmpFolder = "/tmp"
+	} else if runtime.GOOS == "windows" {
+		tmpFolder = "C:/Windows/Temp"
+	}
+	rootPath, err := ioutil.TempDir(tmpFolder, "sftp")
+	require.Nil(t, err)
+	defer os.RemoveAll(rootPath)
+
+	client, server := clientServerPair(t, Chroot(rootPath))
+	defer client.Close()
+	defer server.Close()
+
+	t.Run("stat", func(t *testing.T) {
+		// prepare, create file and symlink for stat
+		require.Nil(t, os.MkdirAll(filepath.Join(rootPath, "/stat"), 0700))
+		regular := "/stat/regular"
+		symlink := "/stat/symlink"
+		content := []byte(strings.Repeat("hello sftp", 1024))
+		require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, regular), content, 0700))
+		require.Nil(t, os.Symlink(filepath.Join(rootPath, regular), filepath.Join(rootPath, symlink)))
+		t.Run("regular-stat", func(t *testing.T) {
+			f, err := client.Stat(regular)
+			require.Nil(t, err)
+			require.NotNil(t, f)
+			assert.EqualValues(t, filepath.Base(regular), f.Name())
+			assert.EqualValues(t, len(content), f.Size())
+			assert.True(t, f.Mode().IsRegular())
+			assert.False(t, f.IsDir())
+		})
+		t.Run("symlink-stat", func(t *testing.T) {
+			f, err := client.Stat(symlink)
+			require.Nil(t, err)
+			require.NotNil(t, f)
+			assert.EqualValues(t, filepath.Base(symlink), f.Name())
+			assert.EqualValues(t, len(content), f.Size())
+			assert.True(t, f.Mode().IsRegular())
+			assert.False(t, f.IsDir())
+		})
+		t.Run("regular-lstat", func(t *testing.T) {
+			f, err := client.Lstat(regular)
+			require.Nil(t, err)
+			require.NotNil(t, f)
+			assert.EqualValues(t, filepath.Base(regular), f.Name())
+			assert.EqualValues(t, len(content), f.Size())
+			assert.True(t, f.Mode().IsRegular())
+			assert.False(t, f.IsDir())
+		})
+		t.Run("symlink-lstat", func(t *testing.T) {
+			f, err := client.Lstat(symlink)
+			require.Nil(t, err)
+			require.NotNil(t, f)
+			assert.EqualValues(t, filepath.Base(symlink), f.Name())
+			assert.Greater(t, int64(128), f.Size()) // may have some meta datas
+			assert.NotZero(t, f.Mode()&fs.ModeSymlink)
+		})
+		t.Run("readlink", func(t *testing.T) {
+			f, err := client.ReadLink(symlink)
+			require.Nil(t, err)
+			assert.Equal(t, regular, f)
+		})
+	})
+	t.Run("dir", func(t *testing.T) {
+		require.Nil(t, os.MkdirAll(filepath.Join(rootPath, "/dir"), 0700))
+		assertDir := func(absPath string, exist bool) {
+			f, err := os.Lstat(absPath)
+			if !exist {
+				require.True(t, os.IsNotExist(err))
+			} else {
+				require.Nil(t, err)
+				assert.True(t, f.IsDir())
+			}
+		}
+		t.Run("mkdir", func(t *testing.T) {
+			relPath := "/dir/mkdir"
+			require.Nil(t, client.Mkdir(relPath))
+			// dir should be created
+			assertDir(filepath.Join(rootPath, relPath), true)
+			// cannot create nested dir
+			require.NotNil(t, client.Mkdir("/dir/mkdir/nested/should/fail"))
+		})
+		t.Run("mkdirall", func(t *testing.T) {
+			relPath := "/dir/mkdir-all/nested"
+			require.Nil(t, client.MkdirAll(relPath))
+			// dir should be created
+			assertDir(filepath.Join(rootPath, relPath), true)
+		})
+		t.Run("rmdir", func(t *testing.T) {
+			// prepare
+			relPath := "/dir/rmdir"
+			require.Nil(t, os.MkdirAll(filepath.Join(rootPath, relPath), 0700))
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, relPath, "nested"), []byte("some file"), 0700))
+			// cannot remove a not empty dir
+			require.NotNil(t, client.RemoveDirectory(relPath))
+			// remove nested file, to remove an empty dir
+			require.Nil(t, os.Remove(filepath.Join(rootPath, relPath, "nested")))
+			// call sftp cmd
+			require.Nil(t, client.RemoveDirectory(relPath))
+			// dir should be removed
+			assertDir(filepath.Join(rootPath, relPath), false)
+		})
+	})
+	t.Run("file", func(t *testing.T) {
+		require.Nil(t, os.MkdirAll(filepath.Join(rootPath, "/file"), 0700))
+		t.Run("symlink", func(t *testing.T) {
+			// prepare
+			regular := "/file/regular"
+			symlink := "/file/symlink"
+			content := []byte(strings.Repeat("hello sftp", 1024))
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, regular), content, 0700))
+			// call sftp cmd
+			require.Nil(t, client.Symlink(regular, symlink))
+			// check result, symlink should be created
+			f, err := os.Lstat(filepath.Join(rootPath, symlink))
+			require.Nil(t, err)
+			assert.EqualValues(t, filepath.Base(symlink), f.Name())
+			assert.NotZero(t, f.Mode()&fs.ModeSymlink)
+		})
+		t.Run("rename", func(t *testing.T) {
+			// prepare
+			oldfile := "/file/oldfile"
+			newfile := "/file/newfile"
+			content := []byte(strings.Repeat("hello sftp", 1024))
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, oldfile), content, 0700))
+			// call sftp cmd
+			require.Nil(t, client.Rename(oldfile, newfile))
+			// check result, ori file should rename to new
+			require.NoFileExists(t, filepath.Join(rootPath, oldfile))
+			require.FileExists(t, filepath.Join(rootPath, newfile))
+		})
+		t.Run("remove", func(t *testing.T) {
+			// prepare
+			toRemove := "/file/to-remove"
+			content := []byte(strings.Repeat("hello sftp", 1024))
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, toRemove), content, 0700))
+			// call sftp cmd
+			require.Nil(t, client.Remove(toRemove))
+			// check result, file should be removed
+			require.NoFileExists(t, filepath.Join(rootPath, toRemove))
+			// cannot remove file not exist
+			require.NotNil(t, client.Remove(toRemove))
+		})
+		t.Run("open", func(t *testing.T) {
+			// prepare
+			readfile := "/file/readfile"
+			content := []byte(strings.Repeat("hello sftp", 1024))
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, readfile), content, 0700))
+			// call sftp cmd
+			f, err := client.Open(readfile)
+			require.Nil(t, err)
+			require.NotNil(t, f)
+			defer f.Close()
+			bytes, err := ioutil.ReadAll(f)
+			// check result
+			require.Nil(t, err)
+			assert.EqualValues(t, content, bytes)
+		})
+		t.Run("write", func(t *testing.T) {
+			// prepare
+			writefile := "/file/writefile"
+			content := []byte(strings.Repeat("hello sftp", 1024))
+			// call sftp cmd
+			f, err := client.Create(writefile)
+			require.Nil(t, err)
+			require.NotNil(t, f)
+			defer f.Close()
+			n, err := f.Write(content)
+			require.Nil(t, err)
+			assert.EqualValues(t, len(content), n)
+			// check result
+			require.FileExists(t, filepath.Join(rootPath, writefile))
+			bytes, err := ioutil.ReadFile(filepath.Join(rootPath, writefile))
+			require.Nil(t, err)
+			assert.EqualValues(t, content, bytes)
+		})
+	})
+	t.Run("relative", func(t *testing.T) {
+		require.Nil(t, os.MkdirAll(filepath.Join(rootPath, "/relative"), 0700))
+		t.Run("opendir", func(t *testing.T) {
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, "/relative/file1"), []byte("file1"), 0700))
+			require.Nil(t, ioutil.WriteFile(filepath.Join(rootPath, "/relative/file2"), []byte("file2"), 0700))
+			files, err := client.ReadDir("/relative")
+			require.Nil(t, err)
+			require.Len(t, files, 2)
+			for _, file := range files {
+				assert.Contains(t, file.Name(), "file")
+				assert.EqualValues(t, file.Size(), 5)
+			}
+		})
+	})
+	t.Run("realpath", func(t *testing.T) {
+		f, err := client.RealPath(".")
+		require.Nil(t, err)
+		assert.Equal(t, "/", f)
+	})
+	t.Run("out-of-path", func(t *testing.T) {
+		_, err := client.RealPath("..")
+		require.NotNil(t, err)
+		_, err = client.ReadDir("..")
+		require.NotNil(t, err)
+	})
 }

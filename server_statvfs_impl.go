@@ -10,7 +10,12 @@ import (
 )
 
 func (p *sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
-	retPkt, err := getStatVFSForPath(p.Path)
+	localPath, err := svr.toLocalPath(p.Path)
+	if err != nil {
+		return statusFromError(p.ID, err)
+	}
+
+	retPkt, err := getStatVFSForPath(localPath)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
