@@ -1203,7 +1203,7 @@ func TestClientReadSequential(t *testing.T) {
 
 		stuff := make([]byte, 32)
 		n, err := sftpFile.Read(stuff)
-		require.NoError(t, err)
+		require.ErrorIs(t, err, io.EOF)
 		require.Equal(t, len(content), n)
 		require.Equal(t, content, stuff[0:len(content)])
 
