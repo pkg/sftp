@@ -999,9 +999,6 @@ func (f *File) readAtSequential(b []byte, off int64) (read int, err error) {
 			read += n
 		}
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return read, nil // return nil explicitly.
-			}
 			return read, err
 		}
 	}
