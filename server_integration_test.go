@@ -501,17 +501,15 @@ func runSftpClient(t *testing.T, script string, path string, host string, port i
 		return "", err
 	}
 
-	output := stdout.String()
-
 	if err := cmd.Wait(); err != nil {
-		return output, &execError{
+		return stdout.String(), &execError{
 			path:   cmd.Path,
 			stderr: stderr.String(),
 			err:    err,
 		}
 	}
 
-	return output, nil
+	return stdout.String(), nil
 }
 
 // assert.Eventually seems to have a data rate on macOS with go 1.14 so replace it with this simpler function
