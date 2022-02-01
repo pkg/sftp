@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -359,7 +360,7 @@ func TestClientOpenIsNotExist(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	if _, err := sftp.Open("/doesnt/exist/"); !os.IsNotExist(err) {
+	if _, err := sftp.Open("/doesnt/exist"); !os.IsNotExist(err) {
 		t.Errorf("os.IsNotExist(%v) = false, want true", err)
 	}
 }
@@ -369,7 +370,7 @@ func TestClientStatIsNotExist(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	if _, err := sftp.Stat("/doesnt/exist/"); !os.IsNotExist(err) {
+	if _, err := sftp.Stat("/doesnt/exist"); !os.IsNotExist(err) {
 		t.Errorf("os.IsNotExist(%v) = false, want true", err)
 	}
 }
@@ -758,6 +759,11 @@ func TestClientGetwd(t *testing.T) {
 }
 
 func TestClientReadLink(t *testing.T) {
+	if runtime.GOOS == "windows" && *testServerImpl {
+		// os.Symlink requires privilege escalation.
+		t.Skip()
+	}
+
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -810,6 +816,11 @@ func TestClientLink(t *testing.T) {
 }
 
 func TestClientSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" && *testServerImpl {
+		// os.Symlink requires privilege escalation.
+		t.Skip()
+	}
+
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -1600,6 +1611,7 @@ func clientWriteDeadlock(t *testing.T, N int, badfunc func(*File)) {
 	if !*testServerImpl {
 		t.Skipf("skipping without -testserver")
 	}
+
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -2241,18 +2253,23 @@ func TestServerRoughDisconnectEOF(t *testing.T) {
 // sftp/issue/26 writing to a read only file caused client to loop.
 func TestClientWriteToROFile(t *testing.T) {
 	skipIfWindows(t)
+
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
+
 	defer func() {
 		err := sftp.Close()
 		assert.NoError(t, err)
 	}()
 
+	// TODO (puellanivis): /dev/zero is not actually a read-only file.
+	// So, this test works purely by accident.
 	f, err := sftp.Open("/dev/zero")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
+
 	_, err = f.Write([]byte("hello"))
 	if err == nil {
 		t.Fatal("expected error, got", err)
