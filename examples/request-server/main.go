@@ -22,10 +22,12 @@ func main() {
 	var (
 		readOnly    bool
 		debugStderr bool
+		fsPath      string
 	)
 
 	flag.BoolVar(&readOnly, "R", false, "read-only server")
 	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
+	flag.StringVar(&fsPath, "localPath", "", "Use a path on the local filesystem instead of in-memory filesystem")
 	flag.Parse()
 
 	debugStream := ioutil.Discard
@@ -121,6 +123,11 @@ func main() {
 
 		root := sftp.InMemHandler()
 		server := sftp.NewRequestServer(channel, root)
+		if fsPath != "" {
+			log.Print("Creating request server for local path: " + fsPath)
+			root = sftp.FilesystemHandler(fsPath)
+			server = sftp.NewRequestServer(channel, root)
+		}
 		if err := server.Serve(); err == io.EOF {
 			server.Close()
 			log.Print("sftp client exited session.")
