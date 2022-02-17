@@ -1176,11 +1176,13 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 		if n > 0 {
 			f.offset += int64(n)
 
-			m, err2 := w.Write(b[:n])
+			m, wErr := w.Write(b[:n])
 			written += int64(m)
 
-			if err == nil {
-				err = err2
+			if wErr != nil {
+				if err == nil || err == io.EOF {
+					err = wErr
+				}
 			}
 		}
 

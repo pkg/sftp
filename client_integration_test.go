@@ -1249,6 +1249,44 @@ func TestClientReadSequential(t *testing.T) {
 	}
 }
 
+type writerFunc func(b []byte) (int, error)
+
+func (f writerFunc) Write(b []byte) (int, error) {
+	return f(b)
+}
+
+func TestClientWriteSequential_WriterErr(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	sftp.disableConcurrentReads = true
+	d, err := ioutil.TempDir("", "sftptest-writesequential")
+	require.NoError(t, err)
+
+	defer os.RemoveAll(d)
+
+	f, err := ioutil.TempFile(d, "write-sequential-test")
+	require.NoError(t, err)
+	fname := f.Name()
+	content := []byte("hello world")
+	f.Write(content)
+	f.Close()
+
+	sftpFile, err := sftp.Open(fname)
+	require.NoError(t, err)
+	defer sftpFile.Close()
+
+	want := errors.New("error writing")
+	n, got := io.Copy(writerFunc(func(b []byte) (int, error) {
+		return 10, want
+	}), sftpFile)
+
+	require.Error(t, got)
+	assert.ErrorIs(t, want, got)
+	assert.Equal(t, int64(10), n)
+}
+
 func TestClientReadDir(t *testing.T) {
 	sftp1, cmd1 := testClient(t, READONLY, NODELAY)
 	sftp2, cmd2 := testClientGoSvr(t, READONLY, NODELAY)
