@@ -29,6 +29,7 @@ type S3Driver struct {
 	prefix   string
 	homePath string
 	kmsKeyID *string
+	lg       Logger
 }
 
 func (d S3Driver) Stat(path string) (os.FileInfo, error) {
@@ -210,6 +211,14 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	if d.lg != nil {
+		d.lg.InfoD("s3Driver-get-file-success", meta{
+			"district_id":     d.bucket,
+			"method":          "GET",
+			"path":            localPath,
+			"file_bytes_size": obj.ContentLength,
+		})
+	}
 	return obj.Body, nil
 }
 
@@ -235,7 +244,18 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 		input.SSEKMSKeyId = aws.String(*d.kmsKeyID)
 	}
 	_, err = d.s3.PutObject(input)
-	return err
+	if err != nil {
+		return err
+	}
+	if d.lg != nil {
+		d.lg.InfoD("s3Driver-put-file-success", meta{
+			"district_id":     d.bucket,
+			"method":          "PUT",
+			"path":            localPath,
+			"file_bytes_size": input.ContentLength,
+		})
+	}
+	return nil
 }
 
 func (d S3Driver) RealPath(path string) string {
@@ -272,7 +292,7 @@ func TranslatePath(prefix, home, path string) (string, error) {
 // bucket: name of S3 bucket
 // prefix: key within the S3 bucket, if applicable
 // homePath: default home directory for user (can be different from prefix)
-func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string, kmsKeyID *string) *S3Driver {
+func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string, kmsKeyID *string, lg Logger) *S3Driver {
 	config := aws.NewConfig().
 		WithRegion(region).
 		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, awsToken))
@@ -283,5 +303,6 @@ func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey,
 		prefix:   prefix,
 		homePath: homePath,
 		kmsKeyID: kmsKeyID,
+		lg:       lg,
 	}
 }
