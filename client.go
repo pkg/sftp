@@ -1180,9 +1180,7 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 			written += int64(m)
 
 			if wErr != nil {
-				if err == nil || err == io.EOF {
-					err = wErr
-				}
+				return written, wErr
 			}
 		}
 
