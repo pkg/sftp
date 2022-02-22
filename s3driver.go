@@ -254,8 +254,7 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 			"s3_bucket":       d.bucket,
 			"method":          "PUT",
 			"path":            localPath,
-			"file_bytes_size": input.ContentLength,
-			"file_size":       bytes.NewReader(rawData).Size(),
+			"file_bytes_size": bytes.NewReader(rawData).Size(),
 		})
 	}
 	return nil
