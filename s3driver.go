@@ -212,7 +212,7 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	if d.lg != nil {
-		d.lg.InfoD("s3Driver-get-file-success", meta{
+		d.lg.InfoD("s3-get-file-success", meta{
 			"district_id":     d.prefix,
 			"s3_bucket":       d.bucket,
 			"method":          "GET",
@@ -249,12 +249,13 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 		return err
 	}
 	if d.lg != nil {
-		d.lg.InfoD("s3Driver-put-file-success", meta{
+		d.lg.InfoD("s3-put-file-success", meta{
 			"district_id":     d.prefix,
 			"s3_bucket":       d.bucket,
 			"method":          "PUT",
 			"path":            localPath,
 			"file_bytes_size": input.ContentLength,
+			"file_size":       bytes.NewReader(rawData).Size(),
 		})
 	}
 	return nil
