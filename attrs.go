@@ -22,11 +22,15 @@ const (
 // fileInfo is an artificial type designed to satisfy os.FileInfo.
 type fileInfo struct {
 	name string
+	lname string
 	stat *FileStat
 }
 
 // Name returns the base name of the file.
 func (fi *fileInfo) Name() string { return fi.name }
+
+// LongName returns the long name of the file.
+func (fi *fileInfo) LongName() string { return fi.lname }
 
 // Size returns the length in bytes for regular files; system-dependent for others.
 func (fi *fileInfo) Size() int64 { return int64(fi.stat.Size) }

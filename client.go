@@ -336,15 +336,22 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 			}
 			count, data := unmarshalUint32(data)
 			for i := uint32(0); i < count; i++ {
-				var filename string
+				var filename, longname string
 				filename, data = unmarshalString(data)
-				_, data = unmarshalString(data) // discard longname
+				// longname contains useful information and should not be discarded
+				// mode         hardlink   user     group      m_time               name
+				// -rwxr-xr-x   1          mjos     staff      348911 Mar 25 14:29  t-filexfer
+				longname, data = unmarshalString(data) // discard longname
 				var attr *FileStat
 				attr, data = unmarshalAttrs(data)
 				if filename == "." || filename == ".." {
 					continue
 				}
-				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)))
+				attrs = append(attrs, &fileInfo{
+					name:  path.Base(filename),
+					lname: longname,
+					stat:  attr,
+				})
 			}
 		case sshFxpStatus:
 			// TODO(dfc) scope warning!
