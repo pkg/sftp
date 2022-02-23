@@ -19,6 +19,10 @@ const (
 		sshFileXferAttrACmodTime | sshFileXferAttrExtended
 )
 
+func GetLongName(fi os.FileInfo) string {
+	return fi.(*fileInfo).LongName()
+}
+
 // fileInfo is an artificial type designed to satisfy os.FileInfo.
 type fileInfo struct {
 	name string
