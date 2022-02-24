@@ -223,7 +223,7 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 	return obj.Body, nil
 }
 
-func (d S3Driver) PutFile(path string, r io.Reader) error {
+func (d S3Driver) PutFile(path string, r io.Reader, source string) error {
 	localPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return err
@@ -255,6 +255,7 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 			"method":          "PUT",
 			"path":            localPath,
 			"file_bytes_size": bytes.NewReader(rawData).Size(),
+			"source":          source,
 		})
 	}
 	return nil
