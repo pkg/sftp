@@ -248,7 +248,7 @@ func (d S3Driver) PutFile(path string, r io.Reader, enableLogging bool) error {
 	if err != nil {
 		return err
 	}
-	if d.lg != nil && enableLogging == true {
+	if d.lg != nil && enableLogging != false {
 		d.lg.InfoD("s3-put-file-success", meta{
 			"district_id":     d.prefix,
 			"s3_bucket":       d.bucket,
