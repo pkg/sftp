@@ -28,7 +28,7 @@ type ServerDriver interface {
 	Rename(oldPath string, newPath string) error
 	MakeDir(path string) error
 	GetFile(path string) (io.ReadCloser, error)
-	PutFile(path string, reader io.Reader, source string) error
+	PutFile(path string, reader io.Reader) error
 	RealPath(path string) string
 }
 
@@ -81,7 +81,7 @@ func (svr *Server) closeHandle(handle string) error {
 		if _, err := f.TempHandle.Seek(0, 0); err != nil {
 			return err
 		}
-		return svr.driver.PutFile(f.Path, f.TempHandle, "closeHandle")
+		return svr.driver.PutFile(f.Path, f.TempHandle)
 	}
 
 	return syscall.EBADF
