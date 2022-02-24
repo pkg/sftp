@@ -298,7 +298,7 @@ func TestPutFile(t *testing.T) {
 		bucket:   "bucket",
 		homePath: "home",
 	}
-	err := driver.PutFile("../../dir/file", bytes.NewReader([]byte{1, 2, 3}))
+	err := driver.PutFile("../../dir/file", bytes.NewReader([]byte{1, 2, 3}), false)
 
 	assert.NoError(t, err)
 }
@@ -323,7 +323,7 @@ func TestPutFileWithKmsKeyID(t *testing.T) {
 		homePath: "home",
 		kmsKeyID: &kmsKeyID,
 	}
-	err := driver.PutFile("../../dir/file", bytes.NewReader([]byte{1, 2, 3}))
+	err := driver.PutFile("../../dir/file", bytes.NewReader([]byte{1, 2, 3}), false)
 
 	assert.NoError(t, err)
 }
