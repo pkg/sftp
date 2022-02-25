@@ -249,7 +249,8 @@ func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedR
 			}
 		case *sshFxpExtendedPacketPosixRename:
 			request := NewRequest("PosixRename", pkt.Oldpath)
-			request.Target = pkt.Newpath
+			request.RawTarget = pkt.Newpath
+			request.Target = cleanPath(pkt.Newpath)
 			rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 		case *sshFxpExtendedPacketStatVFS:
 			request := NewRequest("StatVFS", pkt.Path)

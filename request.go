@@ -123,14 +123,18 @@ func (s *state) getListerAt() ListerAt {
 
 // Request contains the data and state for the incoming service request.
 type Request struct {
+	handle string
 	// Get, Put, Setstat, Stat, Rename, Remove
 	// Rmdir, Mkdir, List, Readlink, Link, Symlink
-	Method   string
-	Filepath string
-	Flags    uint32
-	Attrs    []byte // convert to sub-struct
-	Target   string // for renames and sym-links
-	handle   string
+	Method string
+
+	RawFilepath string // raw file path as sent by the SFTP client
+	Filepath    string // POSIX absolute path, "/" is used as base if RawFilepath is relative
+	RawTarget   string // raw target path for rename and sym-links as sent by the SFTP client
+	Target      string // POSIX absolute path for renames and sym-links, "/" is used as base if RawTarget is relative
+
+	Flags uint32
+	Attrs []byte // convert to sub-struct
 
 	// reader/writer/readdir from handlers
 	state
@@ -143,8 +147,9 @@ type Request struct {
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
 	return &Request{
-		Method:   method,
-		Filepath: cleanPath(path),
+		Method:      method,
+		Filepath:    cleanPath(path),
+		RawFilepath: path,
 	}
 }
 
@@ -153,12 +158,16 @@ func NewRequest(method, path string) *Request {
 // because we have to copy around the mutex in state.
 func (r *Request) copy() *Request {
 	return &Request{
-		Method:   r.Method,
-		Filepath: r.Filepath,
-		Flags:    r.Flags,
-		Attrs:    r.Attrs,
-		Target:   r.Target,
-		handle:   r.handle,
+		handle: r.handle,
+		Method: r.Method,
+
+		RawFilepath: r.RawFilepath,
+		Filepath:    r.Filepath,
+		RawTarget:   r.RawTarget,
+		Target:      r.Target,
+
+		Flags: r.Flags,
+		Attrs: r.Attrs,
 
 		state: r.state.copy(),
 
@@ -180,12 +189,15 @@ func requestFromPacket(ctx context.Context, pkt hasPath) *Request {
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
+		request.RawTarget = p.Newpath
 		request.Target = cleanPath(p.Newpath)
 	case *sshFxpSymlinkPacket:
 		// NOTE: given a POSIX compliant signature: symlink(target, linkpath string)
 		// this makes Request.Target the linkpath, and Request.Filepath the target.
+		request.RawTarget = p.Linkpath
 		request.Target = cleanPath(p.Linkpath)
 	case *sshFxpExtendedPacketHardlink:
+		request.RawTarget = p.Newpath
 		request.Target = cleanPath(p.Newpath)
 	}
 	return request
@@ -355,7 +367,7 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 	r.Method = "List"
 	la, err := h.FileList.Filelist(r)
 	if err != nil {
-		return statusFromError(pkt.id(), wrapPathError(r.Filepath, err))
+		return statusFromError(pkt.id(), wrapPathError(r.RawFilepath, err))
 	}
 
 	r.setListerAt(la)
@@ -558,7 +570,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if n == 0 {
 			err = &os.PathError{
 				Op:   strings.ToLower(r.Method),
-				Path: r.Filepath,
+				Path: r.RawFilepath,
 				Err:  syscall.ENOENT,
 			}
 			return statusFromError(pkt.id(), err)
@@ -574,7 +586,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if n == 0 {
 			err = &os.PathError{
 				Op:   "readlink",
-				Path: r.Filepath,
+				Path: r.RawFilepath,
 				Err:  syscall.ENOENT,
 			}
 			return statusFromError(pkt.id(), err)
