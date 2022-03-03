@@ -37,7 +37,7 @@ func (cs csPair) testHandler() *root {
 
 const sock = "/tmp/rstest.sock"
 
-func clientRequestServerPair(t *testing.T) *csPair {
+func clientRequestServerPair(t *testing.T, options ...RequestServerOption) *csPair {
 	skipIfWindows(t)
 	skipIfPlan9(t)
 
@@ -62,7 +62,6 @@ func clientRequestServerPair(t *testing.T) *csPair {
 		require.NoError(t, err)
 
 		handlers := InMemHandler()
-		var options []RequestServerOption
 		if *testAllocator {
 			options = append(options, WithRSAllocator())
 		}
@@ -781,6 +780,37 @@ func TestRequestStatVFSError(t *testing.T) {
 	checkRequestServerAllocator(t, p)
 }
 
+func TestRequestStartDirOption(t *testing.T) {
+	startDir := "/start/dir"
+	p := clientRequestServerPair(t, WithStartDirectory(startDir))
+	defer p.Close()
+
+	// create the start directory
+	err := p.cli.MkdirAll(startDir)
+	require.NoError(t, err)
+	// the working directory must be the defined start directory
+	wd, err := p.cli.Getwd()
+	require.NoError(t, err)
+	require.Equal(t, startDir, wd)
+	// upload a file using a relative path, it must be uploaded to the start directory
+	fileName := "file.txt"
+	_, err = putTestFile(p.cli, fileName, "")
+	require.NoError(t, err)
+	// we must be able to stat the file using both a relative and an absolute path
+	for _, filePath := range []string{fileName, path.Join(startDir, fileName)} {
+		fi, err := p.cli.Stat(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, fileName, fi.Name())
+	}
+	// list dir contents using a relative path
+	entries, err := p.cli.ReadDir(".")
+	assert.NoError(t, err)
+	assert.Len(t, entries, 1)
+	// delete the file using a relative path
+	err = p.cli.Remove(fileName)
+	assert.NoError(t, err)
+}
+
 func TestCleanDisconnect(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -831,6 +861,7 @@ func TestRealPath(t *testing.T) {
 func TestCleanPath(t *testing.T) {
 	assert.Equal(t, "/", cleanPath("/"))
 	assert.Equal(t, "/", cleanPath("."))
+	assert.Equal(t, "/", cleanPath(""))
 	assert.Equal(t, "/", cleanPath("/."))
 	assert.Equal(t, "/", cleanPath("/a/.."))
 	assert.Equal(t, "/a/c", cleanPath("/a/b/../c"))
