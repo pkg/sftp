@@ -1249,6 +1249,53 @@ func TestClientReadSequential(t *testing.T) {
 	}
 }
 
+// this writer requires maxPacket = 3 and always returns an error for the second write call
+type lastChunkErrSequentialWriter struct {
+	counter int
+}
+
+func (w *lastChunkErrSequentialWriter) Write(b []byte) (int, error) {
+	w.counter++
+	if w.counter == 1 {
+		if len(b) != 3 {
+			return 0, errors.New("this writer requires maxPacket = 3, please set MaxPacketChecked(3)")
+		}
+		return len(b), nil
+	}
+	return 1, errors.New("this writer fails after the first write")
+}
+
+func TestClientWriteSequentialWriterErr(t *testing.T) {
+	client, cmd := testClient(t, READONLY, NODELAY, MaxPacketChecked(3))
+	defer cmd.Wait()
+	defer client.Close()
+
+	d, err := ioutil.TempDir("", "sftptest-writesequential-writeerr")
+	require.NoError(t, err)
+
+	defer os.RemoveAll(d)
+
+	f, err := ioutil.TempFile(d, "write-sequential-writeerr-test")
+	require.NoError(t, err)
+	fname := f.Name()
+	_, err = f.Write([]byte("12345"))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	sftpFile, err := client.Open(fname)
+	require.NoError(t, err)
+	defer sftpFile.Close()
+
+	w := &lastChunkErrSequentialWriter{}
+	written, err := sftpFile.writeToSequential(w)
+	assert.Error(t, err)
+	expected := int64(4)
+	if written != expected {
+		t.Errorf("sftpFile.Write() = %d, but expected %d", written, expected)
+	}
+	assert.Equal(t, 2, w.counter)
+}
+
 func TestClientReadDir(t *testing.T) {
 	sftp1, cmd1 := testClient(t, READONLY, NODELAY)
 	sftp2, cmd2 := testClientGoSvr(t, READONLY, NODELAY)
