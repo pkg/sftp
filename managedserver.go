@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	proxyproto "github.com/pires/go-proxyproto"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -79,7 +80,7 @@ func (m ManagedServer) Start(port int, rawPrivateKeys [][]byte, ciphers, macs []
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
-	proxyList := Listener{Listener: listener}
+	proxyList := proxyproto.Listener{Listener: listener}
 
 	if err != nil {
 		m.errorAndAlert("listen-fail", meta{
