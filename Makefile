@@ -1,11 +1,11 @@
 include golang.mk
-.DEFAULT_GOAL := install_deps # override default goal set in library makefile
+.DEFAULT_GOAL := test # override default goal set in library makefile
 
 SHELL := /bin/bash
 PKG := github.com/Clever/sftp
 PKGS := $(shell go list ./... | grep -v /vendor)
 EXECUTABLE := $(shell basename $(PKG))
-.PHONY: build vendor $(PKGS) $(SCRIPTS)
+.PHONY: test build vendor $(PKGS) $(SCRIPTS)
 
 install_deps:
 	go mod vendor
@@ -20,3 +20,11 @@ build: $(SCRIPTS)
 
 $(PKGS): golang-test-all-strict-deps
 	$(call golang-test-all-strict,$@)
+
+test:
+	go test -integration -v ./...
+	go test -testserver -v ./...
+	go test -integration -testserver -v ./...
+	go test -race -integration -v ./...
+	go test -race -testserver -v ./...
+	go test -race -integration -testserver -v ./...
