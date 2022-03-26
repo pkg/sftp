@@ -24,12 +24,13 @@ type S3 interface {
 }
 
 type S3Driver struct {
-	s3       S3
-	bucket   string
-	prefix   string
-	homePath string
-	kmsKeyID *string
-	lg       Logger
+	s3              S3
+	bucket          string
+	prefix          string
+	homePath        string
+	remoteIPAddress string
+	kmsKeyID        *string
+	lg              Logger
 }
 
 func (d S3Driver) Stat(path string) (os.FileInfo, error) {
@@ -217,6 +218,7 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 			"s3_bucket":       d.bucket,
 			"method":          "GET",
 			"path":            localPath,
+			"client-ip":       d.remoteIPAddress,
 			"file_bytes_size": obj.ContentLength,
 		})
 	}
@@ -254,6 +256,7 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 			"s3_bucket":       d.bucket,
 			"method":          "PUT",
 			"path":            localPath,
+			"client-ip":       d.remoteIPAddress,
 			"file_bytes_size": bytes.NewReader(rawData).Size(),
 		})
 	}
@@ -294,17 +297,29 @@ func TranslatePath(prefix, home, path string) (string, error) {
 // bucket: name of S3 bucket
 // prefix: key within the S3 bucket, if applicable
 // homePath: default home directory for user (can be different from prefix)
-func NewS3Driver(bucket, prefix, homePath, region, awsAccessKeyID, awsSecretKey, awsToken string, kmsKeyID *string, lg Logger) *S3Driver {
+func NewS3Driver(
+	bucket,
+	prefix,
+	homePath,
+	region,
+	awsAccessKeyID,
+	awsSecretKey,
+	awsToken,
+	remoteIPAddress string,
+	kmsKeyID *string,
+	lg Logger,
+) *S3Driver {
 	config := aws.NewConfig().
 		WithRegion(region).
 		WithCredentials(credentials.NewStaticCredentials(awsAccessKeyID, awsSecretKey, awsToken))
 	s3 := s3.New(session.New(), config)
 	return &S3Driver{
-		s3:       s3,
-		bucket:   bucket,
-		prefix:   prefix,
-		homePath: homePath,
-		kmsKeyID: kmsKeyID,
-		lg:       lg,
+		s3:              s3,
+		bucket:          bucket,
+		prefix:          prefix,
+		homePath:        homePath,
+		remoteIPAddress: remoteIPAddress,
+		kmsKeyID:        kmsKeyID,
+		lg:              lg,
 	}
 }
