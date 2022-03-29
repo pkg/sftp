@@ -212,15 +212,7 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	urlArray := strings.Split(d.remoteIPAddress, ":")
-	ip := ""
-	port := ""
-	if len(urlArray) > 0 {
-		ip = urlArray[0]
-	}
-	if len(urlArray) > 1 {
-		port = urlArray[1]
-	}
+	ip, port := getIPAndPort(d.remoteIPAddress)
 	if d.lg != nil {
 		d.lg.InfoD("s3-get-file-success", meta{
 			"district_id":     d.prefix,
@@ -260,15 +252,7 @@ func (d S3Driver) PutFile(path string, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	urlArray := strings.Split(d.remoteIPAddress, ":")
-	ip := ""
-	port := ""
-	if len(urlArray) > 0 {
-		ip = urlArray[0]
-	}
-	if len(urlArray) > 1 {
-		port = urlArray[1]
-	}
+	ip, port := getIPAndPort(d.remoteIPAddress)
 	if d.lg != nil {
 		d.lg.InfoD("s3-put-file-success", meta{
 			"district_id":     d.prefix,
@@ -342,4 +326,17 @@ func NewS3Driver(
 		kmsKeyID:        kmsKeyID,
 		lg:              lg,
 	}
+}
+
+func getIPAndPort(combined string) (string, string) {
+	urlArray := strings.Split(combined, ":")
+	ip := ""
+	port := ""
+	if len(urlArray) > 0 {
+		ip = urlArray[0]
+	}
+	if len(urlArray) > 1 {
+		port = urlArray[1]
+	}
+	return ip, port
 }
