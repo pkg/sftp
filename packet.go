@@ -662,7 +662,8 @@ type sshFxpOpenPacket struct {
 	ID     uint32
 	Path   string
 	Pflags uint32
-	Flags  uint32 // ignored
+	Flags  uint32
+	Perm   uint32
 }
 
 func (p *sshFxpOpenPacket) id() uint32 { return p.ID }
@@ -672,12 +673,19 @@ func (p *sshFxpOpenPacket) MarshalBinary() ([]byte, error) {
 		4 + len(p.Path) +
 		4 + 4
 
+	if p.Flags&sshFileXferAttrPermissions != 0 {
+		l += 4
+	}
+
 	b := make([]byte, 4, l)
 	b = append(b, sshFxpOpen)
 	b = marshalUint32(b, p.ID)
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Pflags)
 	b = marshalUint32(b, p.Flags)
+	if p.Flags&sshFileXferAttrPermissions != 0 {
+		b = marshalUint32(b, p.Perm)
+	}
 
 	return b, nil
 }
@@ -690,8 +698,12 @@ func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) error {
 		return err
 	} else if p.Pflags, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
-	} else if p.Flags, _, err = unmarshalUint32Safe(b); err != nil {
+	} else if p.Flags, b, err = unmarshalUint32Safe(b); err != nil {
 		return err
+	} else if p.Flags&sshFileXferAttrPermissions != 0 {
+		if p.Perm, _, err = unmarshalUint32Safe(b); err != nil {
+			return err
+		}
 	}
 	return nil
 }

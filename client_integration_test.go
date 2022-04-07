@@ -569,6 +569,37 @@ func TestClientFileStat(t *testing.T) {
 	}
 }
 
+func TestClientOpenFileWithMode(t *testing.T) {
+	t.Skipf("skipping with -testserver")
+
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	d, err := ioutil.TempDir("", "sftptest-openfilemode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	filename := filepath.Join(d, "foo")
+	f, err := sftp.OpenFileWithMode(filename, os.O_RDWR|os.O_CREATE|os.O_EXCL,
+		0) // Mode 0 works with every umask.
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	info, err := os.Stat(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if mode := info.Mode(); mode != 0 {
+		t.Error("wanted mode 0, got", mode)
+	}
+}
+
 func TestClientStatLink(t *testing.T) {
 	skipIfWindows(t) // Windows does not support links.
 

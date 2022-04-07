@@ -248,7 +248,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 // read/write at the same time. For those services you will need to use
 // `client.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC)`.
 func (c *Client) Create(path string) (*File, error) {
-	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
+	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC), 0, 0)
 }
 
 const sftpProtocolVersion = 3 // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
@@ -567,22 +567,37 @@ func (c *Client) Truncate(path string, size int64) error {
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
 func (c *Client) Open(path string) (*File, error) {
-	return c.open(path, flags(os.O_RDONLY))
+	return c.open(path, flags(os.O_RDONLY), 0, 0)
 }
 
 // OpenFile is the generalized open call; most users will use Open or
 // Create instead. It opens the named file with specified flag (O_RDONLY
 // etc.). If successful, methods on the returned File can be used for I/O.
 func (c *Client) OpenFile(path string, f int) (*File, error) {
-	return c.open(path, flags(f))
+	return c.open(path, flags(f), 0, 0)
 }
 
-func (c *Client) open(path string, pflags uint32) (*File, error) {
+// OpenFileWithMode opens a file. The flag set f consists of open flags from
+// the os package, os.O_RDONLY, os.O_RDWR, etc. If it includes the flag
+// os.O_CREATE, the initial file permissions are set to perm.
+//
+// Creating a file with OpenFileWithMode is equivalent to creating it with
+// OpenFile followed by Chmod, but without leaving open a window in which
+// the remote file has the wrong permissions.
+//
+// See Client.Chmod for details on how perm is handled.
+func (c *Client) OpenFileWithMode(path string, f int, perm os.FileMode) (*File, error) {
+	return c.open(path, flags(f), sshFileXferAttrPermissions, perm)
+}
+
+func (c *Client) open(path string, pflags, flags uint32, perm os.FileMode) (*File, error) {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpOpenPacket{
 		ID:     id,
 		Path:   path,
 		Pflags: pflags,
+		Flags:  flags,
+		Perm:   toChmodPerm(perm),
 	})
 	if err != nil {
 		return nil, err
