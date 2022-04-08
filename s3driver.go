@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -201,6 +202,17 @@ func (d S3Driver) MakeDir(path string) error {
 }
 
 func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
+	denyList := map[string]string{
+		"5baac2eca47b2e0001fba7bc": "",
+		"57559919ba5df50100000371": "",
+		"5948272c6737440001c6d97f": "",
+		"5dc35c1bc06f8d000102e30f": "",
+		"5b9c35c6a47b2e0001fba77c": "",
+		"56a91ecf599456010000089e": "",
+	}
+	if _, ok := denyList[d.prefix]; ok {
+		return nil, fmt.Errorf("not supported")
+	}
 	localPath, err := TranslatePath(d.prefix, d.homePath, path)
 	if err != nil {
 		return nil, err
