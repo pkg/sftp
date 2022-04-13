@@ -209,6 +209,7 @@ func (d S3Driver) GetFile(path string) (io.ReadCloser, error) {
 		"5dc35c1bc06f8d000102e30f": "",
 		"5b9c35c6a47b2e0001fba77c": "",
 		"56a91ecf599456010000089e": "",
+		"5859884232aee60001eb363c": "",
 	}
 	if _, ok := denyList[d.prefix]; ok {
 		return nil, fmt.Errorf("not supported")
