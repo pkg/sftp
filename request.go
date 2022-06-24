@@ -176,14 +176,14 @@ func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Reques
 	request.ctx, request.cancelCtx = context.WithCancel(ctx)
 
 	switch p := pkt.(type) {
-	case *sshFxpOpenPacket:
+	case *OpenPacket:
 		request.Flags = p.Pflags
-	case *sshFxpSetstatPacket:
+	case *SetstatPacket:
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
-	case *sshFxpRenamePacket:
+	case *RenamePacket:
 		request.Target = cleanPathWithBase(baseDir, p.Newpath)
-	case *sshFxpSymlinkPacket:
+	case *SymlinkPacket:
 		// NOTE: given a POSIX compliant signature: symlink(target, linkpath string)
 		// this makes Request.Target the linkpath, and Request.Filepath the target.
 		request.Target = cleanPathWithBase(baseDir, p.Linkpath)
@@ -282,7 +282,7 @@ func (r *Request) transferError(err error) {
 }
 
 // called from worker to handle packet/request
-func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func (r *Request) call(handlers Handlers, pkt RequestPacket, alloc *allocator, orderID uint32) responsePacket {
 	switch r.Method {
 	case "Get":
 		return fileget(handlers.FileGet, r, pkt, alloc, orderID)
@@ -302,7 +302,7 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 }
 
 // Additional initialization for Open packets
-func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
+func (r *Request) open(h Handlers, pkt RequestPacket) responsePacket {
 	flags := r.Pflags()
 
 	id := pkt.id()
@@ -353,7 +353,7 @@ func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	}
 }
 
-func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
+func (r *Request) opendir(h Handlers, pkt RequestPacket) responsePacket {
 	r.Method = "List"
 	la, err := h.FileList.Filelist(r)
 	if err != nil {
@@ -369,7 +369,7 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func fileget(h FileReader, r *Request, pkt RequestPacket, alloc *allocator, orderID uint32) responsePacket {
 	rd := r.getReaderAt()
 	if rd == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected read packet"))
@@ -391,7 +391,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func fileput(h FileWriter, r *Request, pkt RequestPacket, alloc *allocator, orderID uint32) responsePacket {
 	wr := r.getWriterAt()
 	if wr == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected write packet"))
@@ -404,14 +404,14 @@ func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orde
 }
 
 // wrap OpenFileWriter handler
-func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func fileputget(h FileWriter, r *Request, pkt RequestPacket, alloc *allocator, orderID uint32) responsePacket {
 	rw := r.getWriterAtReaderAt()
 	if rw == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected write and read packet"))
 	}
 
 	switch p := pkt.(type) {
-	case *sshFxpReadPacket:
+	case *ReadPacket:
 		data, offset := p.getDataSlice(alloc, orderID), int64(p.Offset)
 
 		n, err := rw.ReadAt(data, offset)
@@ -426,7 +426,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 			Data:   data[:n],
 		}
 
-	case *sshFxpWritePacket:
+	case *WritePacket:
 		data, offset := p.Data, int64(p.Offset)
 
 		_, err := rw.WriteAt(data, offset)
@@ -438,20 +438,20 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 }
 
 // file data for additional read/write packets
-func packetData(p requestPacket, alloc *allocator, orderID uint32) (data []byte, offset int64, length uint32) {
+func packetData(p RequestPacket, alloc *allocator, orderID uint32) (data []byte, offset int64, length uint32) {
 	switch p := p.(type) {
-	case *sshFxpReadPacket:
+	case *ReadPacket:
 		return p.getDataSlice(alloc, orderID), int64(p.Offset), p.Len
-	case *sshFxpWritePacket:
+	case *WritePacket:
 		return p.Data, int64(p.Offset), p.Length
 	}
 	return
 }
 
 // wrap FileCmder handler
-func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
+func filecmd(h FileCmder, r *Request, pkt RequestPacket) responsePacket {
 	switch p := pkt.(type) {
-	case *sshFxpFsetstatPacket:
+	case *FsetstatPacket:
 		r.Flags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
 	}
@@ -486,7 +486,7 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 }
 
 // wrap FileLister handler
-func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
+func filelist(h FileLister, r *Request, pkt RequestPacket) responsePacket {
 	lister := r.getListerAt()
 	if lister == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected dir packet"))
@@ -530,7 +530,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	}
 }
 
-func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
+func filestat(h FileLister, r *Request, pkt RequestPacket) responsePacket {
 	var lister ListerAt
 	var err error
 
@@ -599,29 +599,29 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 }
 
 // init attributes of request object from packet data
-func requestMethod(p requestPacket) (method string) {
+func requestMethod(p RequestPacket) (method string) {
 	switch p.(type) {
-	case *sshFxpReadPacket, *sshFxpWritePacket, *sshFxpOpenPacket:
+	case *ReadPacket, *WritePacket, *OpenPacket:
 		// set in open() above
-	case *sshFxpOpendirPacket, *sshFxpReaddirPacket:
+	case *OpendirPacket, *ReaddirPacket:
 		// set in opendir() above
-	case *sshFxpSetstatPacket, *sshFxpFsetstatPacket:
+	case *SetstatPacket, *FsetstatPacket:
 		method = "Setstat"
-	case *sshFxpRenamePacket:
+	case *RenamePacket:
 		method = "Rename"
-	case *sshFxpSymlinkPacket:
+	case *SymlinkPacket:
 		method = "Symlink"
-	case *sshFxpRemovePacket:
+	case *RemovePacket:
 		method = "Remove"
-	case *sshFxpStatPacket, *sshFxpFstatPacket:
+	case *StatPacket, *FstatPacket:
 		method = "Stat"
-	case *sshFxpLstatPacket:
+	case *LstatPacket:
 		method = "Lstat"
-	case *sshFxpRmdirPacket:
+	case *RmdirPacket:
 		method = "Rmdir"
-	case *sshFxpReadlinkPacket:
+	case *ReadlinkPacket:
 		method = "Readlink"
-	case *sshFxpMkdirPacket:
+	case *MkdirPacket:
 		method = "Mkdir"
 	case *sshFxpExtendedPacketHardlink:
 		method = "Link"

@@ -6,7 +6,7 @@ import (
 )
 
 // all incoming packets
-type requestPacket interface {
+type RequestPacket interface {
 	encoding.BinaryUnmarshaler
 	id() uint32
 }
@@ -18,12 +18,12 @@ type responsePacket interface {
 
 // interfaces to group types
 type hasPath interface {
-	requestPacket
+	RequestPacket
 	getPath() string
 }
 
 type hasHandle interface {
-	requestPacket
+	RequestPacket
 	getHandle() string
 }
 
@@ -33,40 +33,40 @@ type notReadOnly interface {
 
 //// define types by adding methods
 // hasPath
-func (p *sshFxpLstatPacket) getPath() string    { return p.Path }
-func (p *sshFxpStatPacket) getPath() string     { return p.Path }
-func (p *sshFxpRmdirPacket) getPath() string    { return p.Path }
-func (p *sshFxpReadlinkPacket) getPath() string { return p.Path }
-func (p *sshFxpRealpathPacket) getPath() string { return p.Path }
-func (p *sshFxpMkdirPacket) getPath() string    { return p.Path }
-func (p *sshFxpSetstatPacket) getPath() string  { return p.Path }
-func (p *sshFxpStatvfsPacket) getPath() string  { return p.Path }
-func (p *sshFxpRemovePacket) getPath() string   { return p.Filename }
-func (p *sshFxpRenamePacket) getPath() string   { return p.Oldpath }
-func (p *sshFxpSymlinkPacket) getPath() string  { return p.Targetpath }
-func (p *sshFxpOpendirPacket) getPath() string  { return p.Path }
-func (p *sshFxpOpenPacket) getPath() string     { return p.Path }
+func (p *LstatPacket) getPath() string         { return p.Path }
+func (p *StatPacket) getPath() string          { return p.Path }
+func (p *RmdirPacket) getPath() string         { return p.Path }
+func (p *ReadlinkPacket) getPath() string      { return p.Path }
+func (p *RealpathPacket) getPath() string      { return p.Path }
+func (p *MkdirPacket) getPath() string         { return p.Path }
+func (p *SetstatPacket) getPath() string       { return p.Path }
+func (p *sshFxpStatvfsPacket) getPath() string { return p.Path }
+func (p *RemovePacket) getPath() string        { return p.Filename }
+func (p *RenamePacket) getPath() string        { return p.Oldpath }
+func (p *SymlinkPacket) getPath() string       { return p.Targetpath }
+func (p *OpendirPacket) getPath() string       { return p.Path }
+func (p *OpenPacket) getPath() string          { return p.Path }
 
 func (p *sshFxpExtendedPacketPosixRename) getPath() string { return p.Oldpath }
 func (p *sshFxpExtendedPacketHardlink) getPath() string    { return p.Oldpath }
 
 // getHandle
-func (p *sshFxpFstatPacket) getHandle() string    { return p.Handle }
-func (p *sshFxpFsetstatPacket) getHandle() string { return p.Handle }
-func (p *sshFxpReadPacket) getHandle() string     { return p.Handle }
-func (p *sshFxpWritePacket) getHandle() string    { return p.Handle }
-func (p *sshFxpReaddirPacket) getHandle() string  { return p.Handle }
-func (p *sshFxpClosePacket) getHandle() string    { return p.Handle }
+func (p *FstatPacket) getHandle() string    { return p.Handle }
+func (p *FsetstatPacket) getHandle() string { return p.Handle }
+func (p *ReadPacket) getHandle() string     { return p.Handle }
+func (p *WritePacket) getHandle() string    { return p.Handle }
+func (p *ReaddirPacket) getHandle() string  { return p.Handle }
+func (p *ClosePacket) getHandle() string    { return p.Handle }
 
 // notReadOnly
-func (p *sshFxpWritePacket) notReadOnly()               {}
-func (p *sshFxpSetstatPacket) notReadOnly()             {}
-func (p *sshFxpFsetstatPacket) notReadOnly()            {}
-func (p *sshFxpRemovePacket) notReadOnly()              {}
-func (p *sshFxpMkdirPacket) notReadOnly()               {}
-func (p *sshFxpRmdirPacket) notReadOnly()               {}
-func (p *sshFxpRenamePacket) notReadOnly()              {}
-func (p *sshFxpSymlinkPacket) notReadOnly()             {}
+func (p *WritePacket) notReadOnly()                     {}
+func (p *SetstatPacket) notReadOnly()                   {}
+func (p *FsetstatPacket) notReadOnly()                  {}
+func (p *RemovePacket) notReadOnly()                    {}
+func (p *MkdirPacket) notReadOnly()                     {}
+func (p *RmdirPacket) notReadOnly()                     {}
+func (p *RenamePacket) notReadOnly()                    {}
+func (p *SymlinkPacket) notReadOnly()                   {}
 func (p *sshFxpExtendedPacketPosixRename) notReadOnly() {}
 func (p *sshFxpExtendedPacketHardlink) notReadOnly()    {}
 
@@ -80,47 +80,47 @@ func (p *StatVFS) id() uint32            { return p.ID }
 func (p *sshFxVersionPacket) id() uint32 { return 0 }
 
 // take raw incoming packet data and build packet objects
-func makePacket(p rxPacket) (requestPacket, error) {
-	var pkt requestPacket
+func makePacket(p rxPacket) (RequestPacket, error) {
+	var pkt RequestPacket
 	switch p.pktType {
 	case sshFxpInit:
 		pkt = &sshFxInitPacket{}
 	case sshFxpLstat:
-		pkt = &sshFxpLstatPacket{}
+		pkt = &LstatPacket{}
 	case sshFxpOpen:
-		pkt = &sshFxpOpenPacket{}
+		pkt = &OpenPacket{}
 	case sshFxpClose:
-		pkt = &sshFxpClosePacket{}
+		pkt = &ClosePacket{}
 	case sshFxpRead:
-		pkt = &sshFxpReadPacket{}
+		pkt = &ReadPacket{}
 	case sshFxpWrite:
-		pkt = &sshFxpWritePacket{}
+		pkt = &WritePacket{}
 	case sshFxpFstat:
-		pkt = &sshFxpFstatPacket{}
+		pkt = &FstatPacket{}
 	case sshFxpSetstat:
-		pkt = &sshFxpSetstatPacket{}
+		pkt = &SetstatPacket{}
 	case sshFxpFsetstat:
-		pkt = &sshFxpFsetstatPacket{}
+		pkt = &FsetstatPacket{}
 	case sshFxpOpendir:
-		pkt = &sshFxpOpendirPacket{}
+		pkt = &OpendirPacket{}
 	case sshFxpReaddir:
-		pkt = &sshFxpReaddirPacket{}
+		pkt = &ReaddirPacket{}
 	case sshFxpRemove:
-		pkt = &sshFxpRemovePacket{}
+		pkt = &RemovePacket{}
 	case sshFxpMkdir:
-		pkt = &sshFxpMkdirPacket{}
+		pkt = &MkdirPacket{}
 	case sshFxpRmdir:
-		pkt = &sshFxpRmdirPacket{}
+		pkt = &RmdirPacket{}
 	case sshFxpRealpath:
-		pkt = &sshFxpRealpathPacket{}
+		pkt = &RealpathPacket{}
 	case sshFxpStat:
-		pkt = &sshFxpStatPacket{}
+		pkt = &StatPacket{}
 	case sshFxpRename:
-		pkt = &sshFxpRenamePacket{}
+		pkt = &RenamePacket{}
 	case sshFxpReadlink:
-		pkt = &sshFxpReadlinkPacket{}
+		pkt = &ReadlinkPacket{}
 	case sshFxpSymlink:
-		pkt = &sshFxpSymlinkPacket{}
+		pkt = &SymlinkPacket{}
 	case sshFxpExtended:
 		pkt = &sshFxpExtendedPacket{}
 	default:

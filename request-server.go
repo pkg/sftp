@@ -129,7 +129,7 @@ func (rs *RequestServer) serveLoop(pktChan chan<- orderedRequest) error {
 	defer close(pktChan) // shuts down sftpServerWorkers
 
 	var err error
-	var pkt requestPacket
+	var pkt RequestPacket
 	var pktType uint8
 	var pktBytes []byte
 
@@ -204,20 +204,20 @@ func (rs *RequestServer) Serve() error {
 func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedRequest) error {
 	for pkt := range pktChan {
 		orderID := pkt.orderID()
-		if epkt, ok := pkt.requestPacket.(*sshFxpExtendedPacket); ok {
+		if epkt, ok := pkt.RequestPacket.(*sshFxpExtendedPacket); ok {
 			if epkt.SpecificPacket != nil {
-				pkt.requestPacket = epkt.SpecificPacket
+				pkt.RequestPacket = epkt.SpecificPacket
 			}
 		}
 
 		var rpkt responsePacket
-		switch pkt := pkt.requestPacket.(type) {
+		switch pkt := pkt.RequestPacket.(type) {
 		case *sshFxInitPacket:
 			rpkt = &sshFxVersionPacket{Version: sftpProtocolVersion, Extensions: sftpExtensions}
-		case *sshFxpClosePacket:
+		case *ClosePacket:
 			handle := pkt.getHandle()
 			rpkt = statusFromError(pkt.ID, rs.closeRequest(handle))
-		case *sshFxpRealpathPacket:
+		case *RealpathPacket:
 			var realPath string
 			if realPather, ok := rs.Handlers.FileList.(RealPathFileLister); ok {
 				realPath = realPather.RealPath(pkt.getPath())
@@ -225,7 +225,7 @@ func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedR
 				realPath = cleanPathWithBase(rs.startDirectory, pkt.getPath())
 			}
 			rpkt = cleanPacketPath(pkt, realPath)
-		case *sshFxpOpendirPacket:
+		case *OpendirPacket:
 			request := requestFromPacket(ctx, pkt, rs.startDirectory)
 			handle := rs.nextRequest(request)
 			rpkt = request.opendir(rs.Handlers, pkt)
@@ -233,7 +233,7 @@ func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedR
 				// if we return an error we have to remove the handle from the active ones
 				rs.closeRequest(handle)
 			}
-		case *sshFxpOpenPacket:
+		case *OpenPacket:
 			request := requestFromPacket(ctx, pkt, rs.startDirectory)
 			handle := rs.nextRequest(request)
 			rpkt = request.open(rs.Handlers, pkt)
@@ -241,7 +241,7 @@ func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedR
 				// if we return an error we have to remove the handle from the active ones
 				rs.closeRequest(handle)
 			}
-		case *sshFxpFstatPacket:
+		case *FstatPacket:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
@@ -253,7 +253,7 @@ func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedR
 				}
 				rpkt = request.call(rs.Handlers, pkt, rs.pktMgr.alloc, orderID)
 			}
-		case *sshFxpFsetstatPacket:
+		case *FsetstatPacket:
 			handle := pkt.getHandle()
 			request, ok := rs.getRequest(handle)
 			if !ok {
@@ -301,7 +301,7 @@ func (rs *RequestServer) packetWorker(ctx context.Context, pktChan chan orderedR
 }
 
 // clean and return name packet for file
-func cleanPacketPath(pkt *sshFxpRealpathPacket, realPath string) responsePacket {
+func cleanPacketPath(pkt *RealpathPacket, realPath string) responsePacket {
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []*sshFxpNameAttr{
