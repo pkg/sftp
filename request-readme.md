@@ -37,7 +37,7 @@ Handles "SetStat", "Rename", "Rmdir", "Mkdir"  and "Symlink" methods. Makes the
 appropriate changes and returns nil for success or an filesystem like error
 (eg. os.ErrNotExist). The attributes are currently propagated in their raw form
 ([]byte) and will need to be unmarshalled to be useful. See the respond method
-on SetstatPacket for example of you might want to do this.
+on sshFxpSetstatPacket for example of you might want to do this.
 
 ### Fileinfo(*Request) ([]os.FileInfo, error)
 

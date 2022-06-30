@@ -113,15 +113,15 @@ func TestPacketManager(t *testing.T) {
 	s.close()
 }
 
-func (p RemovePacket) String() string {
+func (p sshFxpRemovePacket) String() string {
 	return fmt.Sprintf("RmPkt:%d", p.ID)
 }
-func (p OpenPacket) String() string {
+func (p sshFxpOpenPacket) String() string {
 	return fmt.Sprintf("OpPkt:%d", p.ID)
 }
-func (p WritePacket) String() string {
+func (p sshFxpWritePacket) String() string {
 	return fmt.Sprintf("WrPkt:%d", p.ID)
 }
-func (p ClosePacket) String() string {
+func (p sshFxpClosePacket) String() string {
 	return fmt.Sprintf("ClPkt:%d", p.ID)
 }

@@ -373,7 +373,7 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
-			packet: &OpenPacket{
+			packet: &sshFxpOpenPacket{
 				ID:     1,
 				Path:   "/foo",
 				Pflags: flags(os.O_RDONLY),
@@ -388,7 +388,7 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
-			packet: &WritePacket{
+			packet: &sshFxpWritePacket{
 				ID:     124,
 				Handle: "foo",
 				Offset: 13,
@@ -405,7 +405,7 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
-			packet: &SetstatPacket{
+			packet: &sshFxpSetstatPacket{
 				ID:    31,
 				Path:  "/bar",
 				Flags: sshFileXferAttrUIDGID,
@@ -506,7 +506,7 @@ func TestRecvPacket(t *testing.T) {
 	}
 }
 
-func TestOpenPacketreadonly(t *testing.T) {
+func TestSSHFxpOpenPacketreadonly(t *testing.T) {
 	var tests = []struct {
 		pflags uint32
 		ok     bool
@@ -526,7 +526,7 @@ func TestOpenPacketreadonly(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		p := &OpenPacket{
+		p := &sshFxpOpenPacket{
 			Pflags: tt.pflags,
 		}
 
@@ -537,7 +537,7 @@ func TestOpenPacketreadonly(t *testing.T) {
 	}
 }
 
-func TestOpenPackethasPflags(t *testing.T) {
+func TestSSHFxpOpenPackethasPflags(t *testing.T) {
 	var tests = []struct {
 		desc      string
 		haveFlags uint32
@@ -579,7 +579,7 @@ func TestOpenPackethasPflags(t *testing.T) {
 	for _, tt := range tests {
 		t.Log(tt.desc)
 
-		p := &OpenPacket{
+		p := &sshFxpOpenPacket{
 			Pflags: tt.haveFlags,
 		}
 
@@ -608,7 +608,7 @@ func BenchmarkMarshalInit(b *testing.B) {
 }
 
 func BenchmarkMarshalOpen(b *testing.B) {
-	benchMarshal(b, &OpenPacket{
+	benchMarshal(b, &sshFxpOpenPacket{
 		ID:     1,
 		Path:   "/home/test/some/random/path",
 		Pflags: flags(os.O_RDONLY),
@@ -618,7 +618,7 @@ func BenchmarkMarshalOpen(b *testing.B) {
 func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 	data := make([]byte, 32*1024)
 
-	benchMarshal(b, &WritePacket{
+	benchMarshal(b, &sshFxpWritePacket{
 		ID:     1,
 		Handle: "someopaquehandle",
 		Offset: 0,
@@ -630,7 +630,7 @@ func BenchmarkMarshalWriteWorstCase(b *testing.B) {
 func BenchmarkMarshalWrite1k(b *testing.B) {
 	data := make([]byte, 1025)
 
-	benchMarshal(b, &WritePacket{
+	benchMarshal(b, &sshFxpWritePacket{
 		ID:     1,
 		Handle: "someopaquehandle",
 		Offset: 0,

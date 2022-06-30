@@ -180,13 +180,13 @@ func TestOpenStatRace(t *testing.T) {
 	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
 	ch := make(chan result, 3)
 	id1 := client.nextID()
-	client.dispatchRequest(ch, &OpenPacket{
+	client.dispatchRequest(ch, &sshFxpOpenPacket{
 		ID:     id1,
 		Path:   tmppath,
 		Pflags: pflags,
 	})
 	id2 := client.nextID()
-	client.dispatchRequest(ch, &LstatPacket{
+	client.dispatchRequest(ch, &sshFxpLstatPacket{
 		ID:   id2,
 		Path: tmppath,
 	})
@@ -224,7 +224,7 @@ func TestStatNonExistent(t *testing.T) {
 
 func TestServerWithBrokenClient(t *testing.T) {
 	validInit := sp(&sshFxInitPacket{Version: 3})
-	brokenOpen := sp(&OpenPacket{Path: "foo"})
+	brokenOpen := sp(&sshFxpOpenPacket{Path: "foo"})
 	brokenOpen = brokenOpen[:len(brokenOpen)-2]
 
 	for _, clientInput := range [][]byte{

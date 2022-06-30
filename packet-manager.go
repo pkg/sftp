@@ -55,12 +55,12 @@ func (s *packetManager) getNextOrderID() uint32 {
 }
 
 type orderedRequest struct {
-	RequestPacket
+	requestPacket
 	orderid uint32
 }
 
-func (s *packetManager) newOrderedRequest(p RequestPacket) orderedRequest {
-	return orderedRequest{RequestPacket: p, orderid: s.newOrderID()}
+func (s *packetManager) newOrderedRequest(p requestPacket) orderedRequest {
+	return orderedRequest{requestPacket: p, orderid: s.newOrderID()}
 }
 func (p orderedRequest) orderID() uint32       { return p.orderid }
 func (p orderedRequest) setOrderID(oid uint32) { p.orderid = oid }
@@ -127,12 +127,12 @@ func (s *packetManager) workerChan(runWorker func(chan orderedRequest),
 	pktChan := make(chan orderedRequest, SftpServerWorkerCount)
 	go func() {
 		for pkt := range pktChan {
-			switch pkt.RequestPacket.(type) {
-			case *ReadPacket, *WritePacket:
+			switch pkt.requestPacket.(type) {
+			case *sshFxpReadPacket, *sshFxpWritePacket:
 				s.incomingPacket(pkt)
 				rwChan <- pkt
 				continue
-			case *ClosePacket:
+			case *sshFxpClosePacket:
 				// wait for reads/writes to finish when file is closed
 				// incomingPacket() call must occur after this
 				s.working.Wait()
