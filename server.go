@@ -28,6 +28,7 @@ const (
 type Server struct {
 	*serverConn
 	debugStream   io.Writer
+	reqCallback   RequestCallback
 	readOnly      bool
 	pktMgr        *packetManager
 	openFiles     map[string]*os.File
@@ -83,6 +84,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 	s := &Server{
 		serverConn:  svrConn,
 		debugStream: ioutil.Discard,
+		reqCallback: func(_ RequestPacket, _ string, _ error) {},
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
 	}
@@ -111,6 +113,15 @@ func WithDebug(w io.Writer) ServerOption {
 func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
+		return nil
+	}
+}
+
+type RequestCallback func(reqPacket RequestPacket, path string, err error)
+
+func WithRequestCallback(reqCallback RequestCallback) ServerOption {
+	return func(s *Server) error {
+		s.reqCallback = reqCallback
 		return nil
 	}
 }
@@ -182,6 +193,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(p, "", err)
 	case *sshFxpLstatPacket:
 		// stat the requested file
 		info, err := os.Lstat(toLocalPath(p.Path))
@@ -192,6 +204,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(p, "", err)
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
 		var err error = EBADF
@@ -206,24 +219,38 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(p, f.Name(), err)
 	case *sshFxpMkdirPacket:
 		// TODO FIXME: ignore flags field
 		err := os.Mkdir(toLocalPath(p.Path), 0755)
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, "", err)
 	case *sshFxpRmdirPacket:
 		err := os.Remove(toLocalPath(p.Path))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, "", err)
 	case *sshFxpRemovePacket:
 		err := os.Remove(toLocalPath(p.Filename))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, "", err)
 	case *sshFxpRenamePacket:
 		err := os.Rename(toLocalPath(p.Oldpath), toLocalPath(p.Newpath))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, "", err)
 	case *sshFxpSymlinkPacket:
 		err := os.Symlink(toLocalPath(p.Targetpath), toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, "", err)
 	case *sshFxpClosePacket:
-		rpkt = statusFromError(p.ID, s.closeHandle(p.Handle))
+		f, ok := s.getHandle(p.Handle)
+		path := f.Name()
+		var err error = EBADF
+		if ok {
+			err = s.closeHandle(p.Handle)
+		}
+
+		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, path, err)
 	case *sshFxpReadlinkPacket:
 		f, err := os.Readlink(toLocalPath(p.Path))
 		rpkt = &sshFxpNamePacket{
@@ -239,6 +266,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(p, "", err)
 	case *sshFxpRealpathPacket:
 		f, err := filepath.Abs(toLocalPath(p.Path))
 		f = cleanPath(f)
@@ -255,14 +283,18 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(p, "", err)
 	case *sshFxpOpendirPacket:
 		p.Path = toLocalPath(p.Path)
 
-		if stat, err := os.Stat(p.Path); err != nil {
+		stat, err := os.Stat(p.Path)
+		if err != nil {
 			rpkt = statusFromError(p.ID, err)
+			s.reqCallback(p, "", err)
 		} else if !stat.IsDir() {
 			rpkt = statusFromError(p.ID, &os.PathError{
 				Path: p.Path, Err: syscall.ENOTDIR})
+			s.reqCallback(p, "", nil)
 		} else {
 			rpkt = (&sshFxpOpenPacket{
 				ID:     p.ID,
@@ -271,8 +303,8 @@ func handlePacket(s *Server, p orderedRequest) error {
 			}).respond(s)
 		}
 	case *sshFxpReadPacket:
-		var err error = EBADF
 		f, ok := s.getHandle(p.Handle)
+		var err error = EBADF
 		if ok {
 			err = nil
 			data := p.getDataSlice(s.pktMgr.alloc, orderID)
@@ -290,7 +322,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
-
+		s.reqCallback(p, f.Name(), err)
 	case *sshFxpWritePacket:
 		f, ok := s.getHandle(p.Handle)
 		var err error = EBADF
@@ -298,6 +330,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 			_, err = f.WriteAt(p.Data, int64(p.Offset))
 		}
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(p, f.Name(), err)
 	case *sshFxpExtendedPacket:
 		if p.SpecificPacket == nil {
 			rpkt = statusFromError(p.ID, ErrSSHFxOpUnsupported)
@@ -447,6 +480,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	}
 
 	f, err := os.OpenFile(toLocalPath(p.Path), osFlags, 0644)
+	svr.reqCallback(p, "", err)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
@@ -462,6 +496,7 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 	}
 
 	dirents, err := f.Readdir(128)
+	svr.reqCallback(p, f.Name(), err)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
@@ -519,6 +554,7 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 			err = os.Chown(p.Path, int(uid), int(gid))
 		}
 	}
+	svr.reqCallback(p, "", err)
 
 	return statusFromError(p.ID, err)
 }
@@ -566,6 +602,7 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 			err = f.Chown(int(uid), int(gid))
 		}
 	}
+	svr.reqCallback(p, f.Name(), err)
 
 	return statusFromError(p.ID, err)
 }
