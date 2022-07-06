@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ const (
 type Server struct {
 	*serverConn
 	debugStream   io.Writer
+	reqCallback   RequestCallback
 	readOnly      bool
 	pktMgr        *packetManager
 	openFiles     map[string]*os.File
@@ -83,6 +85,10 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 	s := &Server{
 		serverConn:  svrConn,
 		debugStream: ioutil.Discard,
+		// default to setting reqCallback to a function that does nothing
+		// so we don't have to check if reqCallback is nil every time we
+		// want to call it
+		reqCallback: func(_ RequestPacket) {},
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
 	}
@@ -111,6 +117,71 @@ func WithDebug(w io.Writer) ServerOption {
 func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
+		return nil
+	}
+}
+
+// RequestType is the type of Request a client made.
+type RequestType uint
+
+const (
+	Open RequestType = iota
+	Close
+	Read
+	Write
+	Lstat
+	Fstat
+	Setstat
+	Fsetstat
+	Opendir
+	Readdir
+	Remove
+	Mkdir
+	Rmdir
+	Realpath
+	Stat
+	Rename
+	Readlink
+	Symlink
+)
+
+// RequestPacket is information about a client request.
+type RequestPacket struct {
+	Type RequestType
+	// Path is the path the request specified, or if the request specified
+	// a handle instead, Path is the path corresponding to that handle.
+	Path string
+	// TargetPath is the new path in a rename request, or the new path in
+	// a symlink request.
+	TargetPath string
+	// Flags is any flags the request passed.
+	Flags      uint32
+	Attributes *Attributes
+	// Err is the error that occured from handling the request.
+	Err error
+}
+
+// Attributes is optional metadata that may or may not be present in a
+// client request.
+type Attributes struct {
+	Size             *uint64
+	UID              *uint32
+	GID              *uint32
+	Permissions      *fs.FileMode
+	AccessTime       *time.Time
+	ModificationTime *time.Time
+}
+
+// RequestCallback is the type of function called by a Server when
+// WithRequestCallback is set. reqPacket will contain details of
+// a client request the server has recieved.
+type RequestCallback func(reqPacket RequestPacket)
+
+// WithRequestCallback sets a RequestCallback to be called whenever
+// the server recieves a client request.
+func WithRequestCallback(reqCallback RequestCallback) ServerOption {
+	return func(s *Server) error {
+		s.reqCallback = reqCallback
 		return nil
 	}
 }
@@ -182,6 +253,11 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(RequestPacket{
+			Type: Stat,
+			Path: p.Path,
+			Err:  err,
+		})
 	case *sshFxpLstatPacket:
 		// stat the requested file
 		info, err := os.Lstat(toLocalPath(p.Path))
@@ -192,6 +268,11 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(RequestPacket{
+			Type: Lstat,
+			Path: p.Path,
+			Err:  err,
+		})
 	case *sshFxpFstatPacket:
 		f, ok := s.getHandle(p.Handle)
 		var err error = EBADF
@@ -206,24 +287,68 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(RequestPacket{
+			Type: Fstat,
+			Path: f.Name(),
+			Err:  err,
+		})
 	case *sshFxpMkdirPacket:
 		// TODO FIXME: ignore flags field
 		err := os.Mkdir(toLocalPath(p.Path), 0755)
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type:  Mkdir,
+			Path:  p.Path,
+			Flags: p.Flags,
+			Err:   err,
+		})
 	case *sshFxpRmdirPacket:
 		err := os.Remove(toLocalPath(p.Path))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type: Rmdir,
+			Path: p.Path,
+			Err:  err,
+		})
 	case *sshFxpRemovePacket:
 		err := os.Remove(toLocalPath(p.Filename))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type: Remove,
+			Path: p.Filename,
+			Err:  err,
+		})
 	case *sshFxpRenamePacket:
 		err := os.Rename(toLocalPath(p.Oldpath), toLocalPath(p.Newpath))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type:       Rename,
+			Path:       p.Oldpath,
+			TargetPath: p.Newpath,
+			Err:        err,
+		})
 	case *sshFxpSymlinkPacket:
 		err := os.Symlink(toLocalPath(p.Targetpath), toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type:       Symlink,
+			Path:       p.Targetpath,
+			TargetPath: p.Linkpath,
+			Err:        err,
+		})
 	case *sshFxpClosePacket:
-		rpkt = statusFromError(p.ID, s.closeHandle(p.Handle))
+		f, ok := s.getHandle(p.Handle)
+		var err error = EBADF
+		if ok {
+			err = s.closeHandle(p.Handle)
+		}
+
+		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type: Close,
+			Path: f.Name(),
+			Err:  err,
+		})
 	case *sshFxpReadlinkPacket:
 		f, err := os.Readlink(toLocalPath(p.Path))
 		rpkt = &sshFxpNamePacket{
@@ -239,6 +364,11 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(RequestPacket{
+			Type: Readlink,
+			Path: p.Path,
+			Err:  err,
+		})
 	case *sshFxpRealpathPacket:
 		f, err := filepath.Abs(toLocalPath(p.Path))
 		f = cleanPath(f)
@@ -255,14 +385,30 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
+		s.reqCallback(RequestPacket{
+			Type: Realpath,
+			Path: p.Path,
+			Err:  err,
+		})
 	case *sshFxpOpendirPacket:
 		p.Path = toLocalPath(p.Path)
 
-		if stat, err := os.Stat(p.Path); err != nil {
+		stat, err := os.Stat(p.Path)
+		if err != nil {
 			rpkt = statusFromError(p.ID, err)
+			s.reqCallback(RequestPacket{
+				Type: Opendir,
+				Path: p.Path,
+				Err:  err,
+			})
 		} else if !stat.IsDir() {
 			rpkt = statusFromError(p.ID, &os.PathError{
 				Path: p.Path, Err: syscall.ENOTDIR})
+			s.reqCallback(RequestPacket{
+				Type: Opendir,
+				Path: p.Path,
+				Err:  err,
+			})
 		} else {
 			rpkt = (&sshFxpOpenPacket{
 				ID:     p.ID,
@@ -271,8 +417,8 @@ func handlePacket(s *Server, p orderedRequest) error {
 			}).respond(s)
 		}
 	case *sshFxpReadPacket:
-		var err error = EBADF
 		f, ok := s.getHandle(p.Handle)
+		var err error = EBADF
 		if ok {
 			err = nil
 			data := p.getDataSlice(s.pktMgr.alloc, orderID)
@@ -290,7 +436,11 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
-
+		s.reqCallback(RequestPacket{
+			Type: Read,
+			Path: f.Name(),
+			Err:  err,
+		})
 	case *sshFxpWritePacket:
 		f, ok := s.getHandle(p.Handle)
 		var err error = EBADF
@@ -298,6 +448,11 @@ func handlePacket(s *Server, p orderedRequest) error {
 			_, err = f.WriteAt(p.Data, int64(p.Offset))
 		}
 		rpkt = statusFromError(p.ID, err)
+		s.reqCallback(RequestPacket{
+			Type: Write,
+			Path: f.Name(),
+			Err:  err,
+		})
 	case *sshFxpExtendedPacket:
 		if p.SpecificPacket == nil {
 			rpkt = statusFromError(p.ID, ErrSSHFxOpUnsupported)
@@ -447,6 +602,12 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	}
 
 	f, err := os.OpenFile(toLocalPath(p.Path), osFlags, 0644)
+	svr.reqCallback(RequestPacket{
+		Type:  Open,
+		Path:  p.Path,
+		Flags: p.Pflags,
+		Err:   err,
+	})
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
@@ -462,6 +623,11 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 	}
 
 	dirents, err := f.Readdir(128)
+	svr.reqCallback(RequestPacket{
+		Type: Readdir,
+		Path: f.Name(),
+		Err:  err,
+	})
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
@@ -482,7 +648,16 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 	// additional unmarshalling is required for each possibility here
 	b := p.Attrs.([]byte)
-	var err error
+
+	var (
+		err         error
+		fileSize    *uint64
+		permissions *uint32
+		accessTime  *time.Time
+		modTime     *time.Time
+		fileUID     *uint32
+		fileGID     *uint32
+	)
 
 	p.Path = toLocalPath(p.Path)
 
@@ -491,12 +666,14 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 		var size uint64
 		if size, b, err = unmarshalUint64Safe(b); err == nil {
 			err = os.Truncate(p.Path, int64(size))
+			fileSize = &size
 		}
 	}
 	if (p.Flags & sshFileXferAttrPermissions) != 0 {
 		var mode uint32
 		if mode, b, err = unmarshalUint32Safe(b); err == nil {
 			err = os.Chmod(p.Path, os.FileMode(mode))
+			permissions = &mode
 		}
 	}
 	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
@@ -506,7 +683,9 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 		} else if mtime, b, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			atimeT := time.Unix(int64(atime), 0)
+			accessTime = &atimeT
 			mtimeT := time.Unix(int64(mtime), 0)
+			modTime = &mtimeT
 			err = os.Chtimes(p.Path, atimeT, mtimeT)
 		}
 	}
@@ -517,8 +696,23 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			err = os.Chown(p.Path, int(uid), int(gid))
+			fileUID = &uid
+			fileGID = &gid
 		}
 	}
+	svr.reqCallback(RequestPacket{
+		Type: Setstat,
+		Path: p.Path,
+		Attributes: &Attributes{
+			Size:             fileSize,
+			UID:              fileUID,
+			GID:              fileGID,
+			Permissions:      (*fs.FileMode)(permissions),
+			AccessTime:       accessTime,
+			ModificationTime: modTime,
+		},
+		Err: err,
+	})
 
 	return statusFromError(p.ID, err)
 }
@@ -531,19 +725,30 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 
 	// additional unmarshalling is required for each possibility here
 	b := p.Attrs.([]byte)
-	var err error
+
+	var (
+		err         error
+		fileSize    *uint64
+		permissions *uint32
+		accessTime  *time.Time
+		modTime     *time.Time
+		fileUID     *uint32
+		fileGID     *uint32
+	)
 
 	debug("fsetstat name \"%s\"", f.Name())
 	if (p.Flags & sshFileXferAttrSize) != 0 {
 		var size uint64
 		if size, b, err = unmarshalUint64Safe(b); err == nil {
 			err = f.Truncate(int64(size))
+			fileSize = &size
 		}
 	}
 	if (p.Flags & sshFileXferAttrPermissions) != 0 {
 		var mode uint32
 		if mode, b, err = unmarshalUint32Safe(b); err == nil {
 			err = f.Chmod(os.FileMode(mode))
+			permissions = &mode
 		}
 	}
 	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
@@ -553,7 +758,9 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 		} else if mtime, b, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			atimeT := time.Unix(int64(atime), 0)
+			accessTime = &atimeT
 			mtimeT := time.Unix(int64(mtime), 0)
+			modTime = &mtimeT
 			err = os.Chtimes(f.Name(), atimeT, mtimeT)
 		}
 	}
@@ -564,8 +771,23 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			err = f.Chown(int(uid), int(gid))
+			fileUID = &uid
+			fileGID = &gid
 		}
 	}
+	svr.reqCallback(RequestPacket{
+		Type: Fsetstat,
+		Path: f.Name(),
+		Attributes: &Attributes{
+			Size:             fileSize,
+			UID:              fileUID,
+			GID:              fileGID,
+			Permissions:      (*fs.FileMode)(permissions),
+			AccessTime:       accessTime,
+			ModificationTime: modTime,
+		},
+		Err: err,
+	})
 
 	return statusFromError(p.ID, err)
 }
