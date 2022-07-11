@@ -276,7 +276,7 @@ func (c *Client) recvVersion() error {
 	typ, data, err := c.recvPacket(0)
 	if err != nil {
 		if err == io.EOF {
-			return io.ErrUnexpectedEOF
+			return fmt.Errorf("server unexpectedly closed connection: %w", io.ErrUnexpectedEOF)
 		}
 
 		return err
