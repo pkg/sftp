@@ -87,12 +87,25 @@ type LstatFileLister interface {
 }
 
 // RealPathFileLister is a FileLister that implements the Realpath method.
-// We use "/" as start directory for relative paths, implementing this
-// interface you can customize the start directory.
+// The built-in RealPath implementation does not resolve symbolic links.
+// By implementing this interface you can customize the returned path
+// and, for example, resolve symbolinc links if needed for your use case.
 // You have to return an absolute POSIX path.
 //
-// Deprecated: if you want to set a start directory use WithStartDirectory RequestServerOption instead.
+// Up to v1.13.5 the signature for the RealPath method was:
+//
+// RealPath(string) string
+//
+// we have added a legacyRealPathFileLister that implements the old method
+// to ensure that your code does not break.
+// You should use the new method signature to avoid future issues
 type RealPathFileLister interface {
+	FileLister
+	RealPath(string) (string, error)
+}
+
+// This interface is here for backward compatibility only
+type legacyRealPathFileLister interface {
 	FileLister
 	RealPath(string) string
 }
