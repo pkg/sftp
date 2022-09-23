@@ -816,8 +816,12 @@ func statusFromError(id uint32, err error) *sshFxpStatusPacket {
 	ret.StatusError.Code = sshFxFailure
 	ret.StatusError.msg = err.Error()
 
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		ret.StatusError.Code = sshFxNoSuchFile
+		return ret
+	}
+	if errors.Is(err, os.ErrExist) {
+		ret.StatusError.Code = sshFxFileAlreadyExists
 		return ret
 	}
 	if code, ok := translateSyscallError(err); ok {
