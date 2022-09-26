@@ -303,7 +303,7 @@ func TestClientMkdir(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	sub := path.Join(dir, "mkdir1")
-	if err := sftp.Mkdir(sub); err != nil {
+	if err := sftp.Mkdir(sub, defaultDirMode); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(sub); err != nil {
@@ -322,7 +322,7 @@ func TestClientMkdirAll(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	sub := path.Join(dir, "mkdir1", "mkdir2", "mkdir3")
-	if err := sftp.MkdirAll(sub); err != nil {
+	if err := sftp.MkdirAll(sub, defaultDirMode); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Lstat(sub)
@@ -490,7 +490,7 @@ func TestClientAppend(t *testing.T) {
 	defer f.Close()
 	defer os.Remove(f.Name())
 
-	f2, err := sftp.OpenFile(f.Name(), os.O_RDWR|os.O_APPEND)
+	f2, err := sftp.OpenFile(f.Name(), os.O_RDWR|os.O_APPEND, defaultFileMode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2209,7 +2209,7 @@ func TestServerRoughDisconnect3(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	dest, err := sftp.OpenFile("/dev/null", os.O_RDWR)
+	dest, err := sftp.OpenFile("/dev/null", os.O_RDWR, defaultFileMode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2240,7 +2240,7 @@ func TestServerRoughDisconnect4(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
-	dest, err := sftp.OpenFile("/dev/null", os.O_RDWR)
+	dest, err := sftp.OpenFile("/dev/null", os.O_RDWR, defaultFileMode)
 	if err != nil {
 		t.Fatal(err)
 	}

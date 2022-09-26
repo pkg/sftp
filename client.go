@@ -256,7 +256,7 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 // read/write at the same time. For those services you will need to use
 // `client.OpenFile(os.O_WRONLY|os.O_CREATE|os.O_TRUNC)`.
 func (c *Client) Create(path string) (*File, error) {
-	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC))
+	return c.open(path, flags(os.O_RDWR|os.O_CREATE|os.O_TRUNC), defaultFileMode)
 }
 
 const sftpProtocolVersion = 3 // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
@@ -581,22 +581,24 @@ func (c *Client) Truncate(path string, size int64) error {
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
 func (c *Client) Open(path string) (*File, error) {
-	return c.open(path, flags(os.O_RDONLY))
+	return c.open(path, flags(os.O_RDONLY), 0)
 }
 
 // OpenFile is the generalized open call; most users will use Open or
 // Create instead. It opens the named file with specified flag (O_RDONLY
 // etc.). If successful, methods on the returned File can be used for I/O.
-func (c *Client) OpenFile(path string, f int) (*File, error) {
-	return c.open(path, flags(f))
+func (c *Client) OpenFile(path string, f int, mode os.FileMode) (*File, error) {
+	return c.open(path, flags(f), mode)
 }
 
-func (c *Client) open(path string, pflags uint32) (*File, error) {
+func (c *Client) open(path string, pflags uint32, mode os.FileMode) (*File, error) {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpOpenPacket{
 		ID:     id,
 		Path:   path,
 		Pflags: pflags,
+		Flags:  sshFileXferAttrPermissions,
+		Attrs:  toChmodPerm(mode),
 	})
 	if err != nil {
 		return nil, err
@@ -859,11 +861,13 @@ func (c *Client) Getwd() (string, error) {
 // Mkdir creates the specified directory. An error will be returned if a file or
 // directory with the specified path already exists, or if the directory's
 // parent folder does not exist (the method cannot create complete paths).
-func (c *Client) Mkdir(path string) error {
+func (c *Client) Mkdir(path string, mode os.FileMode) error {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpMkdirPacket{
-		ID:   id,
-		Path: path,
+		ID:    id,
+		Path:  path,
+		Flags: sshFileXferAttrPermissions,
+		Attrs: toChmodPerm(mode),
 	})
 	if err != nil {
 		return err
@@ -880,7 +884,7 @@ func (c *Client) Mkdir(path string) error {
 // and returns nil, or else returns an error.
 // If path is already a directory, MkdirAll does nothing and returns nil.
 // If path contains a regular file, an error is returned
-func (c *Client) MkdirAll(path string) error {
+func (c *Client) MkdirAll(path string, mode os.FileMode) error {
 	// Most of this code mimics https://golang.org/src/os/path.go?s=514:561#L13
 	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
 	dir, err := c.Stat(path)
@@ -904,14 +908,14 @@ func (c *Client) MkdirAll(path string) error {
 
 	if j > 1 {
 		// Create parent
-		err = c.MkdirAll(path[0 : j-1])
+		err = c.MkdirAll(path[0:j-1], mode)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Parent now exists; invoke Mkdir and use its result.
-	err = c.Mkdir(path)
+	err = c.Mkdir(path, mode)
 	if err != nil {
 		// Handle arguments like "foo/." by
 		// double-checking that directory doesn't exist.
