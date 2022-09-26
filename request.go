@@ -178,6 +178,10 @@ func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Reques
 	switch p := pkt.(type) {
 	case *sshFxpOpenPacket:
 		request.Flags = p.Pflags
+		request.Attrs = p.Attrs.([]byte)
+	case *sshFxpMkdirPacket:
+		request.Flags = p.Flags
+		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpSetstatPacket:
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)

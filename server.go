@@ -19,6 +19,9 @@ import (
 const (
 	// SftpServerWorkerCount defines the number of workers for the SFTP server
 	SftpServerWorkerCount = 8
+
+	defaultFileMode = 0o644
+	defaultDirMode  = 0o755
 )
 
 // Server is an SSH File Transfer Protocol (sftp) server.
@@ -218,8 +221,15 @@ func handlePacket(s *Server, p orderedRequest) error {
 			rpkt = statusFromError(p.ID, err)
 		}
 	case *sshFxpMkdirPacket:
-		// TODO FIXME: ignore flags field
-		err := os.Mkdir(s.toLocalPath(p.Path), 0o755)
+		var mode os.FileMode = defaultDirMode
+		if p.Attrs != nil {
+			attrs, _ := unmarshalFileStat(p.Flags, p.Attrs.([]byte))
+			if p.Flags&sshFileXferAttrPermissions != 0 {
+				mode = toFileMode(attrs.Mode)
+			}
+		}
+
+		err := os.Mkdir(s.toLocalPath(p.Path), mode)
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpRmdirPacket:
 		err := os.Remove(s.toLocalPath(p.Path))
@@ -458,7 +468,15 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(svr.toLocalPath(p.Path), osFlags, 0o644)
+	var mode os.FileMode = defaultFileMode
+	if p.Attrs != nil {
+		attrs, _ := unmarshalFileStat(p.Flags, p.Attrs.([]byte))
+		if p.Flags&sshFileXferAttrPermissions != 0 {
+			mode = toFileMode(attrs.Mode)
+		}
+	}
+
+	f, err := os.OpenFile(svr.toLocalPath(p.Path), osFlags, mode)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
