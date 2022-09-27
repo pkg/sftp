@@ -85,6 +85,9 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 	s := &Server{
 		serverConn:  svrConn,
 		debugStream: ioutil.Discard,
+		// default to setting reqCallback to a function that does nothing
+		// so we don't have to check if reqCallback is nil every time we
+		// want to call it
 		reqCallback: func(_ RequestPacket) {},
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
@@ -118,6 +121,7 @@ func ReadOnly() ServerOption {
 	}
 }
 
+// RequestType is the type of Request a client made.
 type RequestType uint
 
 const (
@@ -141,15 +145,24 @@ const (
 	Symlink
 )
 
+// RequestPacket is information about a client request.
 type RequestPacket struct {
-	Type       RequestType
-	Path       string
+	Type RequestType
+	// Path is the path the request specified, or if the request specified
+	// a handle instead, Path is the path corresponding to that handle.
+	Path string
+	// TargetPath is the new path in a rename request, or the new path in
+	// a symlink request.
 	TargetPath string
+	// Flags is any flags the request passed.
 	Flags      uint32
 	Attributes *Attributes
-	Err        error
+	// Err is the error that occured from handling the request.
+	Err error
 }
 
+// Attributes is optional metadata that may or may not be present in a
+// client request.
 type Attributes struct {
 	Size             *uint64
 	UID              *uint32
@@ -159,8 +172,13 @@ type Attributes struct {
 	ModificationTime *time.Time
 }
 
+// RequestCallback is the type of function called by a Server when
+// WithRequestCallback is set. reqPacket will contain details of
+// a client request the server has recieved.
 type RequestCallback func(reqPacket RequestPacket)
 
+// WithRequestCallback sets a RequestCallback to be called whenever
+// the server recieves a client request.
 func WithRequestCallback(reqCallback RequestCallback) ServerOption {
 	return func(s *Server) error {
 		s.reqCallback = reqCallback
@@ -587,7 +605,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	svr.reqCallback(RequestPacket{
 		Type:  Open,
 		Path:  p.Path,
-		Flags: p.Flags,
+		Flags: p.Pflags,
 		Err:   err,
 	})
 	if err != nil {
