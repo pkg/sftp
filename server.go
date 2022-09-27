@@ -297,20 +297,25 @@ func handlePacket(s *Server, p orderedRequest) error {
 		})
 	case *sshFxpMkdirPacket:
 		var mode os.FileMode = defaultFileMode
+		var attributes *Attributes
 		if p.Attrs != nil {
 			attrs, _ := unmarshalFileStat(p.Flags, p.Attrs.([]byte))
 			if p.Flags&sshFileXferAttrPermissions != 0 {
 				mode = toFileMode(attrs.Mode)
+				attributes = &Attributes{
+					Permissions: &mode,
+				}
 			}
 		}
 
 		err := os.Mkdir(toLocalPath(p.Path), mode)
 		rpkt = statusFromError(p.ID, err)
 		s.reqCallback(RequestPacket{
-			Type:  Mkdir,
-			Path:  p.Path,
-			Flags: p.Flags,
-			Err:   err,
+			Type:       Mkdir,
+			Path:       p.Path,
+			Flags:      p.Flags,
+			Attributes: attributes,
+			Err:        err,
 		})
 	case *sshFxpRmdirPacket:
 		err := os.Remove(toLocalPath(p.Path))
@@ -612,19 +617,24 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	}
 
 	var mode os.FileMode = defaultFileMode
+	var attributes *Attributes
 	if p.Attrs != nil {
 		attrs, _ := unmarshalFileStat(p.Flags, p.Attrs.([]byte))
 		if p.Flags&sshFileXferAttrPermissions != 0 {
 			mode = toFileMode(attrs.Mode)
+			attributes = &Attributes{
+				Permissions: &mode,
+			}
 		}
 	}
 
 	f, err := os.OpenFile(toLocalPath(p.Path), osFlags, mode)
 	svr.reqCallback(RequestPacket{
-		Type:  Open,
-		Path:  p.Path,
-		Flags: p.Pflags,
-		Err:   err,
+		Type:       Open,
+		Path:       p.Path,
+		Flags:      p.Pflags,
+		Attributes: attributes,
+		Err:        err,
 	})
 	if err != nil {
 		return statusFromError(p.ID, err)
