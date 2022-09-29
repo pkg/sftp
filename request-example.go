@@ -525,8 +525,8 @@ func (fs *root) exists(path string) bool {
 	return err != os.ErrNotExist
 }
 
-func (fs *root) fetch(path string) (*memFile, error) {
-	file, err := fs.lfetch(path)
+func (fs *root) fetch(pathname string) (*memFile, error) {
+	file, err := fs.lfetch(pathname)
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +537,12 @@ func (fs *root) fetch(path string) (*memFile, error) {
 			return nil, errTooManySymlinks
 		}
 
-		file, err = fs.lfetch(file.symlink)
+		linkTarget := file.symlink
+		if !path.IsAbs(linkTarget) {
+			linkTarget = path.Join(path.Dir(file.name), linkTarget)
+		}
+
+		file, err = fs.lfetch(linkTarget)
 		if err != nil {
 			return nil, err
 		}

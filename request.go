@@ -187,6 +187,7 @@ func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Reques
 		// NOTE: given a POSIX compliant signature: symlink(target, linkpath string)
 		// this makes Request.Target the linkpath, and Request.Filepath the target.
 		request.Target = cleanPathWithBase(baseDir, p.Linkpath)
+		request.Filepath = p.Targetpath
 	case *sshFxpExtendedPacketHardlink:
 		request.Target = cleanPathWithBase(baseDir, p.Newpath)
 	}
