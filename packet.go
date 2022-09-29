@@ -522,7 +522,12 @@ func (p *sshFxpRmdirPacket) UnmarshalBinary(b []byte) error {
 }
 
 type sshFxpSymlinkPacket struct {
-	ID         uint32
+	ID uint32
+
+	// The order of the arguments to the SSH_FXP_SYMLINK method was inadvertently reversed.
+	// Unfortunately, the reversal was not noticed until the server was widely deployed.
+	// Covered in Section 4.1 of https://github.com/openssh/openssh-portable/blob/master/PROTOCOL
+
 	Targetpath string
 	Linkpath   string
 }
