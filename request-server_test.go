@@ -568,27 +568,63 @@ func TestRequestSymlink(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
 
-	_, err := putTestFile(p.cli, "/foo", "hello")
+	const CONTENT_FOO = "hello"
+	const CONTENT_DIR_FILE_TXT = "file"
+	const CONTENT_SUB_FILE_TXT = "file-in-sub"
+
+	// prepare all files
+	_, err := putTestFile(p.cli, "/foo", CONTENT_FOO)
+	require.NoError(t, err)
+	err = p.cli.Mkdir("/dir")
+	require.NoError(t, err)
+	err = p.cli.Mkdir("/dir/sub")
+	require.NoError(t, err)
+	_, err = putTestFile(p.cli, "/dir/file.txt", CONTENT_DIR_FILE_TXT)
+	require.NoError(t, err)
+	_, err = putTestFile(p.cli, "/dir/sub/file-in-sub.txt", CONTENT_SUB_FILE_TXT)
 	require.NoError(t, err)
 
-	err = p.cli.Symlink("/foo", "/bar")
-	require.NoError(t, err)
-	err = p.cli.Symlink("/bar", "/baz")
-	require.NoError(t, err)
+	type symlink struct {
+		name   string // this is the filename of the symbolic link
+		target string // this is the file or directory the link points to
 
+		//for testing
+		expectsNotExist     bool
+		expectedFileContent string
+	}
+
+	symlinks := []symlink{
+		{name: "/bar", target: "/foo", expectedFileContent: CONTENT_FOO},
+		{name: "/baz", target: "/bar", expectedFileContent: CONTENT_FOO},
+		{name: "/link-to-non-existent-file", target: "non-existent-file", expectsNotExist: true},
+		{name: "/dir/rel-link.txt", target: "file.txt", expectedFileContent: CONTENT_DIR_FILE_TXT},
+		{name: "/dir/abs-link.txt", target: "/dir/file.txt", expectedFileContent: CONTENT_DIR_FILE_TXT},
+		{name: "/dir/rel-subdir-link.txt", target: "sub/file-in-sub.txt", expectedFileContent: CONTENT_SUB_FILE_TXT},
+		{name: "/dir/abs-subdir-link.txt", target: "/dir/sub/file-in-sub.txt", expectedFileContent: CONTENT_SUB_FILE_TXT},
+		{name: "/dir/sub/parentdir-link.txt", target: "../file.txt", expectedFileContent: CONTENT_DIR_FILE_TXT},
+	}
+
+	for _, s := range symlinks {
+		err := p.cli.Symlink(s.target, s.name)
+		require.NoError(t, err, "Creating symlink %q with target %q failed", s.name, s.target)
+	}
+
+	// test fetching via symlink
 	r := p.testHandler()
 
-	fi, err := r.lfetch("/bar")
-	require.NoError(t, err)
-	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
+	for _, s := range symlinks {
+		fi, err := r.lfetch(s.name)
+		require.NoError(t, err, "lfetch(%q) failed", s.name)
+		require.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink, "Expected %q to be a symlink but it is not.", s.name)
 
-	fi, err = r.lfetch("/baz")
-	require.NoError(t, err)
-	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
-
-	content, err := getTestFile(p.cli, "/baz")
-	require.NoError(t, err)
-	assert.Equal(t, []byte("hello"), content)
+		content, err := getTestFile(p.cli, s.name)
+		if s.expectsNotExist {
+			require.True(t, os.IsNotExist(err), "Reading symlink %q expected os.ErrNotExist", s.name)
+		} else {
+			require.NoError(t, err, "getTestFile(%q) failed", s.name)
+			require.Equal(t, []byte(s.expectedFileContent), content, "Reading symlink %q returned unexpected content", s.name)
+		}
+	}
 
 	checkRequestServerAllocator(t, p)
 }
@@ -714,9 +750,17 @@ func TestRequestReadlink(t *testing.T) {
 	require.NoError(t, err)
 	err = p.cli.Symlink("/foo", "/bar")
 	require.NoError(t, err)
+
 	rl, err := p.cli.ReadLink("/bar")
 	assert.NoError(t, err)
-	assert.Equal(t, "foo", rl)
+	assert.Equal(t, "/foo", rl)
+
+	_, err = p.cli.ReadLink("/foo")
+	assert.Error(t, err, "Readlink on non-symlink should fail")
+
+	_, err = p.cli.ReadLink("/foobar")
+	assert.Error(t, err, "Readlink on non-existent file should fail")
+
 	checkRequestServerAllocator(t, p)
 }
 
