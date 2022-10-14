@@ -607,6 +607,10 @@ func TestRequestSymlink(t *testing.T) {
 	for _, s := range symlinks {
 		err := p.cli.Symlink(s.target, s.name)
 		require.NoError(t, err, "Creating symlink %q with target %q failed", s.name, s.target)
+
+		rl, err := p.cli.ReadLink(s.name)
+		require.NoError(t, err, "ReadLink(%q) failed", s.name)
+		require.Equal(t, s.target, rl, "Unexpected result when reading symlink %q", s.name)
 	}
 
 	// test fetching via symlink

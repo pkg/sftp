@@ -391,21 +391,6 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 			return nil, err
 		}
 		return listerat{file}, nil
-
-	case "Readlink":
-		symlink, err := fs.readlink(r.Filepath)
-		if err != nil {
-			return nil, err
-		}
-
-		// SFTP-v2: The server will respond with a SSH_FXP_NAME packet containing only
-		// one name and a dummy attributes value.
-		return listerat{
-			&memFile{
-				name: symlink,
-				err:  os.ErrNotExist, // prevent accidental use as a reader/writer.
-			},
-		}, nil
 	}
 
 	return nil, errors.New("unsupported")
@@ -434,7 +419,7 @@ func (fs *root) readdir(pathname string) ([]os.FileInfo, error) {
 	return files, nil
 }
 
-func (fs *root) readlink(pathname string) (string, error) {
+func (fs *root) Readlink(pathname string) (string, error) {
 	file, err := fs.lfetch(pathname)
 	if err != nil {
 		return "", err
