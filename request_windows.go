@@ -46,7 +46,6 @@ func toLocalPath(workDir, p string) string {
 			// e.g. "/C:" to "C:\\"
 			return tmp
 		}
-
 	}
 
 	return lp

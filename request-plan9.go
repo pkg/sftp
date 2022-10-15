@@ -36,7 +36,6 @@ func toLocalPath(workDir, p string) string {
 			// e.g. "/#s/boot" to "#s/boot"
 			return tmp
 		}
-
 	}
 
 	return lp

@@ -3,8 +3,10 @@ package sftp
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -246,4 +248,109 @@ func TestOpendirHandleReuse(t *testing.T) {
 	}
 	rpkt = request.call(handlers, pkt, nil, 0)
 	assert.IsType(t, &sshFxpNamePacket{}, rpkt)
+}
+
+func Test_toLocalPath(t *testing.T) {
+	type args struct {
+		workDir string
+		p       string
+	}
+	tests := []struct {
+		name string
+		goos string
+		args args
+		want string
+	}{
+		{
+			name: "empty path",
+			goos: "linux",
+			args: args{p: ""},
+			want: "",
+		},
+		{
+			name: "relative path",
+			goos: "linux",
+			args: args{p: "file"},
+			want: "file",
+		},
+		{
+			name: "absolute path",
+			goos: "linux",
+			args: args{p: "/file"},
+			want: "/file",
+		},
+		{
+			name: "empty path",
+			goos: "linux",
+			args: args{workDir: "/home/user", p: ""},
+			want: "/home/user",
+		},
+		{
+			name: "relative path",
+			goos: "linux",
+			args: args{workDir: "/home/user", p: "file"},
+			want: "/home/user/file",
+		},
+		{
+			name: "relative path with .",
+			goos: "linux",
+			args: args{workDir: "/home/user", p: "."},
+			want: "/home/user",
+		},
+		{
+			name: "absolute path",
+			goos: "linux",
+			args: args{workDir: "/home/user", p: "/file"},
+			want: "/file",
+		},
+		{
+			name: "empty path",
+			goos: "windows",
+			args: args{workDir: "C:\\Users\\User", p: ""},
+			want: "C:\\Users\\User",
+		},
+		{
+			name: "relative path",
+			goos: "windows",
+			args: args{workDir: "C:\\Users\\User", p: "file"},
+			want: "C:\\Users\\User\\file",
+		},
+		{
+			name: "relative path with .",
+			goos: "windows",
+			args: args{workDir: "C:\\Users\\User", p: "."},
+			want: "C:\\Users\\User",
+		},
+		{
+			name: "absolute path",
+			goos: "windows",
+			args: args{workDir: "C:\\Users\\User", p: "C:\\file"},
+			want: "C:\\file",
+		},
+		{
+			name: "relative unix-like path",
+			goos: "windows",
+			args: args{workDir: "C:\\Users\\User", p: "./file"},
+			want: "C:\\Users\\User\\file",
+		},
+		{
+			name: "absolute unix-like path",
+			goos: "windows",
+			args: args{workDir: "C:\\Users\\User", p: "/C:/file"},
+			want: "C:\\file",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s %s %s", tt.goos, tt.args.workDir, tt.name), func(t *testing.T) {
+			if runtime.GOOS != tt.goos {
+				t.Skipf("Skipping test for %s on %s", tt.goos, runtime.GOOS)
+			}
+
+			var s Server
+			if tt.args.workDir != "" {
+				_ = WithServerWorkingDirectory(tt.args.workDir)(&s)
+			}
+			assert.Equal(t, tt.want, toLocalPath(s.workDir, tt.args.p), "wrong local path")
+		})
+	}
 }
