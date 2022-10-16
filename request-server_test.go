@@ -762,7 +762,7 @@ func TestRequestReadlink(t *testing.T) {
 	_, err = p.cli.ReadLink("/foo")
 	assert.Error(t, err, "Readlink on non-symlink should fail")
 
-	_, err = p.cli.ReadLink("/foobar")
+	_, err = p.cli.ReadLink("/does-not-exist")
 	assert.Error(t, err, "Readlink on non-existent file should fail")
 
 	checkRequestServerAllocator(t, p)

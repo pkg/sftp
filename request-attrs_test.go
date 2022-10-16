@@ -36,17 +36,17 @@ func TestRequestAttributes(t *testing.T) {
 	testFs, _ := unmarshalFileStat(fl, at)
 	assert.Equal(t, fa, *testFs)
 	// Size and Mode
-	fa = FileStat{Mode: 700, Size: 99}
+	fa = FileStat{Mode: 0700, Size: 99}
 	fl = uint32(sshFileXferAttrSize | sshFileXferAttrPermissions)
 	at = []byte{}
 	at = marshalUint64(at, 99)
-	at = marshalUint32(at, 700)
+	at = marshalUint32(at, 0700)
 	testFs, _ = unmarshalFileStat(fl, at)
 	assert.Equal(t, fa, *testFs)
 	// FileMode
 	assert.True(t, testFs.FileMode().IsRegular())
 	assert.False(t, testFs.FileMode().IsDir())
-	assert.Equal(t, testFs.FileMode().Perm(), os.FileMode(700).Perm())
+	assert.Equal(t, testFs.FileMode().Perm(), os.FileMode(0700).Perm())
 }
 
 func TestRequestAttributesEmpty(t *testing.T) {
