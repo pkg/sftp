@@ -74,6 +74,11 @@ type StatVFSFileCmder interface {
 // FileLister should return an object that fulfils the ListerAt interface
 // Note in cases of an error, the error text will be sent to the client.
 // Called for Methods: List, Stat, Readlink
+//
+// Since Filelist returns an os.FileInfo, this can make it non-ideal for impelmenting Readlink.
+// This is because the Name receiver method defined by that interface defines that it should only return the base name.
+// However, Readlink is required to be capable of returning essentially any arbitrary valid path relative or absolute.
+// In order to implement this more expressive requirement, implement [ReadlinkFileLister] which will then be used instead.
 type FileLister interface {
 	Filelist(*Request) (ListerAt, error)
 }
@@ -94,7 +99,7 @@ type LstatFileLister interface {
 //
 // Up to v1.13.5 the signature for the RealPath method was:
 //
-// RealPath(string) string
+// # RealPath(string) string
 //
 // we have added a legacyRealPathFileLister that implements the old method
 // to ensure that your code does not break.
@@ -102,6 +107,14 @@ type LstatFileLister interface {
 type RealPathFileLister interface {
 	FileLister
 	RealPath(string) (string, error)
+}
+
+// ReadlinkFileLister is a FileLister that implements the Readlink method.
+// By implementing the Readlink method, it is possible to return any arbitrary valid path relative or absolute.
+// This allows giving a better response than via the default FileLister (which is limited to os.FileInfo, whose Name method should only return the base name of a file)
+type ReadlinkFileLister interface {
+	FileLister
+	Readlink(string) (string, error)
 }
 
 // This interface is here for backward compatibility only
