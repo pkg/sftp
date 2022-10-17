@@ -253,7 +253,16 @@ func handlePacket(s *Server, p orderedRequest) error {
 	case *sshFxpRealpathPacket:
 		f, err := filepath.Abs(toLocalPath(s.workDir, p.Path))
 		f = cleanPath(f)
-		rpkt = cleanPacketPath(p, f)
+		rpkt = &sshFxpNamePacket{
+			ID: p.ID,
+			NameAttrs: []*sshFxpNameAttr{
+				{
+					Name:     f,
+					LongName: f,
+					Attrs:    emptyFileStat,
+				},
+			},
+		}
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
