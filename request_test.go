@@ -346,11 +346,8 @@ func Test_toLocalPath(t *testing.T) {
 				t.Skipf("Skipping test for %s on %s", tt.goos, runtime.GOOS)
 			}
 
-			var s Server
-			if tt.args.workDir != "" {
-				_ = WithServerWorkingDirectory(tt.args.workDir)(&s)
-			}
-			assert.Equal(t, tt.want, toLocalPath(s.workDir, tt.args.p), "wrong local path")
+			workDir := cleanPath(tt.args.workDir)
+			assert.Equal(t, tt.want, toLocalPath(workDir, tt.args.p), "wrong local path")
 		})
 	}
 }
