@@ -263,19 +263,16 @@ func Test_toLocalPath(t *testing.T) {
 	}{
 		{
 			name: "empty path",
-			goos: "linux",
 			args: args{p: ""},
 			want: "",
 		},
 		{
 			name: "relative path",
-			goos: "linux",
 			args: args{p: "file"},
 			want: "file",
 		},
 		{
 			name: "absolute path",
-			goos: "linux",
 			args: args{p: "/file"},
 			want: "/file",
 		},
@@ -296,6 +293,12 @@ func Test_toLocalPath(t *testing.T) {
 			goos: "linux",
 			args: args{workDir: "/home/user", p: "."},
 			want: "/home/user",
+		},
+		{
+			name: "relative path with . and file",
+			goos: "linux",
+			args: args{workDir: "/home/user", p: "./file"},
+			want: "/home/user/file",
 		},
 		{
 			name: "absolute path",
@@ -322,27 +325,27 @@ func Test_toLocalPath(t *testing.T) {
 			want: "C:\\Users\\User",
 		},
 		{
-			name: "absolute path",
-			goos: "windows",
-			args: args{workDir: "C:\\Users\\User", p: "C:\\file"},
-			want: "C:\\file",
-		},
-		{
-			name: "relative unix-like path",
+			name: "relative path with . and file",
 			goos: "windows",
 			args: args{workDir: "C:\\Users\\User", p: "./file"},
 			want: "C:\\Users\\User\\file",
 		},
 		{
-			name: "absolute unix-like path",
+			name: "absolute path",
 			goos: "windows",
 			args: args{workDir: "C:\\Users\\User", p: "/C:/file"},
 			want: "C:\\file",
 		},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s %s %s", tt.goos, tt.args.workDir, tt.name), func(t *testing.T) {
-			if runtime.GOOS != tt.goos {
+		var name string
+		if tt.goos == "" {
+			name = fmt.Sprintf("%s %s", tt.args.workDir, tt.name)
+		} else {
+			name = fmt.Sprintf("%s %s %s", tt.goos, tt.args.workDir, tt.name)
+		}
+		t.Run(name, func(t *testing.T) {
+			if tt.goos != "" && runtime.GOOS != tt.goos {
 				t.Skipf("Skipping test for %s on %s", tt.goos, runtime.GOOS)
 			}
 
