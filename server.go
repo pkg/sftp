@@ -267,13 +267,13 @@ func handlePacket(s *Server, p orderedRequest) error {
 			rpkt = statusFromError(p.ID, err)
 		}
 	case *sshFxpOpendirPacket:
-		p.Path = toLocalPath(s.workDir, p.Path)
+		lp := toLocalPath(s.workDir, p.Path)
 
-		if stat, err := os.Stat(p.Path); err != nil {
+		if stat, err := os.Stat(lp); err != nil {
 			rpkt = statusFromError(p.ID, err)
 		} else if !stat.IsDir() {
 			rpkt = statusFromError(p.ID, &os.PathError{
-				Path: p.Path, Err: syscall.ENOTDIR,
+				Path: lp, Err: syscall.ENOTDIR,
 			})
 		} else {
 			rpkt = (&sshFxpOpenPacket{
