@@ -306,6 +306,12 @@ func Test_toLocalPath(t *testing.T) {
 			want: "/file",
 		},
 		{
+			name: "workdir and non-unixy path on Unix prefixes workdir",
+			goos: "linux",
+			args: args{workDir: cleanPath("/home/user"), p: "C:\\file"},
+			want: "/home/user/C:\\file",
+		},
+		{
 			name: "workdir and empty path on Windows",
 			goos: "windows",
 			args: args{workDir: cleanPath("C:\\Users\\User"), p: ""},
@@ -338,8 +344,8 @@ func Test_toLocalPath(t *testing.T) {
 		{
 			name: "workdir and non-unixy path on Windows prefixes workdir",
 			goos: "windows",
-			args: args{workDir: cleanPath("C:\\Users\\User"), p: "C:\file"},
-			want: "C:\\Users\\User\\C:\file",
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: "C:\\file"},
+			want: "C:\\Users\\User\\C:\\file",
 		},
 	}
 	for _, tt := range tests {
