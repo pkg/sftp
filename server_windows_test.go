@@ -1,6 +1,3 @@
-//go:build windows
-// +build windows
-
 package sftp
 
 import (
@@ -80,7 +77,7 @@ func TestServer_toLocalPath(t *testing.T) {
 			}
 
 			if got := s.toLocalPath(tt.p); got != tt.want {
-				t.Errorf("Server.toLocalPath() = %v, want %v", got, tt.want)
+				t.Errorf("Server.toLocalPath() = %q, want %q", got, tt.want)
 			}
 		})
 	}

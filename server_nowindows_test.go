@@ -1,5 +1,5 @@
-//go:build !windows && !plan9
-// +build !windows,!plan9
+//go:build !windows
+// +build !windows
 
 package sftp
 
@@ -80,7 +80,7 @@ func TestServer_toLocalPath(t *testing.T) {
 			}
 
 			if got := s.toLocalPath(tt.p); got != tt.want {
-				t.Errorf("Server.toLocalPath() = %v, want %v", got, tt.want)
+				t.Errorf("Server.toLocalPath() = %q, want %q", got, tt.want)
 			}
 		})
 	}
