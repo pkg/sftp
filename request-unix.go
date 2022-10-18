@@ -4,7 +4,6 @@ package sftp
 
 import (
 	"errors"
-	"path"
 	"syscall"
 )
 
@@ -21,12 +20,4 @@ func testOsSys(sys interface{}) error {
 		return errors.New("Gid failed to match")
 	}
 	return nil
-}
-
-func toLocalPath(workDir, p string) string {
-	if workDir != "" && !path.IsAbs(p) {
-		p = path.Join(workDir, p)
-	}
-
-	return p
 }

@@ -185,7 +185,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		}
 	case *sshFxpStatPacket:
 		// stat the requested file
-		info, err := os.Stat(toLocalPath(s.workDir, p.Path))
+		info, err := os.Stat(s.toLocalPath(p.Path))
 		rpkt = &sshFxpStatResponse{
 			ID:   p.ID,
 			info: info,
@@ -195,7 +195,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		}
 	case *sshFxpLstatPacket:
 		// stat the requested file
-		info, err := os.Lstat(toLocalPath(s.workDir, p.Path))
+		info, err := os.Lstat(s.toLocalPath(p.Path))
 		rpkt = &sshFxpStatResponse{
 			ID:   p.ID,
 			info: info,
@@ -219,24 +219,24 @@ func handlePacket(s *Server, p orderedRequest) error {
 		}
 	case *sshFxpMkdirPacket:
 		// TODO FIXME: ignore flags field
-		err := os.Mkdir(toLocalPath(s.workDir, p.Path), 0o755)
+		err := os.Mkdir(s.toLocalPath(p.Path), 0o755)
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpRmdirPacket:
-		err := os.Remove(toLocalPath(s.workDir, p.Path))
+		err := os.Remove(s.toLocalPath(p.Path))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpRemovePacket:
-		err := os.Remove(toLocalPath(s.workDir, p.Filename))
+		err := os.Remove(s.toLocalPath(p.Filename))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpRenamePacket:
-		err := os.Rename(toLocalPath(s.workDir, p.Oldpath), toLocalPath(s.workDir, p.Newpath))
+		err := os.Rename(s.toLocalPath(p.Oldpath), s.toLocalPath(p.Newpath))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpSymlinkPacket:
-		err := os.Symlink(toLocalPath(s.workDir, p.Targetpath), toLocalPath(s.workDir, p.Linkpath))
+		err := os.Symlink(s.toLocalPath(p.Targetpath), s.toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpClosePacket:
 		rpkt = statusFromError(p.ID, s.closeHandle(p.Handle))
 	case *sshFxpReadlinkPacket:
-		f, err := os.Readlink(toLocalPath(s.workDir, p.Path))
+		f, err := os.Readlink(s.toLocalPath(p.Path))
 		rpkt = &sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []*sshFxpNameAttr{
@@ -251,7 +251,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 			rpkt = statusFromError(p.ID, err)
 		}
 	case *sshFxpRealpathPacket:
-		f, err := filepath.Abs(toLocalPath(s.workDir, p.Path))
+		f, err := filepath.Abs(s.toLocalPath(p.Path))
 		f = cleanPath(f)
 		rpkt = &sshFxpNamePacket{
 			ID: p.ID,
@@ -267,7 +267,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 			rpkt = statusFromError(p.ID, err)
 		}
 	case *sshFxpOpendirPacket:
-		lp := toLocalPath(s.workDir, p.Path)
+		lp := s.toLocalPath(p.Path)
 
 		if stat, err := os.Stat(lp); err != nil {
 			rpkt = statusFromError(p.ID, err)
@@ -458,7 +458,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(toLocalPath(svr.workDir, p.Path), osFlags, 0o644)
+	f, err := os.OpenFile(svr.toLocalPath(p.Path), osFlags, 0o644)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
@@ -496,7 +496,7 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 	b := p.Attrs.([]byte)
 	var err error
 
-	p.Path = toLocalPath(svr.workDir, p.Path)
+	p.Path = svr.toLocalPath(p.Path)
 
 	debug("setstat name \"%s\"", p.Path)
 	if (p.Flags & sshFileXferAttrSize) != 0 {
