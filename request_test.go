@@ -335,6 +335,12 @@ func Test_toLocalPath(t *testing.T) {
 			args: args{workDir: cleanPath("C:\\Users\\User"), p: "/C:/file"},
 			want: "C:\\file",
 		},
+		{
+			name: "workdir and non-unixy path on Windows prefixes workdir",
+			goos: "windows",
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: "C:\file"},
+			want: "C:\\Users\\User\\C:\file",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
