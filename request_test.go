@@ -3,7 +3,6 @@ package sftp
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"runtime"
@@ -262,95 +261,88 @@ func Test_toLocalPath(t *testing.T) {
 		want string
 	}{
 		{
-			name: "empty path",
+			name: "empty path with no workdir",
 			args: args{p: ""},
 			want: "",
 		},
 		{
-			name: "relative path",
+			name: "relative path with no workdir",
 			args: args{p: "file"},
 			want: "file",
 		},
 		{
-			name: "absolute path",
+			name: "absolute path with no workdir",
 			args: args{p: "/file"},
 			want: "/file",
 		},
 		{
-			name: "empty path",
+			name: "workdir and empty path on Unix",
 			goos: "linux",
-			args: args{workDir: "/home/user", p: ""},
+			args: args{workDir: cleanPath("/home/user"), p: ""},
 			want: "/home/user",
 		},
 		{
-			name: "relative path",
+			name: "workdir and relative path on Unix",
 			goos: "linux",
-			args: args{workDir: "/home/user", p: "file"},
+			args: args{workDir: cleanPath("/home/user"), p: "file"},
 			want: "/home/user/file",
 		},
 		{
-			name: "relative path with .",
+			name: "workdir and relative path with . on Unix",
 			goos: "linux",
-			args: args{workDir: "/home/user", p: "."},
+			args: args{workDir: cleanPath("/home/user"), p: "."},
 			want: "/home/user",
 		},
 		{
-			name: "relative path with . and file",
+			name: "workdir and relative path with . and file on Unix",
 			goos: "linux",
-			args: args{workDir: "/home/user", p: "./file"},
+			args: args{workDir: cleanPath("/home/user"), p: "./file"},
 			want: "/home/user/file",
 		},
 		{
-			name: "absolute path",
+			name: "workdir and absolute path on Unix",
 			goos: "linux",
-			args: args{workDir: "/home/user", p: "/file"},
+			args: args{workDir: cleanPath("/home/user"), p: "/file"},
 			want: "/file",
 		},
 		{
-			name: "empty path",
+			name: "workdir and empty path on Windows",
 			goos: "windows",
-			args: args{workDir: "C:\\Users\\User", p: ""},
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: ""},
 			want: "C:\\Users\\User",
 		},
 		{
-			name: "relative path",
+			name: "workdir and relative path on Windows",
 			goos: "windows",
-			args: args{workDir: "C:\\Users\\User", p: "file"},
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: "file"},
 			want: "C:\\Users\\User\\file",
 		},
 		{
-			name: "relative path with .",
+			name: "workdir and relative path with . on Windows",
 			goos: "windows",
-			args: args{workDir: "C:\\Users\\User", p: "."},
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: "."},
 			want: "C:\\Users\\User",
 		},
 		{
-			name: "relative path with . and file",
+			name: "workdir and relative path with . and file on Windows",
 			goos: "windows",
-			args: args{workDir: "C:\\Users\\User", p: "./file"},
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: "./file"},
 			want: "C:\\Users\\User\\file",
 		},
 		{
-			name: "absolute path",
+			name: "workdir and absolute path on Windows",
 			goos: "windows",
-			args: args{workDir: "C:\\Users\\User", p: "/C:/file"},
+			args: args{workDir: cleanPath("C:\\Users\\User"), p: "/C:/file"},
 			want: "C:\\file",
 		},
 	}
 	for _, tt := range tests {
-		var name string
-		if tt.goos == "" {
-			name = fmt.Sprintf("%s %s", tt.args.workDir, tt.name)
-		} else {
-			name = fmt.Sprintf("%s %s %s", tt.goos, tt.args.workDir, tt.name)
-		}
-		t.Run(name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			if tt.goos != "" && runtime.GOOS != tt.goos {
 				t.Skipf("Skipping test for %s on %s", tt.goos, runtime.GOOS)
 			}
 
-			workDir := cleanPath(tt.args.workDir)
-			assert.Equal(t, tt.want, toLocalPath(workDir, tt.args.p), "wrong local path")
+			assert.Equal(t, tt.want, toLocalPath(tt.args.workDir, tt.args.p), "wrong local path")
 		})
 	}
 }
