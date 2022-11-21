@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -183,9 +184,26 @@ func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.RequestSubsystem("sftp"); err != nil {
+	er, err := s.StderrPipe()
+	if err != nil {
 		return nil, err
 	}
+	if err := s.RequestSubsystem("sftp"); err != nil {
+		// If the subsystem request failed and a generic error is
+		// returned, return the session's stderr as the error if it's
+		// non-empty, as the session's stderr may have a more useful
+		// error message. String comparison is only used here because
+		// the error is not exported.
+		if err.Error() == "ssh: subsystem request failed" {
+			var sb strings.Builder
+			n, cpErr := io.Copy(&sb, er)
+			if cpErr == nil && n != 0 {
+				return nil, errors.New(sb.String())
+			}
+		}
+		return nil, err
+	}
+
 	pw, err := s.StdinPipe()
 	if err != nil {
 		return nil, err
