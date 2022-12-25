@@ -615,13 +615,15 @@ func statusFromError(id uint32, err error) *sshFxpStatusPacket {
 		return ret
 	}
 
-	switch e := err.(type) {
-	case fxerr:
+	if errors.Is(err, io.EOF) {
+		ret.StatusError.Code = sshFxEOF
+		return ret
+	}
+
+	var e fxerr
+	if errors.As(err, &e) {
 		ret.StatusError.Code = uint32(e)
-	default:
-		if e == io.EOF {
-			ret.StatusError.Code = sshFxEOF
-		}
+		return ret
 	}
 
 	return ret
