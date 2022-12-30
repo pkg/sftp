@@ -3,6 +3,7 @@ package sftp
 // sftp server counterpart
 
 import (
+	"context"
 	"encoding"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ type Server struct {
 	openFilesLock sync.RWMutex
 	handleCount   int
 	workDir       string
+	requestHook   RequestHook
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -86,6 +88,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		debugStream: ioutil.Discard,
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
+		requestHook: nil,
 	}
 
 	for _, o := range options {
@@ -99,6 +102,17 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 
 // A ServerOption is a function which applies configuration to a Server.
 type ServerOption func(*Server) error
+
+// A hook to perform actions on the orderedRequest and return an Error.
+type RequestHook func(*Request) error
+
+// WithRequestHook enables the request hook so you can inspect every FTP packet.
+func WithRequestHook(requestHook RequestHook) ServerOption {
+	return func(s *Server) error {
+		s.requestHook = requestHook
+		return nil
+	}
+}
 
 // WithDebug enables Server debugging output to the supplied io.Writer.
 func WithDebug(w io.Writer) ServerOption {
@@ -177,6 +191,17 @@ func (svr *Server) sftpServerWorker(pktChan chan orderedRequest) error {
 func handlePacket(s *Server, p orderedRequest) error {
 	var rpkt responsePacket
 	orderID := p.orderID()
+	if s.requestHook != nil {
+		switch p := p.requestPacket.(type) {
+		case hasPath:
+			err := s.requestHook(requestFromPacket(context.Background(), p, s.workDir))
+			if err != nil {
+				rpkt = statusFromError(p.id(), err)
+				s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, orderID))
+				return nil
+			}
+		}
+	}
 	switch p := p.requestPacket.(type) {
 	case *sshFxInitPacket:
 		rpkt = &sshFxVersionPacket{
