@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"syscall"
 	"testing"
@@ -19,6 +20,8 @@ func TestErrFxCode(t *testing.T) {
 		{err: syscall.ENOENT, fx: ErrSSHFxNoSuchFile},
 		{err: syscall.EPERM, fx: ErrSSHFxPermissionDenied},
 		{err: io.EOF, fx: ErrSSHFxEOF},
+		{err: fmt.Errorf("wrapped permission denied error: %w", ErrSSHFxPermissionDenied), fx: ErrSSHFxPermissionDenied},
+		{err: fmt.Errorf("wrapped op unsupported error: %w", ErrSSHFxOpUnsupported), fx: ErrSSHFxOpUnsupported},
 	}
 	for _, tt := range table {
 		statusErr := statusFromError(1, tt.err).StatusError
