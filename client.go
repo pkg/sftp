@@ -1674,7 +1674,7 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 					Handle: f.handle,
 					Offset: uint64(off),
 					Length: uint32(n),
-					Data:   b,
+					Data:   b[:n],
 				})
 
 				select {
