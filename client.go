@@ -244,6 +244,8 @@ func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Clie
 		}
 	}()
 
+  sftp.clientConn.wg.Wait() // Wait for go routine to complete recv() call
+
 	return sftp, nil
 }
 
