@@ -71,6 +71,15 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 		b = marshalUint32(b, fileStat.Mtime)
 	}
 
+	if flags&sshFileXferAttrExtended != 0 {
+		b = marshalUint32(b, uint32(len(fileStat.Extended)))
+
+		for _, attr := range fileStat.Extended {
+			b = marshalString(b, attr.ExtType)
+			b = marshalString(b, attr.ExtData)
+		}
+	}
+
 	return b
 }
 
