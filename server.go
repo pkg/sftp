@@ -24,7 +24,7 @@ const (
 // Server is an SSH File Transfer Protocol (sftp) server.
 // This is intended to provide the sftp subsystem to an ssh server daemon.
 // This implementation currently supports most of sftp server protocol version 3,
-// as specified at http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
+// as specified at https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt
 type Server struct {
 	*serverConn
 	debugStream   io.Writer

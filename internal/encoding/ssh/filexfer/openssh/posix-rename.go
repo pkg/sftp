@@ -4,38 +4,38 @@ import (
 	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
-const extensionPosixRename = "posix-rename@openssh.com"
+const extensionPOSIXRename = "posix-rename@openssh.com"
 
-// RegisterExtensionPosixRename registers the "posix-rename@openssh.com" extended packet with the encoding/ssh/filexfer package.
-func RegisterExtensionPosixRename() {
-	sshfx.RegisterExtendedPacketType(extensionPosixRename, func() sshfx.ExtendedData {
-		return new(PosixRenameExtendedPacket)
+// RegisterExtensionPOSIXRename registers the "posix-rename@openssh.com" extended packet with the encoding/ssh/filexfer package.
+func RegisterExtensionPOSIXRename() {
+	sshfx.RegisterExtendedPacketType(extensionPOSIXRename, func() sshfx.ExtendedData {
+		return new(POSIXRenameExtendedPacket)
 	})
 }
 
-// ExtensionPosixRename returns an ExtensionPair suitable to append into an sshfx.InitPacket or sshfx.VersionPacket.
-func ExtensionPosixRename() *sshfx.ExtensionPair {
+// ExtensionPOSIXRename returns an ExtensionPair suitable to append into an sshfx.InitPacket or sshfx.VersionPacket.
+func ExtensionPOSIXRename() *sshfx.ExtensionPair {
 	return &sshfx.ExtensionPair{
-		Name: extensionPosixRename,
+		Name: extensionPOSIXRename,
 		Data: "1",
 	}
 }
 
-// PosixRenameExtendedPacket defines the posix-rename@openssh.com extend packet.
-type PosixRenameExtendedPacket struct {
+// POSIXRenameExtendedPacket defines the posix-rename@openssh.com extend packet.
+type POSIXRenameExtendedPacket struct {
 	OldPath string
 	NewPath string
 }
 
 // Type returns the SSH_FXP_EXTENDED packet type.
-func (ep *PosixRenameExtendedPacket) Type() sshfx.PacketType {
+func (ep *POSIXRenameExtendedPacket) Type() sshfx.PacketType {
 	return sshfx.PacketTypeExtended
 }
 
 // MarshalPacket returns ep as a two-part binary encoding of the full extended packet.
-func (ep *PosixRenameExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+func (ep *POSIXRenameExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	p := &sshfx.ExtendedPacket{
-		ExtendedRequest: extensionPosixRename,
+		ExtendedRequest: extensionPOSIXRename,
 
 		Data: ep,
 	}
@@ -43,7 +43,7 @@ func (ep *PosixRenameExtendedPacket) MarshalPacket(reqid uint32, b []byte) (head
 }
 
 // MarshalInto encodes ep into the binary encoding of the hardlink@openssh.com extended packet-specific data.
-func (ep *PosixRenameExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
+func (ep *POSIXRenameExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 	buf.AppendString(ep.OldPath)
 	buf.AppendString(ep.NewPath)
 }
@@ -51,7 +51,7 @@ func (ep *PosixRenameExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 // MarshalBinary encodes ep into the binary encoding of the hardlink@openssh.com extended packet-specific data.
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended packet.
-func (ep *PosixRenameExtendedPacket) MarshalBinary() ([]byte, error) {
+func (ep *POSIXRenameExtendedPacket) MarshalBinary() ([]byte, error) {
 	// string(oldpath) + string(newpath)
 	size := 4 + len(ep.OldPath) + 4 + len(ep.NewPath)
 
@@ -61,19 +61,16 @@ func (ep *PosixRenameExtendedPacket) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalFrom decodes the hardlink@openssh.com extended packet-specific data from buf.
-func (ep *PosixRenameExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
-	if ep.OldPath, err = buf.ConsumeString(); err != nil {
-		return err
+func (ep *POSIXRenameExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
+	*ep = POSIXRenameExtendedPacket{
+		OldPath: buf.ConsumeString(),
+		NewPath: buf.ConsumeString(),
 	}
 
-	if ep.NewPath, err = buf.ConsumeString(); err != nil {
-		return err
-	}
-
-	return nil
+	return buf.Err
 }
 
 // UnmarshalBinary decodes the hardlink@openssh.com extended packet-specific data into ep.
-func (ep *PosixRenameExtendedPacket) UnmarshalBinary(data []byte) (err error) {
+func (ep *POSIXRenameExtendedPacket) UnmarshalBinary(data []byte) (err error) {
 	return ep.UnmarshalFrom(sshfx.NewBuffer(data))
 }

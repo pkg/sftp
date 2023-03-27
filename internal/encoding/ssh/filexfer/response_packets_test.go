@@ -1,4 +1,4 @@
-package filexfer
+package sshfx
 
 import (
 	"bytes"

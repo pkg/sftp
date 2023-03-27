@@ -1,4 +1,4 @@
-package filexfer
+package sshfx
 
 import (
 	"bufio"
@@ -8,7 +8,8 @@ import (
 	"testing"
 )
 
-// This string data is copied verbatim from https://tools.ietf.org/html/draft-ietf-secsh-filexfer-13
+// This string data is copied verbatim from https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-13.txt
+// except where commented that it was taken from a different source.
 var fxpStandardsText = `
 SSH_FXP_INIT                1
 SSH_FXP_VERSION             2
