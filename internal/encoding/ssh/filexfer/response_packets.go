@@ -196,7 +196,7 @@ func (p *NamePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 		p.Entries = append(p.Entries, &e)
 	}
 
-	return nil
+	return buf.Err
 }
 
 // AttrsPacket defines the SSH_FXP_ATTRS packet.
