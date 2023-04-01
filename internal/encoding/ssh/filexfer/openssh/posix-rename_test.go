@@ -7,20 +7,20 @@ import (
 	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
-var _ sshfx.PacketMarshaller = &PosixRenameExtendedPacket{}
+var _ sshfx.PacketMarshaller = &POSIXRenameExtendedPacket{}
 
 func init() {
-	RegisterExtensionPosixRename()
+	RegisterExtensionPOSIXRename()
 }
 
-func TestPosixRenameExtendedPacket(t *testing.T) {
+func TestPOSIXRenameExtendedPacket(t *testing.T) {
 	const (
 		id      = 42
 		oldpath = "/foo"
 		newpath = "/bar"
 	)
 
-	ep := &PosixRenameExtendedPacket{
+	ep := &POSIXRenameExtendedPacket{
 		OldPath: oldpath,
 		NewPath: newpath,
 	}
@@ -50,13 +50,13 @@ func TestPosixRenameExtendedPacket(t *testing.T) {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.ExtendedRequest != extensionPosixRename {
-		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extensionPosixRename)
+	if p.ExtendedRequest != extensionPOSIXRename {
+		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extensionPOSIXRename)
 	}
 
-	ep, ok := p.Data.(*PosixRenameExtendedPacket)
+	ep, ok := p.Data.(*POSIXRenameExtendedPacket)
 	if !ok {
-		t.Fatalf("UnmarshaledPacketBody(): Data was type %T, but expected *PosixRenameExtendedPacket", p.Data)
+		t.Fatalf("UnmarshaledPacketBody(): Data was type %T, but expected *POSIXRenameExtendedPacket", p.Data)
 	}
 
 	if ep.OldPath != oldpath {

@@ -61,11 +61,11 @@ func (ep *StatVFSExtendedPacket) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom decodes the statvfs@openssh.com extended packet-specific data into ep.
 func (ep *StatVFSExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
-	if ep.Path, err = buf.ConsumeString(); err != nil {
-		return err
+	*ep = StatVFSExtendedPacket{
+		Path: buf.ConsumeString(),
 	}
 
-	return nil
+	return buf.Err
 }
 
 // UnmarshalBinary decodes the statvfs@openssh.com extended packet-specific data into ep.
@@ -130,11 +130,11 @@ func (ep *FStatVFSExtendedPacket) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom decodes the statvfs@openssh.com extended packet-specific data into ep.
 func (ep *FStatVFSExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
-	if ep.Path, err = buf.ConsumeString(); err != nil {
-		return err
+	*ep = FStatVFSExtendedPacket{
+		Path: buf.ConsumeString(),
 	}
 
-	return nil
+	return buf.Err
 }
 
 // UnmarshalBinary decodes the statvfs@openssh.com extended packet-specific data into ep.
@@ -213,41 +213,21 @@ func (ep *StatVFSExtendedReplyPacket) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom decodes the fstatvfs@openssh.com extended reply packet-specific data into ep.
 func (ep *StatVFSExtendedReplyPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
-	if ep.BlockSize, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.FragmentSize, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.Blocks, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.BlocksFree, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.BlocksAvail, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.Files, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.FilesFree, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.FilesAvail, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.FilesystemID, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.MountFlags, err = buf.ConsumeUint64(); err != nil {
-		return err
-	}
-	if ep.MaxNameLength, err = buf.ConsumeUint64(); err != nil {
-		return err
+	*ep = StatVFSExtendedReplyPacket{
+		BlockSize:     buf.ConsumeUint64(),
+		FragmentSize:  buf.ConsumeUint64(),
+		Blocks:        buf.ConsumeUint64(),
+		BlocksFree:    buf.ConsumeUint64(),
+		BlocksAvail:   buf.ConsumeUint64(),
+		Files:         buf.ConsumeUint64(),
+		FilesFree:     buf.ConsumeUint64(),
+		FilesAvail:    buf.ConsumeUint64(),
+		FilesystemID:  buf.ConsumeUint64(),
+		MountFlags:    buf.ConsumeUint64(),
+		MaxNameLength: buf.ConsumeUint64(),
 	}
 
-	return nil
+	return buf.Err
 }
 
 // UnmarshalBinary decodes the fstatvfs@openssh.com extended reply packet-specific data into ep.

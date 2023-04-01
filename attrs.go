@@ -1,7 +1,7 @@
 package sftp
 
 // ssh_FXP_ATTRS support
-// see http://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-5
+// see https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt#section-5
 
 import (
 	"os"

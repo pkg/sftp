@@ -60,11 +60,11 @@ func (ep *FSyncExtendedPacket) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom decodes the fsync@openssh.com extended packet-specific data from buf.
 func (ep *FSyncExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
-	if ep.Handle, err = buf.ConsumeString(); err != nil {
-		return err
+	*ep = FSyncExtendedPacket{
+		Handle: buf.ConsumeString(),
 	}
 
-	return nil
+	return buf.Err
 }
 
 // UnmarshalBinary decodes the fsync@openssh.com extended packet-specific data into ep.

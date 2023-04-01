@@ -1,4 +1,4 @@
-package filexfer
+package sshfx
 
 import (
 	"bytes"
@@ -58,7 +58,7 @@ func TestReadPacket(t *testing.T) {
 	p := &ReadPacket{
 		Handle: "somehandle",
 		Offset: offset,
-		Len:    length,
+		Length: length,
 	}
 
 	buf, err := ComposePacket(p.MarshalPacket(id, nil))
@@ -94,8 +94,8 @@ func TestReadPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Offset was %x, but expected %x", p.Offset, offset)
 	}
 
-	if p.Len != length {
-		t.Errorf("UnmarshalPacketBody(): Len was %x, but expected %x", p.Len, length)
+	if p.Length != length {
+		t.Errorf("UnmarshalPacketBody(): Length was %x, but expected %x", p.Length, length)
 	}
 }
 

@@ -1,4 +1,4 @@
-package filexfer
+package sshfx
 
 import (
 	"bytes"
@@ -20,9 +20,9 @@ func (d *testExtendedData) MarshalBinary() ([]byte, error) {
 func (d *testExtendedData) UnmarshalBinary(data []byte) error {
 	buf := NewBuffer(data)
 
-	v, err := buf.ConsumeUint8()
-	if err != nil {
-		return err
+	v := buf.ConsumeUint8()
+	if buf.Err != nil {
+		return buf.Err
 	}
 
 	d.value = v ^ 0x2a

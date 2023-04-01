@@ -62,15 +62,12 @@ func (ep *HardlinkExtendedPacket) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom decodes the hardlink@openssh.com extended packet-specific data from buf.
 func (ep *HardlinkExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
-	if ep.OldPath, err = buf.ConsumeString(); err != nil {
-		return err
+	*ep = HardlinkExtendedPacket{
+		OldPath: buf.ConsumeString(),
+		NewPath: buf.ConsumeString(),
 	}
 
-	if ep.NewPath, err = buf.ConsumeString(); err != nil {
-		return err
-	}
-
-	return nil
+	return buf.Err
 }
 
 // UnmarshalBinary decodes the hardlink@openssh.com extended packet-specific data into ep.
