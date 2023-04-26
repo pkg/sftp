@@ -728,7 +728,7 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // file or directory with the specified path exists, or if the specified directory
 // is not empty.
 func (c *Client) Remove(path string) error {
-	err := c.removeFile(path)
+	err := c.RemoveFile(path)
 	// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
 	// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
 	// EPERM is converted to os.ErrPermission so it is not a StatusError
@@ -744,7 +744,7 @@ func (c *Client) Remove(path string) error {
 	return err
 }
 
-func (c *Client) removeFile(path string) error {
+func (c *Client) RemoveFile(path string) error {
 	id := c.nextID()
 	typ, data, err := c.sendPacket(nil, &sshFxpRemovePacket{
 		ID:       id,

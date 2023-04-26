@@ -689,6 +689,45 @@ func TestClientRemoveFailed(t *testing.T) {
 	}
 }
 
+func TestClientRemoveFile(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest-remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.Close()
+
+	if err := sftp.RemoveFile(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f.Name()); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRemoveFileFailed(t *testing.T) {
+	sftp, cmd := testClient(t, READONLY, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	f, err := ioutil.TempFile("", "sftptest-removefailed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	if err := sftp.RemoveFile(f.Name()); err == nil {
+		t.Fatalf("Remove(%v): want: permission denied, got %v", f.Name(), err)
+	}
+	if _, err := os.Lstat(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClientRename(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
