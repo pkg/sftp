@@ -924,6 +924,55 @@ func (c *Client) MkdirAll(path string) error {
 	return nil
 }
 
+// DeleteAllResources delete files recursively in the directory and Recursively delete subdirectories.
+// An error will be returned if no file or directory with the specified path exists
+func (c *Client) DeleteAllResources(filePath string) error {
+
+	// Get the file/directory information
+	fileInfo, err := c.Stat(filePath)
+	if err != nil {
+		return err
+	}
+
+	if fileInfo.IsDir() {
+		// Delete files recursively in the directory
+		files, err := c.ReadDir(filePath)
+		if err != nil {
+			return err
+		}
+
+		for _, file := range files {
+			if file.IsDir() {
+				// Recursively delete subdirectories
+				err = c.DeleteAllResources(filePath + "/" + file.Name())
+				if err != nil {
+					return err
+				}
+			} else {
+				// Delete individual files
+				err = c.Remove(filePath + "/" + file.Name())
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		// Delete the empty directory
+		err = c.RemoveDirectory(filePath)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Delete individual files
+		err = c.Remove(filePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // File represents a remote file.
 type File struct {
 	c      *Client
