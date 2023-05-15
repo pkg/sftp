@@ -651,6 +651,50 @@ func TestClientRemove(t *testing.T) {
 	}
 }
 
+func TestRemoveAll(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	// Create a temporary directory for testing
+	tempDir, err := ioutil.TempDir("", "sftptest-removeAll")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create file and directory within the temporary directory
+	f, err := ioutil.TempFile(tempDir, "sftptest-removeAll*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	d, err := ioutil.TempDir(tempDir, "sftptest-removeAll1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(d)
+
+	// Call the function to remove the files recursively
+	err = sftp.RemoveAll(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check if the directories and files have been deleted
+	_, err = os.Stat(f.Name())
+	if !os.IsNotExist(err) {
+		t.Errorf("File %s still exists", f.Name())
+	}
+
+	_, err = os.Stat(d)
+	if !os.IsNotExist(err) {
+		t.Errorf("Directory %s still exists", d)
+	}
+
+}
+
 func TestClientRemoveDir(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
