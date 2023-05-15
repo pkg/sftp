@@ -958,19 +958,13 @@ func (c *Client) RemoveAll(path string) error {
 		}
 
 		// Delete the empty directory
-		err = c.RemoveDirectory(path)
-		if err != nil {
-			return c.RemoveDirectory(path)
-		}
+		return c.RemoveDirectory(path)
+
 	} else {
 		// Delete individual files
-		err = c.Remove(path)
-		if err != nil {
-			return c.Remove(path)
-		}
+		return c.Remove(path)
 	}
 
-	return nil
 }
 
 // File represents a remote file.
