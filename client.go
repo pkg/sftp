@@ -957,12 +957,9 @@ func (c *Client) RemoveAll(path string) error {
 			}
 		}
 
-		// Delete the empty directory
-		return c.Remove(path)
-
 	}
 
-	return nil
+	return c.Remove(path)
 
 }
 
