@@ -30,7 +30,7 @@ type FileReader interface {
 // FileWriter should return an io.WriterAt for the filepath.
 //
 // The request server code will call Close() on the returned io.WriterAt
-// ojbect if an io.Closer type assertion succeeds.
+// object if an io.Closer type assertion succeeds.
 // Note in cases of an error, the error text will be sent to the client.
 // Note when receiving an Append flag it is important to not open files using
 // O_APPEND if you plan to use WriteAt, as they conflict.
