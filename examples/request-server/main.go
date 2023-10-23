@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -28,7 +27,7 @@ func main() {
 	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
 	flag.Parse()
 
-	debugStream := ioutil.Discard
+	debugStream := io.Discard
 	if debugStderr {
 		debugStream = os.Stderr
 	}
@@ -47,7 +46,7 @@ func main() {
 		},
 	}
 
-	privateBytes, err := ioutil.ReadFile("id_rsa")
+	privateBytes, err := os.ReadFile("id_rsa")
 	if err != nil {
 		log.Fatal("Failed to load private key", err)
 	}
