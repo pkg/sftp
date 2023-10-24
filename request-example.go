@@ -72,7 +72,7 @@ func (fs *root) putfile(pathname string, file *memFile) error {
 		return os.ErrInvalid
 	}
 
-	if _, err := fs.lfetch(pathname); err != os.ErrNotExist {
+	if _, err := fs.lfetch(pathname); !errors.Is(err, os.ErrNotExist) {
 		return os.ErrExist
 	}
 
@@ -209,7 +209,7 @@ func (fs *root) rename(oldpath, newpath string) error {
 	}
 
 	target, err := fs.lfetch(newpath)
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		if target == file {
 			// IEEE 1003.1: if oldpath and newpath are the same directory entry,
 			// then return no error, and perform no further action.
@@ -507,7 +507,7 @@ func (fs *root) exists(path string) bool {
 
 	_, err = fs.lfetch(path)
 
-	return err != os.ErrNotExist
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func (fs *root) fetch(pathname string) (*memFile, error) {
