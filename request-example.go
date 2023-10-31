@@ -110,6 +110,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 
 		file := &memFile{
 			modtime: time.Now(),
+			mode:    0644,
 		}
 
 		if err := fs.putfile(pathname, file); err != nil {
@@ -544,6 +545,7 @@ type memFile struct {
 	modtime time.Time
 	symlink string
 	isdir   bool
+	mode    uint32
 
 	mu      sync.RWMutex
 	content []byte
@@ -569,7 +571,7 @@ func (f *memFile) Mode() os.FileMode {
 	if f.symlink != "" {
 		return os.FileMode(0777) | os.ModeSymlink
 	}
-	return os.FileMode(0644)
+	return os.FileMode(f.mode)
 }
 func (f *memFile) ModTime() time.Time { return f.modtime }
 func (f *memFile) IsDir() bool        { return f.isdir }
