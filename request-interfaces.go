@@ -155,3 +155,9 @@ type ListerAt interface {
 type TransferError interface {
 	TransferError(err error)
 }
+
+// FileStatSetter is an optional interface that a writerAt could implement in order to allow direct setting of stats.
+// This is primarily used for the inmemhandler backend.
+type FileStatSetter interface {
+	SetStat(r *Request, flags *FileAttrFlags, attrs *FileStat) error
+}
