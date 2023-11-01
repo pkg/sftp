@@ -275,7 +275,7 @@ func (c *Client) nextID() uint32 {
 func (c *Client) recvVersion() error {
 	typ, data, err := c.recvPacket(0)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return fmt.Errorf("server unexpectedly closed connection: %w", io.ErrUnexpectedEOF)
 		}
 
@@ -368,7 +368,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 			return nil, unimplementedPacketErr(typ)
 		}
 	}
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		err = nil
 	}
 	return attrs, err
@@ -1238,7 +1238,7 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 		}
 
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return written, nil // return nil explicitly.
 			}
 
@@ -1435,7 +1435,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		}
 
 		if packet.err != nil {
-			if packet.err == io.EOF {
+			if errors.Is(packet.err, io.EOF) {
 				return written, nil
 			}
 
@@ -1726,7 +1726,7 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 			}
 
 			if err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					errCh <- rwErr{off, err}
 				}
 				return
@@ -1878,7 +1878,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 		}
 
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return read, nil // return nil explicitly.
 			}
 

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -136,7 +137,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := server.Serve(); err == io.EOF {
+		if err := server.Serve(); errors.Is(err, io.EOF) {
 			server.Close()
 			log.Print("sftp client exited session.")
 		} else if err != nil {

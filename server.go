@@ -289,7 +289,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 			err = nil
 			data := p.getDataSlice(s.pktMgr.alloc, orderID)
 			n, _err := f.ReadAt(data, int64(p.Offset))
-			if _err != nil && (_err != io.EOF || n == 0) {
+			if _err != nil && (!errors.Is(_err, io.EOF) || n == 0) {
 				err = _err
 			}
 			rpkt = &sshFxpDataPacket{
@@ -354,7 +354,7 @@ func (svr *Server) Serve() error {
 		pktType, pktBytes, err = svr.serverConn.recvPacket(svr.pktMgr.getNextOrderID())
 		if err != nil {
 			// Check whether the connection terminated cleanly in-between packets.
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				err = nil
 			}
 			// we don't care about releasing allocated pages here, the server will quit and the allocator freed

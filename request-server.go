@@ -189,7 +189,7 @@ func (rs *RequestServer) Serve() error {
 	// make sure all open requests are properly closed
 	// (eg. possible on dropped connections, client crashes, etc.)
 	for handle, req := range rs.openRequests {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		req.transferError(err)
