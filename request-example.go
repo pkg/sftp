@@ -141,25 +141,6 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 	return file, nil
 }
 
-func (fs *root) SetStat(r *Request, flags *FileAttrFlags, attrs *FileStat) error {
-	file, err := fs.openfile(r.Filepath, sshFxfWrite)
-	if err != nil {
-		return err
-	}
-
-	if flags.Permissions {
-		file.mode = attrs.Mode
-	}
-	// We only have mtime, not atime.
-	if flags.Acmodtime {
-		file.modtime = time.Unix(int64(attrs.Mtime), 0)
-	}
-	if flags.Size {
-		return file.Truncate(int64(attrs.Size))
-	}
-	return nil
-}
-
 func (fs *root) Filecmd(r *Request) error {
 	if fs.mockErr != nil {
 		return fs.mockErr
@@ -172,7 +153,26 @@ func (fs *root) Filecmd(r *Request) error {
 	switch r.Method {
 	case "Setstat":
 		flags := r.AttrFlags()
-		return fs.SetStat(r, &flags, r.Attributes())
+		attrs := r.Attributes()
+		file, err := fs.openfile(r.Filepath, sshFxfWrite)
+		if err != nil {
+			return err
+		}
+
+		if flags.Size {
+			if err = file.Truncate(int64(attrs.Size)); err != nil {
+				return err
+			}
+		}
+		if flags.Permissions {
+			const mask = uint32(os.ModePerm | s_ISUID | s_ISGID | s_ISVTX)
+			file.mode = (file.mode &^ mask) | (attrs.Mode & mask)
+		}
+		// We only have mtime, not atime.
+		if flags.Acmodtime {
+			file.modtime = time.Unix(int64(attrs.Mtime), 0)
+		}
+		return nil
 
 	case "Rename":
 		// SFTP-v2: "It is an error if there already exists a file with the name specified by newpath."
