@@ -37,7 +37,8 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	return fs.OpenFile(r)
+	// Needs to be readable by the user.
+	return fs.openFileModeCheck(r, 0o0400)
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
@@ -47,10 +48,16 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	return fs.OpenFile(r)
+	// Needs to be writable by the user.
+	return fs.openFileModeCheck(r, 0o0200)
 }
 
 func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
+	// Needs to be readable and writable by the user.
+	return fs.openFileModeCheck(r, 0o0200|0o0400)
+}
+
+func (fs *root) openFileModeCheck(r *Request, mode uint32) (WriterAtReaderAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
@@ -59,7 +66,16 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	return fs.openfile(r.Filepath, r.Flags)
+	f, err := fs.openfile(r.Filepath, r.Flags)
+	if err != nil {
+		return nil, err
+	}
+
+	if f.mode&mode != mode {
+		return nil, os.ErrPermission
+	}
+
+	return f, nil
 }
 
 func (fs *root) putfile(pathname string, file *memFile) error {
