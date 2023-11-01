@@ -44,37 +44,6 @@ func newFileAttrFlags(flags uint32) FileAttrFlags {
 	}
 }
 
-func (r *Request) SetAttributes(flags FileAttrFlags, attrs FileStat) error {
-	r.Method = "Setstat"
-
-	buf := []byte{}
-
-	r.Flags = 0
-
-	if flags.Size {
-		r.Flags |= sshFileXferAttrSize
-		buf = marshalUint64(buf, attrs.Size)
-	}
-	if flags.UidGid {
-		r.Flags |= sshFileXferAttrUIDGID
-		buf = marshalUint32(buf, attrs.UID)
-		buf = marshalUint32(buf, attrs.GID)
-	}
-	if flags.Permissions {
-		r.Flags |= sshFileXferAttrPermissions
-		buf = marshalUint32(buf, attrs.Mode)
-	}
-
-	if flags.Acmodtime {
-		r.Flags |= sshFileXferAttrACmodTime
-		buf = marshalUint32(buf, attrs.Atime)
-		buf = marshalUint32(buf, attrs.Mtime)
-	}
-
-	r.Attrs = buf
-	return nil
-}
-
 // AttrFlags returns a FileAttrFlags boolean struct based on the
 // bitmap/uint32 file attribute flags from the SFTP packaet.
 func (r *Request) AttrFlags() FileAttrFlags {
