@@ -47,7 +47,7 @@ func runLs(idLookup NameLookupFileLister, dirent os.FileInfo) string {
 	// format:
 	// {directory / char device / etc}{rwxrwxrwx}  {number of links} owner group size month day [time (this year) | year (otherwise)] name
 
-	symPerms := sshfx.FileMode(fromFileMode(dirent.Mode())).String()
+	symPerms := sshfx.FileMode(FromFileMode(dirent.Mode())).String()
 
 	var numLinks uint64 = 1
 	uid, gid := "0", "0"

@@ -49,8 +49,8 @@ func isRegular(mode uint32) bool {
 	return mode&S_IFMT == syscall.S_IFREG
 }
 
-// toFileMode converts sftp filemode bits to the os.FileMode specification
-func toFileMode(mode uint32) os.FileMode {
+// ToFileMode converts sftp filemode bits to the os.FileMode specification
+func ToFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
 
 	switch mode & S_IFMT {
@@ -83,8 +83,8 @@ func toFileMode(mode uint32) os.FileMode {
 	return fm
 }
 
-// fromFileMode converts from the os.FileMode specification to sftp filemode bits
-func fromFileMode(mode os.FileMode) uint32 {
+// FromFileMode converts from the os.FileMode specification to sftp filemode bits
+func FromFileMode(mode os.FileMode) uint32 {
 	ret := uint32(mode & os.ModePerm)
 
 	switch mode & os.ModeType {

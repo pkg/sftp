@@ -2009,7 +2009,7 @@ func flags(f int) uint32 {
 
 // toChmodPerm converts Go permission bits to POSIX permission bits.
 //
-// This differs from fromFileMode in that we preserve the POSIX versions of
+// This differs from FromFileMode in that we preserve the POSIX versions of
 // setuid, setgid and sticky in m, because we've historically supported those
 // bits, and we mask off any non-permission bits.
 func toChmodPerm(m os.FileMode) (perm uint32) {

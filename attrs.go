@@ -32,7 +32,7 @@ func (fi *fileInfo) Name() string { return fi.name }
 func (fi *fileInfo) Size() int64 { return int64(fi.stat.Size) }
 
 // Mode returns file mode bits.
-func (fi *fileInfo) Mode() os.FileMode { return toFileMode(fi.stat.Mode) }
+func (fi *fileInfo) Mode() os.FileMode { return ToFileMode(fi.stat.Mode) }
 
 // ModTime returns the last modification time of the file.
 func (fi *fileInfo) ModTime() time.Time { return time.Unix(int64(fi.stat.Mtime), 0) }
@@ -92,7 +92,7 @@ func fileStatFromInfo(fi os.FileInfo) (uint32, *FileStat) {
 
 	fileStat := &FileStat{
 		Size:  uint64(fi.Size()),
-		Mode:  fromFileMode(fi.Mode()),
+		Mode:  FromFileMode(fi.Mode()),
 		Mtime: uint32(mtime),
 		Atime: uint32(atime),
 	}
