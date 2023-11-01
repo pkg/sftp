@@ -170,6 +170,14 @@ func (fs *root) Filecmd(r *Request) error {
 
 	switch r.Method {
 	case "Setstat":
+		// We explicitly do not support changing the mode of symlinks.
+		// Nor do we want to change the mode of whatever the symlink is pointed
+		// at.
+		link, err := fs.Readlink(r.Filepath)
+		if link != "" || err == nil || !errors.Is(err, os.ErrInvalid) {
+			return err
+		}
+
 		// Note: fs.openfile does not support opening a directory.
 		// So there is currently no way to set the mode of a directory.
 		// That's a good thing, because it means that we don't have to do
