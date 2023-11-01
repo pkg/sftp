@@ -124,6 +124,8 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			link, err = fs.lfetch(pathname)
 		}
 
+		// The mode is hard coded because the sftp protocol does not specify a
+		// mode at file open time.
 		file := &memFile{
 			modtime: time.Now(),
 			mode:    0644,
@@ -168,6 +170,10 @@ func (fs *root) Filecmd(r *Request) error {
 
 	switch r.Method {
 	case "Setstat":
+		// Note: fs.openfile does not support opening a directory.
+		// So there is currently no way to set the mode of a directory.
+		// That's a good thing, because it means that we don't have to do
+		// permissions checks on parent directories.
 		flags := r.AttrFlags()
 		attrs := r.Attributes()
 		file, err := fs.openfile(r.Filepath, sshFxfWrite)
@@ -592,6 +598,8 @@ func (f *memFile) Size() int64 {
 	return f.size()
 }
 func (f *memFile) Mode() os.FileMode {
+	// Hardcoded values, because we do not even try to support changing the
+	// mode of directories or symlinks.
 	if f.isdir {
 		return os.FileMode(0755) | os.ModeDir
 	}
