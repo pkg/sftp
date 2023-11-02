@@ -2,7 +2,6 @@ package sftp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -241,7 +240,7 @@ func TestRequestJustRead(t *testing.T) {
 	defer rf.Close()
 	contents := make([]byte, 5)
 	n, err := rf.Read(contents)
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil && err != io.EOF {
 		t.Fatalf("err: %v", err)
 	}
 	assert.Equal(t, 5, n)

@@ -470,7 +470,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 
 	n, err := rd.ReadAt(data, offset)
 	// only return EOF error if no data left to read
-	if err != nil && (!errors.Is(err, io.EOF) || n == 0) {
+	if err != nil && (err != io.EOF || n == 0) {
 		return statusFromError(pkt.id(), err)
 	}
 
@@ -507,7 +507,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 
 		n, err := rw.ReadAt(data, offset)
 		// only return EOF error if no data left to read
-		if err != nil && (!errors.Is(err, io.EOF) || n == 0) {
+		if err != nil && (err != io.EOF || n == 0) {
 			return statusFromError(pkt.id(), err)
 		}
 
@@ -592,7 +592,7 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 
 	switch r.Method {
 	case "List":
-		if err != nil && (!errors.Is(err, io.EOF) || n == 0) {
+		if err != nil && (err != io.EOF || n == 0) {
 			return statusFromError(pkt.id(), err)
 		}
 
@@ -645,7 +645,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 
 	switch r.Method {
 	case "Stat", "Lstat":
-		if err != nil && !errors.Is(err, io.EOF) {
+		if err != nil && err != io.EOF {
 			return statusFromError(pkt.id(), err)
 		}
 		if n == 0 {
@@ -661,7 +661,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			info: finfo[0],
 		}
 	case "Readlink":
-		if err != nil && !errors.Is(err, io.EOF) {
+		if err != nil && err != io.EOF {
 			return statusFromError(pkt.id(), err)
 		}
 		if n == 0 {

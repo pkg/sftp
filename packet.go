@@ -292,7 +292,7 @@ func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, e
 	if _, err := io.ReadFull(r, b[:length]); err != nil {
 		// ReadFull only returns EOF if it has read no bytes.
 		// In this case, that means a partial packet, and thus unexpected.
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
 		debug("recv packet %d bytes: err %v", length, err)

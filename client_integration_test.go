@@ -1240,7 +1240,7 @@ func TestClientReadSimple(t *testing.T) {
 	defer f2.Close()
 	stuff := make([]byte, 32)
 	n, err := f2.Read(stuff)
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil && err != io.EOF {
 		t.Fatalf("err: %v", err)
 	}
 	if n != 5 {
@@ -2152,7 +2152,7 @@ func TestMatch(t *testing.T) {
 		pattern := tt.pattern
 		s := tt.s
 		ok, err := Match(pattern, s)
-		if ok != tt.match || !errors.Is(err, tt.err) {
+		if ok != tt.match || err != tt.err {
 			t.Errorf("Match(%#q, %#q) = %v, %q want %v, %q", pattern, s, ok, errp(err), tt.match, errp(tt.err))
 		}
 	}
@@ -2411,7 +2411,7 @@ func benchmarkRead(b *testing.B, bufsize int, delay time.Duration) {
 		for offset < size {
 			n, err := io.ReadFull(f2, buf)
 			offset += n
-			if errors.Is(err, io.ErrUnexpectedEOF) && offset != size {
+			if err == io.ErrUnexpectedEOF && offset != size {
 				b.Fatalf("read too few bytes! want: %d, got: %d", size, n)
 			}
 

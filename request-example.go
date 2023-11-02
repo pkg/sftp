@@ -102,7 +102,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 	pflags := newFileOpenFlags(flags)
 
 	file, err := fs.fetch(pathname)
-	if errors.Is(err, os.ErrNotExist) {
+	if err == os.ErrNotExist {
 		if !pflags.Creat {
 			return nil, os.ErrNotExist
 		}
