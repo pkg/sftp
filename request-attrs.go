@@ -35,6 +35,23 @@ type FileAttrFlags struct {
 	Size, UidGid, Permissions, Acmodtime bool
 }
 
+func (faf FileAttrFlags) ForRequest() (flags uint32) {
+	if faf.Size {
+		flags |= sshFileXferAttrSize
+	}
+	if faf.UidGid {
+		flags |= sshFileXferAttrUIDGID
+	}
+	if faf.Permissions {
+		flags |= sshFileXferAttrPermissions
+	}
+	if faf.Acmodtime {
+		flags |= sshFileXferAttrACmodTime
+	}
+
+	return flags
+}
+
 func newFileAttrFlags(flags uint32) FileAttrFlags {
 	return FileAttrFlags{
 		Size:        (flags & sshFileXferAttrSize) != 0,

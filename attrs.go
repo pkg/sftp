@@ -56,6 +56,53 @@ type FileStat struct {
 	Extended []StatExtended
 }
 
+func (fs FileStat) MarshalTo(flags FileAttrFlags) []byte {
+	// attributes variable struct, and also variable per protocol version
+	// spec version 3 attributes:
+	// uint32   flags
+	// uint64   size           present only if flag SSH_FILEXFER_ATTR_SIZE
+	// uint32   uid            present only if flag SSH_FILEXFER_ATTR_UIDGID
+	// uint32   gid            present only if flag SSH_FILEXFER_ATTR_UIDGID
+	// uint32   permissions    present only if flag SSH_FILEXFER_ATTR_PERMISSIONS
+	// uint32   atime          present only if flag SSH_FILEXFER_ACMODTIME
+	// uint32   mtime          present only if flag SSH_FILEXFER_ACMODTIME
+	// uint32   extended_count present only if flag SSH_FILEXFER_ATTR_EXTENDED
+	// string   extended_type
+	// string   extended_data
+	// ...      more extended data (extended_type - extended_data pairs),
+	// 	   so that number of pairs equals extended_count
+	var b []byte
+
+	f := flags.ForRequest()
+	b = marshalUint32(b, f)
+
+	if flags.Size {
+		b = marshalUint64(b, fs.Size)
+	}
+	if flags.UidGid {
+		b = marshalUint32(b, fs.UID)
+		b = marshalUint32(b, fs.GID)
+	}
+	if flags.Permissions {
+		b = marshalUint32(b, fs.Mode)
+	}
+	if flags.Acmodtime {
+		b = marshalUint32(b, fs.Atime)
+		b = marshalUint32(b, fs.Mtime)
+	}
+
+	if len(fs.Extended) > 0 {
+		b = marshalUint32(b, uint32(len(fs.Extended)))
+
+		for _, attr := range fs.Extended {
+			b = marshalString(b, attr.ExtType)
+			b = marshalString(b, attr.ExtData)
+		}
+	}
+
+	return b
+}
+
 // StatExtended contains additional, extended information for a FileStat.
 type StatExtended struct {
 	ExtType string
