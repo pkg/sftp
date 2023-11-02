@@ -187,8 +187,7 @@ func (fs *root) Filecmd(r *Request) error {
 			}
 		}
 		if flags.Permissions {
-			const mask = uint32(os.ModePerm | s_ISUID | s_ISGID | s_ISVTX)
-			file.mode = (file.mode &^ mask) | (attrs.Mode & mask)
+			file.chmod(attrs.Mode)
 		}
 		// We only have mtime, not atime.
 		if flags.Acmodtime {
@@ -681,4 +680,9 @@ func (f *memFile) TransferError(err error) {
 	defer f.mu.Unlock()
 
 	f.err = err
+}
+
+func (f *memFile) chmod(mode uint32) {
+	const mask = uint32(os.ModePerm | s_ISUID | s_ISGID | s_ISVTX)
+	f.mode = (f.mode &^ mask) | (mode & mask)
 }
