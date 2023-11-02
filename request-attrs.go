@@ -22,6 +22,29 @@ func newFileOpenFlags(flags uint32) FileOpenFlags {
 	}
 }
 
+func (fof FileOpenFlags) ForRequest() (flags uint32) {
+	if fof.Read {
+		flags |= sshFxfRead
+	}
+	if fof.Write {
+		flags |= sshFxfWrite
+	}
+	if fof.Append {
+		flags |= sshFxfAppend
+	}
+	if fof.Creat {
+		flags |= sshFxfCreat
+	}
+	if fof.Trunc {
+		flags |= sshFxfTrunc
+	}
+	if fof.Excl {
+		flags |= sshFxfExcl
+	}
+
+	return flags
+}
+
 // Pflags converts the bitmap/uint32 from SFTP Open packet pflag values,
 // into a FileOpenFlags struct with booleans set for flags set in bitmap.
 func (r *Request) Pflags() FileOpenFlags {
