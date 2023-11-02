@@ -37,7 +37,7 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	// Needs to be readable by the user.
+	// Needs to be readable by the owner.
 	return fs.openFileModeCheck(r, 0o0400)
 }
 
@@ -48,12 +48,12 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	// Needs to be writable by the user.
+	// Needs to be writable by the owner.
 	return fs.openFileModeCheck(r, 0o0200)
 }
 
 func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
-	// Needs to be readable and writable by the user.
+	// Needs to be readable and writable by the owner.
 	return fs.openFileModeCheck(r, 0o0200|0o0400)
 }
 
@@ -124,8 +124,7 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			link, err = fs.lfetch(pathname)
 		}
 
-		// The mode is hard coded because the sftp protocol does not specify a
-		// mode at file open time.
+		// The mode is currently hard coded because this library doesn't parse out the mode at file open time.
 		file := &memFile{
 			modtime: time.Now(),
 			mode:    0644,
@@ -606,11 +605,11 @@ func (f *memFile) Size() int64 {
 	return f.size()
 }
 func (f *memFile) Mode() os.FileMode {
-	// Hardcoded values, because we do not even try to support changing the
-	// mode of directories or symlinks.
+	// At this time, we do not implement directory modes.
 	if f.isdir {
 		return os.FileMode(0755) | os.ModeDir
 	}
+	// Under POSIX, symlinks have a fixed mode which can not be changed.
 	if f.symlink != "" {
 		return os.FileMode(0777) | os.ModeSymlink
 	}
