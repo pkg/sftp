@@ -182,7 +182,7 @@ func (fs *root) Filecmd(r *Request) error {
 		}
 
 		if flags.Size {
-			if err = file.Truncate(int64(attrs.Size)); err != nil {
+			if err := file.Truncate(int64(attrs.Size)); err != nil {
 				return err
 			}
 		}
