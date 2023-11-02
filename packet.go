@@ -54,31 +54,10 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 	// 	   so that number of pairs equals extended_count
 
 	flags, fileStat := fileStatFromInfo(fi)
+	f := newFileAttrFlags(flags)
 
 	b = marshalUint32(b, flags)
-	if flags&sshFileXferAttrSize != 0 {
-		b = marshalUint64(b, fileStat.Size)
-	}
-	if flags&sshFileXferAttrUIDGID != 0 {
-		b = marshalUint32(b, fileStat.UID)
-		b = marshalUint32(b, fileStat.GID)
-	}
-	if flags&sshFileXferAttrPermissions != 0 {
-		b = marshalUint32(b, fileStat.Mode)
-	}
-	if flags&sshFileXferAttrACmodTime != 0 {
-		b = marshalUint32(b, fileStat.Atime)
-		b = marshalUint32(b, fileStat.Mtime)
-	}
-
-	if flags&sshFileXferAttrExtended != 0 {
-		b = marshalUint32(b, uint32(len(fileStat.Extended)))
-
-		for _, attr := range fileStat.Extended {
-			b = marshalString(b, attr.ExtType)
-			b = marshalString(b, attr.ExtData)
-		}
-	}
+	b = append(b, fileStat.MarshalTo(f)...)
 
 	return b
 }
