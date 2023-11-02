@@ -169,18 +169,11 @@ func (fs *root) Filecmd(r *Request) error {
 
 	switch r.Method {
 	case "Setstat":
-		// We explicitly do not support changing the mode of symlinks.
-		// Nor do we want to change the mode of whatever the symlink is pointed
-		// at.
-		link, err := fs.Readlink(r.Filepath)
-		if link != "" || err == nil || !errors.Is(err, os.ErrInvalid) {
-			return err
-		}
-
-		// Note: fs.openfile does not support opening a directory.
-		// So there is currently no way to set the mode of a directory.
-		// That's a good thing, because it means that we don't have to do
-		// permissions checks on parent directories.
+		// Some notes:
+		//
+		// openfile will follow symlinks, however as best as I can tell this is the correct POSIX behavior for chmod.
+		//
+		// openfile does not currently support opening a directory, and at this time we do not implement directory permissions.
 		flags := r.AttrFlags()
 		attrs := r.Attributes()
 		file, err := fs.openfile(r.Filepath, sshFxfWrite)
