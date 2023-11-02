@@ -38,7 +38,7 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	}
 
 	// Needs to be readable by the owner.
-	return fs.openFileModeCheck(r, 0o0400)
+	return fs.openFileModeCheck(r, 0o400)
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
@@ -49,12 +49,12 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	}
 
 	// Needs to be writable by the owner.
-	return fs.openFileModeCheck(r, 0o0200)
+	return fs.openFileModeCheck(r, 0o200)
 }
 
 func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	// Needs to be readable and writable by the owner.
-	return fs.openFileModeCheck(r, 0o0200|0o0400)
+	return fs.openFileModeCheck(r, 0o200|0o400)
 }
 
 func (fs *root) openFileModeCheck(r *Request, mode uint32) (WriterAtReaderAt, error) {
