@@ -140,91 +140,6 @@ type Request struct {
 	cancelCtx context.CancelFunc
 }
 
-// This is essentially a more unmarshaled Request.
-// I say more unmarshaled, because StatAttrs is a FileStat, which while better
-// than a binary array, is still supposed to be sftp protocol values instead of
-// something like os or fs package types and values.
-type ParsedRequest struct {
-	Method    string
-	Filepath  string
-	OpenFlags FileOpenFlags
-	StatFlags FileAttrFlags
-	StatAttrs FileStat
-	Target    string // for renames and sym-links
-}
-
-// Marshal is used to turn a ParsedRequest into a Request.
-func (pr *ParsedRequest) Marshal() (r *Request) {
-	r = NewRequest(pr.Method, pr.Filepath)
-
-	switch pr.Method {
-	case "Get", "Put":
-		r.Flags = 0
-		if pr.OpenFlags.Read {
-			r.Flags |= sshFxfRead
-		}
-		if pr.OpenFlags.Write {
-			r.Flags |= sshFxfWrite
-		}
-		if pr.OpenFlags.Append {
-			r.Flags |= sshFxfAppend
-		}
-		if pr.OpenFlags.Creat {
-			r.Flags |= sshFxfCreat
-		}
-		if pr.OpenFlags.Trunc {
-			r.Flags |= sshFxfTrunc
-		}
-		if pr.OpenFlags.Excl {
-			r.Flags |= sshFxfExcl
-		}
-
-	case "Stat", "Setstat":
-		var buf []byte
-		r.Flags = 0
-
-		if pr.StatFlags.Size {
-			r.Flags |= sshFileXferAttrSize
-			buf = marshalUint64(buf, pr.StatAttrs.Size)
-		}
-		if pr.StatFlags.UidGid {
-			r.Flags |= sshFileXferAttrUIDGID
-			buf = marshalUint32(buf, pr.StatAttrs.UID)
-			buf = marshalUint32(buf, pr.StatAttrs.GID)
-		}
-		if pr.StatFlags.Permissions {
-			r.Flags |= sshFileXferAttrPermissions
-			buf = marshalUint32(buf, FromFileMode(os.FileMode(pr.StatAttrs.Mode)))
-		}
-
-		if pr.StatFlags.Acmodtime {
-			r.Flags |= sshFileXferAttrACmodTime
-			buf = marshalUint32(buf, pr.StatAttrs.Atime)
-			buf = marshalUint32(buf, pr.StatAttrs.Mtime)
-		}
-
-		r.Attrs = buf
-	}
-
-	return r
-}
-
-// Unmarshal is used to turn a Request into a ParsedRequest.
-func (r *Request) Unmarshal() (pr *ParsedRequest) {
-	pr = &ParsedRequest{}
-
-	pr.Method = r.Method
-	switch pr.Method {
-	case "Get", "Put":
-		pr.OpenFlags = r.Pflags()
-	case "Stat", "Setstat":
-		pr.StatFlags = r.AttrFlags()
-		pr.StatAttrs = *r.Attributes()
-	}
-
-	return pr
-}
-
 // NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
 	return &Request{
@@ -541,7 +456,7 @@ func packetData(p requestPacket, alloc *allocator, orderID uint32) (data []byte,
 
 // wrap FileCmder handler
 func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
-	switch p := pkt.(type) { // nolint: gocritic
+	switch p := pkt.(type) {
 	case *sshFxpFsetstatPacket:
 		r.Flags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
