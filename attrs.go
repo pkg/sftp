@@ -73,9 +73,6 @@ func (fs FileStat) MarshalTo(flags FileAttrFlags) []byte {
 	// 	   so that number of pairs equals extended_count
 	var b []byte
 
-	f := flags.ForRequest()
-	b = marshalUint32(b, f)
-
 	if flags.Size {
 		b = marshalUint64(b, fs.Size)
 	}
