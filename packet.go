@@ -57,7 +57,7 @@ func marshalFileInfo(b []byte, fi os.FileInfo) []byte {
 	f := newFileAttrFlags(flags)
 
 	b = marshalUint32(b, flags)
-	b = append(b, fileStat.MarshalTo(f)...)
+	b = fileStat.MarshalTo(b, f)
 
 	return b
 }

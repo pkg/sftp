@@ -56,7 +56,7 @@ type FileStat struct {
 	Extended []StatExtended
 }
 
-func (fs FileStat) MarshalTo(flags FileAttrFlags) []byte {
+func (fs FileStat) MarshalTo(b []byte, flags FileAttrFlags) []byte {
 	// attributes variable struct, and also variable per protocol version
 	// spec version 3 attributes:
 	// uint32   flags
@@ -71,8 +71,6 @@ func (fs FileStat) MarshalTo(flags FileAttrFlags) []byte {
 	// string   extended_data
 	// ...      more extended data (extended_type - extended_data pairs),
 	// 	   so that number of pairs equals extended_count
-	var b []byte
-
 	if flags.Size {
 		b = marshalUint64(b, fs.Size)
 	}
