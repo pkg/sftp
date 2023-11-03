@@ -86,6 +86,8 @@ func (fs FileStat) MarshalTo(b []byte, flags FileAttrFlags) []byte {
 		b = marshalUint32(b, fs.Mtime)
 	}
 
+	// NOTE: This is subtle, this logic must not be changed without also changing the login in fileStatFromInfo.
+	// The rules on how sshFileXferAttrExtended gets set must match the rules on how we generate the packet.
 	if len(fs.Extended) > 0 {
 		b = marshalUint32(b, uint32(len(fs.Extended)))
 
@@ -151,6 +153,9 @@ func fileStatFromInfo(fi os.FileInfo) (uint32, *FileStat) {
 		fileStat.GID = fiExt.Gid()
 	}
 
+	// NOTE: This is subtle, this logic must not be changed without also changing the login in marshalTo.
+	// The rules on how sshFileXferAttrExtended gets set must match the rules on how we generate the packet.
+	//
 	// if fi implements FileInfoExtendedData, retrieve extended data from it
 	if fiExt, ok := fi.(FileInfoExtendedData); ok {
 		fileStat.Extended = fiExt.Extended()
