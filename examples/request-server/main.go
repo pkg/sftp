@@ -17,7 +17,6 @@ import (
 
 // Based on example server code from golang.org/x/crypto/ssh and server_standalone
 func main() {
-
 	var (
 		readOnly    bool
 		debugStderr bool
@@ -120,11 +119,12 @@ func main() {
 
 		root := sftp.InMemHandler()
 		server := sftp.NewRequestServer(channel, root)
-		if err := server.Serve(); err == io.EOF {
-			server.Close()
-			log.Print("sftp client exited session.")
-		} else if err != nil {
-			log.Fatal("sftp server completed with error:", err)
+		if err := server.Serve(); err != nil {
+			if err != io.EOF {
+				log.Fatal("sftp server completed with error:", err)
+			}
 		}
+		server.Close()
+		log.Print("sftp client exited session.")
 	}
 }
