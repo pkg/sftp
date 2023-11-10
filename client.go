@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -321,17 +322,28 @@ func (c *Client) Walk(root string) *fs.Walker {
 	return fs.WalkFS(root, c)
 }
 
-// ReadDir reads the directory named by dirname and returns a list of
-// directory entries.
+// ReadDir reads the directory named by p
+// and returns a list of directory entries.
 func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
+	return c.ReadDirContext(context.Background(), p)
+}
+
+// ReadDirContext reads the directory named by p
+// and returns a list of directory entries.
+// The passed context can be used to cancel the operation
+// returning all entries listed up to the cancellation.
+func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, error) {
 	handle, err := c.opendir(p)
 	if err != nil {
 		return nil, err
 	}
 	defer c.close(handle) // this has to defer earlier than the lock below
-	var attrs []os.FileInfo
+	var entries []os.FileInfo
 	var done = false
 	for !done {
+		if err = ctx.Err(); err != nil {
+			return entries, err
+		}
 		id := c.nextID()
 		typ, data, err1 := c.sendPacket(nil, &sshFxpReaddirPacket{
 			ID:     id,
@@ -358,7 +370,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 				if filename == "." || filename == ".." {
 					continue
 				}
-				attrs = append(attrs, fileInfoFromStat(attr, path.Base(filename)))
+				entries = append(entries, fileInfoFromStat(attr, path.Base(filename)))
 			}
 		case sshFxpStatus:
 			// TODO(dfc) scope warning!
@@ -371,7 +383,7 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 	if err == io.EOF {
 		err = nil
 	}
-	return attrs, err
+	return entries, err
 }
 
 func (c *Client) opendir(path string) (string, error) {
