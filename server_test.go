@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -76,7 +77,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	defer server.Close()
 
 	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
-	typ, data, err := client.clientConn.sendPacket(nil, badPacket)
+	typ, data, err := client.clientConn.sendPacket(context.Background(), nil, badPacket)
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
 	}
