@@ -462,22 +462,29 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(svr.toLocalPath(p.Path), osFlags, 0o644)
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
+	name := svr.toLocalPath(p.Path)
+	mode := os.FileMode(0o644)
+
+	var applyAttrs []func(*os.File) error
 
 	// Both `sshFileXferAttrPermissions` and `sshFileXferAttrACmodTime` are set
 	// by e.g. `sftp`. Just in case, we handle all other cases as well.
-	if b, ok := p.Attrs.([]byte); ok {
+	// Only apply for newly created files.
+	var err error
+	useAttrs := true
+	if _, err := os.Stat(name); err == nil {
+		useAttrs = false
+	}
+	if b, ok := p.Attrs.([]byte); useAttrs && ok {
 		if (p.Flags & sshFileXferAttrSize) != 0 {
 			var size uint64
 			if size, b, err = unmarshalUint64Safe(b); err == nil {
-				err = f.Truncate(int64(size))
+				applyAttrs = append(applyAttrs, func(f *os.File) error {
+					return f.Truncate(int64(size))
+				})
 			}
 		}
 		if err != nil {
-			_ = f.Close()
 			return statusFromError(p.ID, err)
 		}
 		if (p.Flags & sshFileXferAttrUIDGID) != 0 {
@@ -486,21 +493,22 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 			if uid, b, err = unmarshalUint32Safe(b); err != nil {
 			} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
 			} else {
-				err = f.Chown(int(uid), int(gid))
+				applyAttrs = append(applyAttrs, func(f *os.File) error {
+					return f.Chown(int(uid), int(gid))
+				})
 			}
 		}
 		if err != nil {
-			_ = f.Close()
 			return statusFromError(p.ID, err)
 		}
 		if (p.Flags & sshFileXferAttrPermissions) != 0 {
-			var mode uint32
-			if mode, b, err = unmarshalUint32Safe(b); err == nil {
-				err = f.Chmod(os.FileMode(mode))
+			var attrMode uint32
+			if attrMode, b, err = unmarshalUint32Safe(b); err == nil {
+				// Optionally, we could apply umask here.
+				mode = os.FileMode(attrMode)
 			}
 		}
 		if err != nil {
-			_ = f.Close()
 			return statusFromError(p.ID, err)
 		}
 		if (p.Flags & sshFileXferAttrACmodTime) != 0 {
@@ -511,10 +519,23 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 			} else {
 				atimeT := time.Unix(int64(atime), 0)
 				mtimeT := time.Unix(int64(mtime), 0)
-				err = os.Chtimes(f.Name(), atimeT, mtimeT)
+				applyAttrs = append(applyAttrs, func(f *os.File) error {
+					return os.Chtimes(f.Name(), atimeT, mtimeT)
+				})
 			}
 		}
 		if err != nil {
+			return statusFromError(p.ID, err)
+		}
+	}
+
+	f, err := os.OpenFile(name, osFlags, mode)
+	if err != nil {
+		return statusFromError(p.ID, err)
+	}
+
+	for _, applyAttr := range applyAttrs {
+		if err := applyAttr(f); err != nil {
 			_ = f.Close()
 			return statusFromError(p.ID, err)
 		}

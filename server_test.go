@@ -217,6 +217,9 @@ func TestOpenWithPermissions(t *testing.T) {
 	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
 	ch := make(chan result, 2)
 	id1 := client.nextID()
+	id2 := client.nextID()
+
+	// New files should have their permissions set.
 	client.dispatchRequest(ch, &sshFxpOpenPacket{
 		ID:     id1,
 		Path:   tmppath,
@@ -230,6 +233,22 @@ func TestOpenWithPermissions(t *testing.T) {
 	if !assert.Equal(t, os.FileMode(0o745), stat.Mode()&os.ModePerm) {
 		t.Logf("stat.Mode() = %v", stat.Mode())
 	}
+
+	// Existing files should not have their permissions changed.
+	client.dispatchRequest(ch, &sshFxpOpenPacket{
+		ID:     id2,
+		Path:   tmppath,
+		Pflags: pflags,
+		Flags:  sshFileXferAttrPermissions,
+		Attrs:  []byte{0x0, 0x0, 0x1, 0xed}, // 0o755
+	})
+	<-ch
+	stat, err = os.Stat(tmppath)
+	assert.NoError(t, err, "mode should not have changed")
+	if !assert.Equal(t, os.FileMode(0o745), stat.Mode()&os.ModePerm) {
+		t.Logf("stat.Mode() = %v", stat.Mode())
+	}
+
 	os.Remove(tmppath)
 	checkServerAllocator(t, server)
 }
