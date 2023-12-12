@@ -388,6 +388,24 @@ func TestSendPacket(t *testing.T) {
 			},
 		},
 		{
+			packet: &sshFxpOpenPacket{
+				ID:     3,
+				Path:   "/foo",
+				Pflags: flags(os.O_WRONLY | os.O_CREATE | os.O_TRUNC),
+				Flags:  sshFileXferAttrPermissions,
+				Attrs:  []uint8{0x0, 0x0, 0x1, 0xed}, // 0o755
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x19,
+				0x3,
+				0x0, 0x0, 0x0, 0x3,
+				0x0, 0x0, 0x0, 0x4, '/', 'f', 'o', 'o',
+				0x0, 0x0, 0x0, 0x1a,
+				0x0, 0x0, 0x0, 0x4,
+				0x0, 0x0, 0x1, 0xed,
+			},
+		},
+		{
 			packet: &sshFxpWritePacket{
 				ID:     124,
 				Handle: "foo",

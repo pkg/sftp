@@ -208,6 +208,32 @@ func TestOpenStatRace(t *testing.T) {
 	checkServerAllocator(t, server)
 }
 
+func TestOpenWithPermissions(t *testing.T) {
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	tmppath := path.Join(os.TempDir(), "open_permissions")
+	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
+	ch := make(chan result, 2)
+	id1 := client.nextID()
+	client.dispatchRequest(ch, &sshFxpOpenPacket{
+		ID:     id1,
+		Path:   tmppath,
+		Pflags: pflags,
+		Flags:  sshFileXferAttrPermissions,
+		Attrs:  []byte{0x0, 0x0, 0x1, 0xe5}, // 0o745 -- a slightly strange permission to test.
+	})
+	<-ch
+	stat, err := os.Stat(tmppath)
+	assert.NoError(t, err)
+	if !assert.Equal(t, os.FileMode(0o745), stat.Mode()&os.ModePerm) {
+		t.Logf("stat.Mode() = %v", stat.Mode())
+	}
+	os.Remove(tmppath)
+	checkServerAllocator(t, server)
+}
+
 // Ensure that proper error codes are returned for non existent files, such
 // that they are mapped back to a 'not exists' error on the client side.
 func TestStatNonExistent(t *testing.T) {
