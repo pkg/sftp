@@ -505,55 +505,11 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 }
 
 func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
-	// additional unmarshalling is required for each possibility here
-	b := p.Attrs.([]byte)
-	var err error
-
 	p.Path = svr.toLocalPath(p.Path)
 
 	debug("setstat name \"%s\"", p.Path)
-	if (p.Flags & sshFileXferAttrSize) != 0 {
-		var size uint64
-		if size, b, err = unmarshalUint64Safe(b); err == nil {
-			err = os.Truncate(p.Path, int64(size))
-		}
-	}
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
-	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
-		var uid uint32
-		var gid uint32
-		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			err = os.Chown(p.Path, int(uid), int(gid))
-		}
-	}
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
-	if (p.Flags & sshFileXferAttrPermissions) != 0 {
-		var mode uint32
-		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = os.Chmod(p.Path, toFileMode(mode))
-		}
-	}
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
-	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
-		var atime uint32
-		var mtime uint32
-		if atime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if mtime, _, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			atimeT := time.Unix(int64(atime), 0)
-			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(p.Path, atimeT, mtimeT)
-		}
-	}
-	return statusFromError(p.ID, err)
+	b := p.Attrs.([]byte)
+	return statusFromError(p.ID, applyAttrsToFile(p.Path, p.Flags, b))
 }
 
 func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
@@ -562,53 +518,36 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 		return statusFromError(p.ID, EBADF)
 	}
 
-	// additional unmarshalling is required for each possibility here
-	b := p.Attrs.([]byte)
-	var err error
-
 	debug("fsetstat name \"%s\"", f.Name())
-	if (p.Flags & sshFileXferAttrSize) != 0 {
-		var size uint64
-		if size, b, err = unmarshalUint64Safe(b); err == nil {
-			err = f.Truncate(int64(size))
+	b := p.Attrs.([]byte)
+	return statusFromError(p.ID, applyAttrsToFile(f.Name(), p.Flags, b))
+}
+
+func applyAttrsToFile(name string, flags uint32, attrs []byte) error {
+	fs, _ := unmarshalFileStat(flags, attrs)
+	if (flags & sshFileXferAttrSize) != 0 {
+		if err := os.Truncate(name, int64(fs.Size)); err != nil {
+			return err
 		}
 	}
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
-	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
-		var uid uint32
-		var gid uint32
-		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			err = f.Chown(int(uid), int(gid))
+	if (flags & sshFileXferAttrUIDGID) != 0 {
+		if err := os.Chown(name, int(fs.UID), int(fs.GID)); err != nil {
+			return err
 		}
 	}
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
-	if (p.Flags & sshFileXferAttrPermissions) != 0 {
-		var mode uint32
-		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = f.Chmod(toFileMode(mode))
+	if (flags & sshFileXferAttrPermissions) != 0 {
+		if err := os.Chmod(name, toFileMode(fs.Mode)); err != nil {
+			return err
 		}
 	}
-	if err != nil {
-		return statusFromError(p.ID, err)
-	}
-	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
-		var atime uint32
-		var mtime uint32
-		if atime, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if mtime, _, err = unmarshalUint32Safe(b); err != nil {
-		} else {
-			atimeT := time.Unix(int64(atime), 0)
-			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(f.Name(), atimeT, mtimeT)
+	if (flags & sshFileXferAttrACmodTime) != 0 {
+		atimeT := time.Unix(int64(fs.Atime), 0)
+		mtimeT := time.Unix(int64(fs.Mtime), 0)
+		if err := os.Chtimes(name, atimeT, mtimeT); err != nil {
+			return err
 		}
 	}
-	return statusFromError(p.ID, err)
+	return nil
 }
 
 func statusFromError(id uint32, err error) *sshFxpStatusPacket {
