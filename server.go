@@ -467,7 +467,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	// being created. Otherwise, the permissions are ignored.
 	if b, ok := p.Attrs.([]byte); ok && (p.Flags&sshFileXferAttrPermissions) != 0 {
 		fs, _ := unmarshalFileStat(p.Flags, b)
-		mode = os.FileMode(fs.Mode)
+		mode = toFileMode(fs.Mode)
 	}
 
 	name := svr.toLocalPath(p.Path)
@@ -536,7 +536,7 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 	if (p.Flags & sshFileXferAttrPermissions) != 0 {
 		var mode uint32
 		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = os.Chmod(p.Path, os.FileMode(mode))
+			err = os.Chmod(p.Path, toFileMode(mode))
 		}
 	}
 	if err != nil {
@@ -591,7 +591,7 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 	if (p.Flags & sshFileXferAttrPermissions) != 0 {
 		var mode uint32
 		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = f.Chmod(os.FileMode(mode))
+			err = f.Chmod(toFileMode(mode))
 		}
 	}
 	if err != nil {
