@@ -52,7 +52,7 @@ func (r *Request) AttrFlags() FileAttrFlags {
 
 // FileMode returns the Mode SFTP file attributes wrapped as os.FileMode
 func (a FileStat) FileMode() os.FileMode {
-	return os.FileMode(a.Mode)
+	return toFileMode(a.Mode)
 }
 
 // Attributes parses file attributes byte blob and return them in a
