@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -21,6 +22,51 @@ const (
 	SftpServerWorkerCount = 8
 )
 
+type FileLike interface {
+	Stat() (os.FileInfo, error)
+	ReadAt(b []byte, off int64) (int, error)
+	WriteAt(b []byte, off int64) (int, error)
+	Readdir(int) ([]os.FileInfo, error)
+	Name() string
+	Truncate(int64) error
+	Chmod(mode fs.FileMode) error
+	Chown(uid, gid int) error
+	Close() error
+}
+
+type dummyFile struct {
+}
+
+func (f *dummyFile) Stat() (os.FileInfo, error) {
+	return nil, os.ErrPermission
+}
+func (f *dummyFile) ReadAt(b []byte, off int64) (int, error) {
+	return 0, os.ErrPermission
+}
+func (f *dummyFile) WriteAt(b []byte, off int64) (int, error) {
+	return 0, os.ErrPermission
+}
+func (f *dummyFile) Readdir(int) ([]os.FileInfo, error) {
+	return nil, os.ErrPermission
+}
+func (f *dummyFile) Name() string {
+	return "dummyFile"
+}
+func (f *dummyFile) Truncate(int64) error {
+	return os.ErrPermission
+}
+func (f *dummyFile) Chmod(mode fs.FileMode) error {
+	return os.ErrPermission
+}
+func (f *dummyFile) Chown(uid, gid int) error {
+	return os.ErrPermission
+}
+func (f *dummyFile) Close() error {
+	return os.ErrPermission
+}
+
+var _ = dummyFile{} // ignore unused
+
 // Server is an SSH File Transfer Protocol (sftp) server.
 // This is intended to provide the sftp subsystem to an ssh server daemon.
 // This implementation currently supports most of sftp server protocol version 3,
@@ -30,13 +76,13 @@ type Server struct {
 	debugStream   io.Writer
 	readOnly      bool
 	pktMgr        *packetManager
-	openFiles     map[string]*os.File
+	openFiles     map[string]FileLike
 	openFilesLock sync.RWMutex
 	handleCount   int
 	workDir       string
 }
 
-func (svr *Server) nextHandle(f *os.File) string {
+func (svr *Server) nextHandle(f FileLike) string {
 	svr.openFilesLock.Lock()
 	defer svr.openFilesLock.Unlock()
 	svr.handleCount++
@@ -56,7 +102,7 @@ func (svr *Server) closeHandle(handle string) error {
 	return EBADF
 }
 
-func (svr *Server) getHandle(handle string) (*os.File, bool) {
+func (svr *Server) getHandle(handle string) (FileLike, bool) {
 	svr.openFilesLock.RLock()
 	defer svr.openFilesLock.RUnlock()
 	f, ok := svr.openFiles[handle]
@@ -85,7 +131,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		serverConn:  svrConn,
 		debugStream: ioutil.Discard,
 		pktMgr:      newPktMgr(svrConn),
-		openFiles:   make(map[string]*os.File),
+		openFiles:   make(map[string]FileLike),
 	}
 
 	for _, o := range options {
@@ -462,7 +508,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(svr.toLocalPath(p.Path), osFlags, 0o644)
+	f, err := openFileLike(svr.toLocalPath(p.Path), osFlags, 0o644)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
