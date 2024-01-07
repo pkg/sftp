@@ -4,12 +4,13 @@ package sftp
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"syscall"
-	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 func (s *Server) toLocalPath(p string) string {
@@ -45,16 +46,13 @@ func (s *Server) toLocalPath(p string) string {
 	return lp
 }
 
-var kernel32, _ = syscall.LoadLibrary("kernel32.dll")
-var getLogicalDrivesHandle, _ = syscall.GetProcAddress(kernel32, "GetLogicalDrives")
-
 func bitsToDrives(bitmap uint32) []string {
-	var drive rune = 'A'
+	var drive rune = 'a'
 	var drives []string
 
 	for bitmap != 0 {
 		if bitmap&1 == 1 {
-			drives = append(drives, string(drive))
+			drives = append(drives, string(drive)+":")
 		}
 		drive++
 		bitmap >>= 1
@@ -64,56 +62,63 @@ func bitsToDrives(bitmap uint32) []string {
 }
 
 func getDrives() ([]string, error) {
-	if ret, _, callErr := syscall.Syscall(uintptr(getLogicalDrivesHandle), 0, 0, 0, 0); callErr != 0 {
-		return nil, fmt.Errorf("GetLogicalDrives: %w", callErr)
-	} else {
-		drives := bitsToDrives(uint32(ret))
-		return drives, nil
+	mask, err := windows.GetLogicalDrives()
+	if err != nil {
+		return nil, fmt.Errorf("GetLogicalDrives: %w", err)
 	}
+	return bitsToDrives(mask), nil
 }
 
-type dummyDriveStat struct {
+type driveInfo struct {
+	fs.FileInfo
 	name string
 }
 
-func (s *dummyDriveStat) Name() string {
-	return s.name
-}
-func (s *dummyDriveStat) Size() int64 {
-	return 1024
-}
-func (s *dummyDriveStat) Mode() os.FileMode {
-	return os.FileMode(0755)
-}
-func (s *dummyDriveStat) ModTime() time.Time {
-	return time.Now()
-}
-func (s *dummyDriveStat) IsDir() bool {
-	return true
-}
-func (s *dummyDriveStat) Sys() any {
-	return nil
+func (i *driveInfo) Name() string {
+	return i.name // since the Name() returned from a os.Stat("C:\\") is "\\"
 }
 
-type WinRoot struct {
+type winRoot struct {
 	dummyFile
+	doneDirs int
 }
 
-func (f *WinRoot) Readdir(int) ([]os.FileInfo, error) {
+func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 	drives, err := getDrives()
 	if err != nil {
 		return nil, err
 	}
-	infos := []os.FileInfo{}
-	for _, drive := range drives {
-		infos = append(infos, &dummyDriveStat{drive})
+
+	if f.doneDirs >= len(drives) {
+		return nil, io.EOF
 	}
+	drives = drives[f.doneDirs:]
+
+	var infos []os.FileInfo
+	for i, drive := range drives {
+		if i >= n {
+			break
+		}
+
+		fi, err := os.Stat(drive)
+		if err != nil {
+			return nil, err
+		}
+
+		di := &driveInfo{
+			FileInfo: fi,
+			name:     drive,
+		}
+		infos = append(infos, di)
+	}
+
+	f.doneDirs += len(infos)
 	return infos, nil
 }
 
-func openFileLike(path string, flag int, mode fs.FileMode) (FileLike, error) {
+func openfile(path string, flag int, mode fs.FileMode) (file, error) {
 	if path == "/" {
-		return &WinRoot{}, nil
+		return &winRoot{}, nil
 	}
 	return os.OpenFile(path, flag, mode)
 }

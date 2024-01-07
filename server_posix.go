@@ -8,6 +8,6 @@ import (
 	"os"
 )
 
-func openFileLike(path string, flag int, mode fs.FileMode) (FileLike, error) {
+func openfile(path string, flag int, mode fs.FileMode) (file, error) {
 	return os.OpenFile(path, flag, mode)
 }

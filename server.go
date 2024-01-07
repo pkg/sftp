@@ -22,7 +22,7 @@ const (
 	SftpServerWorkerCount = 8
 )
 
-type FileLike interface {
+type file interface {
 	Stat() (os.FileInfo, error)
 	ReadAt(b []byte, off int64) (int, error)
 	WriteAt(b []byte, off int64) (int, error)
@@ -76,13 +76,13 @@ type Server struct {
 	debugStream   io.Writer
 	readOnly      bool
 	pktMgr        *packetManager
-	openFiles     map[string]FileLike
+	openFiles     map[string]file
 	openFilesLock sync.RWMutex
 	handleCount   int
 	workDir       string
 }
 
-func (svr *Server) nextHandle(f FileLike) string {
+func (svr *Server) nextHandle(f file) string {
 	svr.openFilesLock.Lock()
 	defer svr.openFilesLock.Unlock()
 	svr.handleCount++
@@ -102,7 +102,7 @@ func (svr *Server) closeHandle(handle string) error {
 	return EBADF
 }
 
-func (svr *Server) getHandle(handle string) (FileLike, bool) {
+func (svr *Server) getHandle(handle string) (file, bool) {
 	svr.openFilesLock.RLock()
 	defer svr.openFilesLock.RUnlock()
 	f, ok := svr.openFiles[handle]
@@ -131,7 +131,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		serverConn:  svrConn,
 		debugStream: ioutil.Discard,
 		pktMgr:      newPktMgr(svrConn),
-		openFiles:   make(map[string]FileLike),
+		openFiles:   make(map[string]file),
 	}
 
 	for _, o := range options {
@@ -508,7 +508,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := openFileLike(svr.toLocalPath(p.Path), osFlags, 0o644)
+	f, err := openfile(svr.toLocalPath(p.Path), osFlags, 0o644)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
