@@ -1,5 +1,3 @@
-//go:build go1.18
-
 package sftp
 
 import (
@@ -80,26 +78,33 @@ func (i *driveInfo) Name() string {
 
 type winRoot struct {
 	dummyFile
-	doneDirs int
+	drives []string
 }
 
-func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
+func newWinRoot() (*winRoot, error) {
 	drives, err := getDrives()
 	if err != nil {
 		return nil, err
 	}
+	return &winRoot{
+		drives: drives,
+	}, nil
+}
 
-	if f.doneDirs >= len(drives) {
-		return nil, io.EOF
+func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
+	drives := f.drives
+	if n > 0 {
+		if len(drives) > n {
+			drives = drives[:n]
+		}
+		f.drives = f.drives[len(drives):]
+		if len(drives) == 0 {
+			return nil, io.EOF
+		}
 	}
-	drives = drives[f.doneDirs:]
 
 	var infos []os.FileInfo
-	for i, drive := range drives {
-		if i >= n {
-			break
-		}
-
+	for _, drive := range drives {
 		fi, err := os.Stat(drive)
 		if err != nil {
 			return nil, err
@@ -112,13 +117,12 @@ func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 		infos = append(infos, di)
 	}
 
-	f.doneDirs += len(infos)
 	return infos, nil
 }
 
 func openfile(path string, flag int, mode fs.FileMode) (file, error) {
 	if path == "/" {
-		return &winRoot{}, nil
+		return newWinRoot()
 	}
 	return os.OpenFile(path, flag, mode)
 }
