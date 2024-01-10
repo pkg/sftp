@@ -18,7 +18,11 @@ func (s *Server) toLocalPath(p string) string {
 
 	lp := filepath.FromSlash(p)
 
-	if path.IsAbs(p) {
+	if path.IsAbs(p) { // starts with '/'
+		if len(p) == 1 && s.winRoot {
+			return `\\.\` // for openfile
+		}
+
 		tmp := lp
 		for len(tmp) > 0 && tmp[0] == '\\' {
 			tmp = tmp[1:]
@@ -38,6 +42,11 @@ func (s *Server) toLocalPath(p string) string {
 			// then we have a filepath encoded with a prefix '/' and a dropped '/' at the end.
 			// e.g. "/C:" to "C:\\"
 			return tmp
+		}
+
+		if s.winRoot {
+			// Make it so that "/Windows" is not found, and "/c:/Windows" has to be used
+			return `\\.\` + tmp
 		}
 	}
 
@@ -93,19 +102,17 @@ func newWinRoot() (*winRoot, error) {
 
 func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 	drives := f.drives
-	if n > 0 {
-		if len(drives) > n {
-			drives = drives[:n]
-		}
-		f.drives = f.drives[len(drives):]
-		if len(drives) == 0 {
-			return nil, io.EOF
-		}
+	if n > 0 && len(drives) > n {
+		drives = drives[:n]
+	}
+	f.drives = f.drives[len(drives):]
+	if len(drives) == 0 {
+		return nil, io.EOF
 	}
 
 	var infos []os.FileInfo
 	for _, drive := range drives {
-		fi, err := os.Stat(drive)
+		fi, err := os.Stat(drive + `\`)
 		if err != nil {
 			return nil, err
 		}
@@ -120,8 +127,8 @@ func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 	return infos, nil
 }
 
-func openfile(path string, flag int, mode fs.FileMode) (file, error) {
-	if path == "/" {
+func (s *Server) openfile(path string, flag int, mode fs.FileMode) (file, error) {
+	if path == `\\.\` && s.winRoot {
 		return newWinRoot()
 	}
 	return os.OpenFile(path, flag, mode)

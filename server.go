@@ -80,6 +80,7 @@ type Server struct {
 	openFilesLock sync.RWMutex
 	handleCount   int
 	workDir       string
+	winRoot       bool
 }
 
 func (svr *Server) nextHandle(f file) string {
@@ -158,6 +159,14 @@ func WithDebug(w io.Writer) ServerOption {
 func ReadOnly() ServerOption {
 	return func(s *Server) error {
 		s.readOnly = true
+		return nil
+	}
+}
+
+// WinRoot configures a Server to serve a virtual '/' for windows that lists all drives
+func WinRoot() ServerOption {
+	return func(s *Server) error {
+		s.winRoot = true
 		return nil
 	}
 }
@@ -508,7 +517,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := openfile(svr.toLocalPath(p.Path), osFlags, 0o644)
+	f, err := svr.openfile(svr.toLocalPath(p.Path), osFlags, 0o644)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
