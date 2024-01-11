@@ -34,39 +34,6 @@ type file interface {
 	Close() error
 }
 
-type dummyFile struct {
-}
-
-func (f *dummyFile) Stat() (os.FileInfo, error) {
-	return nil, os.ErrPermission
-}
-func (f *dummyFile) ReadAt(b []byte, off int64) (int, error) {
-	return 0, os.ErrPermission
-}
-func (f *dummyFile) WriteAt(b []byte, off int64) (int, error) {
-	return 0, os.ErrPermission
-}
-func (f *dummyFile) Readdir(int) ([]os.FileInfo, error) {
-	return nil, os.ErrPermission
-}
-func (f *dummyFile) Name() string {
-	return "dummyFile"
-}
-func (f *dummyFile) Truncate(int64) error {
-	return os.ErrPermission
-}
-func (f *dummyFile) Chmod(mode fs.FileMode) error {
-	return os.ErrPermission
-}
-func (f *dummyFile) Chown(uid, gid int) error {
-	return os.ErrPermission
-}
-func (f *dummyFile) Close() error {
-	return os.ErrPermission
-}
-
-var _ = dummyFile{} // ignore unused
-
 // Server is an SSH File Transfer Protocol (sftp) server.
 // This is intended to provide the sftp subsystem to an ssh server daemon.
 // This implementation currently supports most of sftp server protocol version 3,
@@ -163,8 +130,8 @@ func ReadOnly() ServerOption {
 	}
 }
 
-// WinRoot configures a Server to serve a virtual '/' for windows that lists all drives
-func WinRoot() ServerOption {
+// configures a Server to serve a virtual '/' for windows that lists all drives
+func WindowsRootEnumeratesDrives() ServerOption {
 	return func(s *Server) error {
 		s.winRoot = true
 		return nil

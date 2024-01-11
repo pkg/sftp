@@ -86,7 +86,6 @@ func (i *driveInfo) Name() string {
 }
 
 type winRoot struct {
-	dummyFile
 	drives []string
 }
 
@@ -125,6 +124,31 @@ func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 	}
 
 	return infos, nil
+}
+
+func (f *winRoot) Stat() (os.FileInfo, error) {
+	return nil, os.ErrPermission
+}
+func (f *winRoot) ReadAt(b []byte, off int64) (int, error) {
+	return 0, os.ErrPermission
+}
+func (f *winRoot) WriteAt(b []byte, off int64) (int, error) {
+	return 0, os.ErrPermission
+}
+func (f *winRoot) Name() string {
+	return "/"
+}
+func (f *winRoot) Truncate(int64) error {
+	return os.ErrPermission
+}
+func (f *winRoot) Chmod(mode fs.FileMode) error {
+	return os.ErrPermission
+}
+func (f *winRoot) Chown(uid, gid int) error {
+	return os.ErrPermission
+}
+func (f *winRoot) Close() error {
+	return nil
 }
 
 func (s *Server) openfile(path string, flag int, mode fs.FileMode) (file, error) {
