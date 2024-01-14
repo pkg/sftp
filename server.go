@@ -130,7 +130,7 @@ func ReadOnly() ServerOption {
 	}
 }
 
-// configures a Server to serve a virtual '/' for windows that lists all drives
+// WindowsRootEnumeratesDrives configures a Server to serve a virtual '/' for windows that lists all drives
 func WindowsRootEnumeratesDrives() ServerOption {
 	return func(s *Server) error {
 		s.winRoot = true
