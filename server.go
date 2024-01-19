@@ -523,14 +523,14 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 			err = os.Chmod(path, fs.FileMode())
 		}
 	}
-	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
-		if err == nil {
-			err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
-		}
-	}
 	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
 		if err == nil {
 			err = os.Chown(path, int(fs.UID), int(fs.GID))
+		}
+	}
+	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
+		if err == nil {
+			err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
 		}
 	}
 
@@ -559,6 +559,11 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 			err = f.Chmod(fs.FileMode())
 		}
 	}
+	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
+		if err == nil {
+			err = f.Chown(int(fs.UID), int(fs.GID))
+		}
+	}
 	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
 		if err == nil {
 			switch f := interface{}(f).(type) {
@@ -570,11 +575,6 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 			default:
 				err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
 			}
-		}
-	}
-	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
-		if err == nil {
-			err = f.Chown(int(fs.UID), int(fs.GID))
 		}
 	}
 
