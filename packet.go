@@ -174,36 +174,69 @@ func unmarshalStringSafe(b []byte) (string, []byte, error) {
 	return string(b[:n]), b[n:], nil
 }
 
-func unmarshalAttrs(b []byte) (*FileStat, []byte) {
-	flags, b := unmarshalUint32(b)
+func unmarshalAttrs(b []byte) (*FileStat, []byte, error) {
+	flags, b, err := unmarshalUint32Safe(b)
+	if err != nil {
+		return nil, b, err
+	}
 	return unmarshalFileStat(flags, b)
 }
 
-func unmarshalFileStat(flags uint32, b []byte) (*FileStat, []byte) {
+func unmarshalFileStat(flags uint32, b []byte) (*FileStat, []byte, error) {
 	var fs FileStat
+	var err error
+
 	if flags&sshFileXferAttrSize == sshFileXferAttrSize {
-		fs.Size, b, _ = unmarshalUint64Safe(b)
+		fs.Size, b, err = unmarshalUint64Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
 	}
 	if flags&sshFileXferAttrUIDGID == sshFileXferAttrUIDGID {
-		fs.UID, b, _ = unmarshalUint32Safe(b)
-		fs.GID, b, _ = unmarshalUint32Safe(b)
+		fs.UID, b, err = unmarshalUint32Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
+		fs.GID, b, err = unmarshalUint32Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
 	}
 	if flags&sshFileXferAttrPermissions == sshFileXferAttrPermissions {
-		fs.Mode, b, _ = unmarshalUint32Safe(b)
+		fs.Mode, b, err = unmarshalUint32Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
 	}
 	if flags&sshFileXferAttrACmodTime == sshFileXferAttrACmodTime {
-		fs.Atime, b, _ = unmarshalUint32Safe(b)
-		fs.Mtime, b, _ = unmarshalUint32Safe(b)
+		fs.Atime, b, err = unmarshalUint32Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
+		fs.Mtime, b, err = unmarshalUint32Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
 	}
 	if flags&sshFileXferAttrExtended == sshFileXferAttrExtended {
 		var count uint32
-		count, b, _ = unmarshalUint32Safe(b)
+		count, b, err = unmarshalUint32Safe(b)
+		if err != nil {
+			return nil, b, err
+		}
+
 		ext := make([]StatExtended, count)
 		for i := uint32(0); i < count; i++ {
 			var typ string
 			var data string
-			typ, b, _ = unmarshalStringSafe(b)
-			data, b, _ = unmarshalStringSafe(b)
+			typ, b, err = unmarshalStringSafe(b)
+			if err != nil {
+				return nil, b, err
+			}
+			data, b, err = unmarshalStringSafe(b)
+			if err != nil {
+				return nil, b, err
+			}
 			ext[i] = StatExtended{
 				ExtType: typ,
 				ExtData: data,
@@ -211,7 +244,7 @@ func unmarshalFileStat(flags uint32, b []byte) (*FileStat, []byte) {
 		}
 		fs.Extended = ext
 	}
-	return &fs, b
+	return &fs, b, nil
 }
 
 func unmarshalStatus(id uint32, data []byte) error {
@@ -734,15 +767,15 @@ func (p *sshFxpOpenPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-func (p *sshFxpOpenPacket) unmarshalFileStat(flags uint32) *FileStat {
+func (p *sshFxpOpenPacket) unmarshalFileStat(flags uint32) (*FileStat, error) {
 	switch attrs := p.Attrs.(type) {
 	case *FileStat:
-		return attrs
+		return attrs, nil
 	case []byte:
-		fs, _ := unmarshalFileStat(flags, attrs)
-		return fs
+		fs, _, err := unmarshalFileStat(flags, attrs)
+		return fs, err
 	default:
-		panic(fmt.Sprintf("invalid type in unmarshalFileStat: %T", attrs))
+		return nil, fmt.Errorf("invalid type in unmarshalFileStat: %T", attrs)
 	}
 }
 
@@ -1030,15 +1063,15 @@ func (p *sshFxpSetstatPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-func (p *sshFxpSetstatPacket) unmarshalFileStat(flags uint32) *FileStat {
+func (p *sshFxpSetstatPacket) unmarshalFileStat(flags uint32) (*FileStat, error) {
 	switch attrs := p.Attrs.(type) {
 	case *FileStat:
-		return attrs
+		return attrs, nil
 	case []byte:
-		fs, _ := unmarshalFileStat(flags, attrs)
-		return fs
+		fs, _, err := unmarshalFileStat(flags, attrs)
+		return fs, err
 	default:
-		panic(fmt.Sprintf("invalid type in unmarshalFileStat: %T", attrs))
+		return nil, fmt.Errorf("invalid type in unmarshalFileStat: %T", attrs)
 	}
 }
 
@@ -1055,15 +1088,15 @@ func (p *sshFxpFsetstatPacket) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-func (p *sshFxpFsetstatPacket) unmarshalFileStat(flags uint32) *FileStat {
+func (p *sshFxpFsetstatPacket) unmarshalFileStat(flags uint32) (*FileStat, error) {
 	switch attrs := p.Attrs.(type) {
 	case *FileStat:
-		return attrs
+		return attrs, nil
 	case []byte:
-		fs, _ := unmarshalFileStat(flags, attrs)
-		return fs
+		fs, _, err := unmarshalFileStat(flags, attrs)
+		return fs, err
 	default:
-		panic(fmt.Sprintf("invalid type in unmarshalFileStat: %T", attrs))
+		return nil, fmt.Errorf("invalid type in unmarshalFileStat: %T", attrs)
 	}
 }
 

@@ -228,11 +228,11 @@ func TestOpenWithPermissions(t *testing.T) {
 	id2 := client.nextID()
 
 	typ, data, err := client.sendPacket(ctx, nil, &sshFxpOpenPacket{
-		ID: id1,
-		Path: tmppath,
+		ID:     id1,
+		Path:   tmppath,
 		Pflags: pflags,
 		Flags:  sshFileXferAttrPermissions,
-		Attrs:  &FileStat{
+		Attrs: &FileStat{
 			Mode: 0o745,
 		},
 	})
@@ -259,11 +259,11 @@ func TestOpenWithPermissions(t *testing.T) {
 
 	// Existing files should not have their permissions changed.
 	typ, data, err = client.sendPacket(ctx, nil, &sshFxpOpenPacket{
-		ID: id2,
-		Path: tmppath,
+		ID:     id2,
+		Path:   tmppath,
 		Pflags: pflags,
 		Flags:  sshFileXferAttrPermissions,
-		Attrs:  &FileStat{
+		Attrs: &FileStat{
 			Mode: 0o755,
 		},
 	})

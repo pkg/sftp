@@ -284,7 +284,10 @@ func TestUnmarshalAttrs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, _ := unmarshalAttrs(tt.b)
+		got, _, err := unmarshalAttrs(tt.b)
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
 		if !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("unmarshalAttrs(% X):\n-  got: %#v\n- want: %#v", tt.b, got, tt.want)
 		}
@@ -389,11 +392,11 @@ func TestSendPacket(t *testing.T) {
 		},
 		{
 			packet: &sshFxpOpenPacket{
-				ID: 3,
-				Path: "/foo",
+				ID:     3,
+				Path:   "/foo",
 				Pflags: toPflags(os.O_WRONLY | os.O_CREATE | os.O_TRUNC),
 				Flags:  sshFileXferAttrPermissions,
-				Attrs:  &FileStat{
+				Attrs: &FileStat{
 					Mode: 0o755,
 				},
 			},

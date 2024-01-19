@@ -606,7 +606,7 @@ ls -l /usr/bin/
 						// words[7] as timestamps on dirs can vary for things like /tmp
 					case 8:
 						// words[8] can either have full path or just the filename
-						bad = !strings.HasSuffix(opWord, "/" + goWord)
+						bad = !strings.HasSuffix(opWord, "/"+goWord)
 					default:
 						bad = true
 					}

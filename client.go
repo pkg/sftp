@@ -363,7 +363,10 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 				filename, data = unmarshalString(data)
 				_, data = unmarshalString(data) // discard longname
 				var attr *FileStat
-				attr, data = unmarshalAttrs(data)
+				attr, data, err = unmarshalAttrs(data)
+				if err != nil {
+					return nil, err
+				}
 				if filename == "." || filename == ".." {
 					continue
 				}
@@ -434,8 +437,8 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
-		attr, _ := unmarshalAttrs(data)
-		return fileInfoFromStat(attr, path.Base(p)), nil
+		attr, _, err := unmarshalAttrs(data)
+		return fileInfoFromStat(attr, path.Base(p)), err
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
@@ -660,8 +663,8 @@ func (c *Client) stat(path string) (*FileStat, error) {
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
-		attr, _ := unmarshalAttrs(data)
-		return attr, nil
+		attr, _, err := unmarshalAttrs(data)
+		return attr, err
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
@@ -684,8 +687,8 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 		if sid != id {
 			return nil, &unexpectedIDErr{id, sid}
 		}
-		attr, _ := unmarshalAttrs(data)
-		return attr, nil
+		attr, _, err := unmarshalAttrs(data)
+		return attr, err
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
@@ -974,8 +977,8 @@ func (c *Client) RemoveAll(path string) error {
 
 // File represents a remote file.
 type File struct {
-	c      *Client
-	path   string
+	c    *Client
+	path string
 
 	mu     sync.RWMutex
 	handle string
@@ -991,6 +994,10 @@ func (f *File) Close() error {
 	if f.handle == "" {
 		return os.ErrClosed
 	}
+
+	// When `openssh-portable/sftp-server.c` is doing `handle_close`,
+	// it will unconditionally mark the handle as unused,
+	// so we need to also unconditionally mark this handle as invalid.
 
 	handle := f.handle
 	f.handle = ""
@@ -1485,6 +1492,8 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	}
 }
 
+// Stat returns the FileInfo structure describing file. If there is an
+// error.
 func (f *File) Stat() (os.FileInfo, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -1496,8 +1505,6 @@ func (f *File) Stat() (os.FileInfo, error) {
 	return f.stat()
 }
 
-// Stat returns the FileInfo structure describing file. If there is an
-// error.
 func (f *File) stat() (os.FileInfo, error) {
 	fs, err := f.c.fstat(f.handle)
 	if err != nil {
@@ -2055,7 +2062,6 @@ func (f *File) Sync() error {
 		return os.ErrClosed
 	}
 
-	
 	id := f.c.nextID()
 	typ, data, err := f.c.sendPacket(context.Background(), nil, &sshFxpFsyncPacket{
 		ID:     id,

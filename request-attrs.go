@@ -52,6 +52,6 @@ func (r *Request) AttrFlags() FileAttrFlags {
 // Attributes parses file attributes byte blob and return them in a
 // FileStat object.
 func (r *Request) Attributes() *FileStat {
-	fs, _ := unmarshalFileStat(r.Flags, r.Attrs)
+	fs, _, _ := unmarshalFileStat(r.Flags, r.Attrs)
 	return fs
 }

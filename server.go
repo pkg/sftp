@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 )
 
 const (
@@ -462,10 +463,13 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	}
 
 	mode := os.FileMode(0o644)
-	// Like OpenSSH, we only handle permissions here, if the file is being created.
+	// Like OpenSSH, we only handle permissions here, and only when the file is being created.
 	// Otherwise, the permissions are ignored.
-	if p.Flags & sshFileXferAttrPermissions != 0 {
-		fs := p.unmarshalFileStat(p.Flags)
+	if p.Flags&sshFileXferAttrPermissions != 0 {
+		fs, err := p.unmarshalFileStat(p.Flags)
+		if err != nil {
+			return statusFromError(p.ID, err)
+		}
 		mode = fs.FileMode() & os.ModePerm
 	}
 
@@ -507,9 +511,7 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 
 	debug("setstat name %q", path)
 
-	fs := p.unmarshalFileStat(p.Flags)
-	
-	var err error
+	fs, err := p.unmarshalFileStat(p.Flags)
 
 	if (p.Flags & sshFileXferAttrSize) != 0 {
 		if err == nil {
@@ -545,9 +547,7 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 
 	debug("fsetstat name %q", path)
 
-	fs := p.unmarshalFileStat(p.Flags)
-	
-	var err error
+	fs, err := p.unmarshalFileStat(p.Flags)
 
 	if (p.Flags & sshFileXferAttrSize) != 0 {
 		if err == nil {
@@ -561,7 +561,15 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 	}
 	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
 		if err == nil {
-			err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
+			switch f := interface{}(f).(type) {
+			case interface {
+				Chtimes(atime, mtime time.Time) error
+			}:
+				// future-compatible, if any when *os.File supports Chtimes.
+				err = f.Chtimes(fs.AccessTime(), fs.ModTime())
+			default:
+				err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
+			}
 		}
 	}
 	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
