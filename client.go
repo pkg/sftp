@@ -1023,10 +1023,6 @@ func (f *File) Read(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.handle == "" {
-		return 0, os.ErrClosed
-	}
-
 	n, err := f.readAt(b, f.offset)
 	f.offset += int64(n)
 	return n, err
@@ -1095,14 +1091,15 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	if f.handle == "" {
-		return 0, os.ErrClosed
-	}
-
 	return f.readAt(b, off)
 }
 
 func (f *File) readAt(b []byte, off int64) (int, error) {
+	if f.handle == "" {
+		return 0, os.ErrClosed
+	}
+	handle := f.handle // need a local copy to prevent aberrent race detection
+
 	if len(b) <= f.c.maxPacket {
 		// This should be able to be serviced with 1/2 requests.
 		// So, just do it directly.
@@ -1154,7 +1151,7 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 
 			f.c.dispatchRequest(res, &sshFxpReadPacket{
 				ID:     id,
-				Handle: f.handle,
+				Handle: handle,
 				Offset: uint64(offset),
 				Len:    uint32(chunkSize),
 			})
@@ -1302,6 +1299,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	if f.handle == "" {
 		return 0, os.ErrClosed
 	}
+	handle := f.handle // need a local copy to prevent aberrent race detection
 
 	if f.c.disableConcurrentReads {
 		return f.writeToSequential(w)
@@ -1387,7 +1385,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 			f.c.dispatchRequest(res, &sshFxpReadPacket{
 				ID:     id,
-				Handle: f.handle,
+				Handle: handle,
 				Offset: uint64(off),
 				Len:    uint32(chunkSize),
 			})
@@ -1740,14 +1738,15 @@ func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.handle == "" {
-		return 0, os.ErrClosed
-	}
-
 	return f.readFromWithConcurrency(r, concurrency)
 }
 
 func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64, err error) {
+	if f.handle == "" {
+		return 0, os.ErrClosed
+	}
+	handle := f.handle // need a local copy to prevent aberrent race detection
+
 	// Split the write into multiple maxPacket sized concurrent writes.
 	// This allows writes with a suitably large reader
 	// to transfer data at a much faster rate due to overlapping round trip times.
@@ -1792,7 +1791,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 
 				f.c.dispatchRequest(res, &sshFxpWritePacket{
 					ID:     id,
-					Handle: f.handle,
+					Handle: handle,
 					Offset: uint64(off),
 					Length: uint32(n),
 					Data:   b[:n],
