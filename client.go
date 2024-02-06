@@ -999,9 +999,11 @@ func (f *File) Close() error {
 		return os.ErrClosed
 	}
 
-	// When `openssh-portable/sftp-server.c` is doing `handle_close`,
+	// The design principle here is that when `openssh-portable/sftp-server.c` is doing `handle_close`,
 	// it will unconditionally mark the handle as unused,
 	// so we need to also unconditionally mark this handle as invalid.
+	// By invalidating our local copy of the handle,
+	// we ensure that there cannot be any erroneous use-after-close requests sent after Close.
 
 	handle := f.handle
 	f.handle = ""
