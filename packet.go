@@ -737,6 +737,8 @@ func (p *sshFxpOpenPacket) marshalPacket() ([]byte, []byte, error) {
 	b = marshalUint32(b, p.Flags)
 
 	switch attrs := p.Attrs.(type) {
+	case []byte:
+		return b, attrs, nil // may as well short-ciruit this case.
 	case os.FileInfo:
 		_, fs := fileStatFromInfo(attrs) // we throw away the flags, and override with those in packet.
 		return b, marshalFileStat(nil, p.Flags, fs), nil
@@ -1008,6 +1010,8 @@ func (p *sshFxpSetstatPacket) marshalPacket() ([]byte, []byte, error) {
 	b = marshalUint32(b, p.Flags)
 
 	switch attrs := p.Attrs.(type) {
+	case []byte:
+		return b, attrs, nil // may as well short-ciruit this case.
 	case os.FileInfo:
 		_, fs := fileStatFromInfo(attrs) // we throw away the flags, and override with those in packet.
 		return b, marshalFileStat(nil, p.Flags, fs), nil
@@ -1035,6 +1039,8 @@ func (p *sshFxpFsetstatPacket) marshalPacket() ([]byte, []byte, error) {
 	b = marshalUint32(b, p.Flags)
 
 	switch attrs := p.Attrs.(type) {
+	case []byte:
+		return b, attrs, nil // may as well short-ciruit this case.
 	case os.FileInfo:
 		_, fs := fileStatFromInfo(attrs) // we throw away the flags, and override with those in packet.
 		return b, marshalFileStat(nil, p.Flags, fs), nil
