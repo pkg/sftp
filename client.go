@@ -438,7 +438,10 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		attr, _, err := unmarshalAttrs(data)
-		return fileInfoFromStat(attr, path.Base(p)), err
+		if err != nil {
+			return nil, err
+		}
+		return fileInfoFromStat(attr, path.Base(p)), nil
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
 	default:
@@ -664,6 +667,9 @@ func (c *Client) stat(path string) (*FileStat, error) {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		attr, _, err := unmarshalAttrs(data)
+		if err != nil {
+			return nil, err
+		}
 		return attr, err
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
@@ -1094,11 +1100,26 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	return f.readAt(b, off)
 }
 
+// readAt must be called while holding either the Read or Write mutex in File.
+// This code is concurrent safe with itself, but not with Close.
 func (f *File) readAt(b []byte, off int64) (int, error) {
 	if f.handle == "" {
 		return 0, os.ErrClosed
 	}
-	handle := f.handle // need a local copy to prevent aberrent race detection
+
+	// We need to make a local copy of this handle in order to prevent aberrent race detection.
+	// Because the value is referenced in a sub-goroutine while holding a RWMutex,
+	// the race detector flags that use as a race-condition.
+	// By bringing this into a local variable, we are not actually resolving the concurrency issue,
+	// since the sub-goroutine could erroneously be using a stale handle value after a Close.
+	//
+	// However, this use is not erroneous, so long as this function cannot return before that goroutine ends.
+	// This is guaranteed because:
+	// 1. This main goroutine returns strictly after `errCh` closes.
+	// 2. A goroutine is using `wg.Wait` to close `errCh`.
+	// 3. The goroutines consuming `workCh` call `wg.Done` in a defer, and returns only when `workCh` is closed..
+	// 4. The goroutine referencing `handle` closes `workCh` in a defer.
+	// TODO: handle := f.handle
 
 	if len(b) <= f.c.maxPacket {
 		// This should be able to be serviced with 1/2 requests.
@@ -1151,7 +1172,7 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 
 			f.c.dispatchRequest(res, &sshFxpReadPacket{
 				ID:     id,
-				Handle: handle,
+				Handle: f.handle,
 				Offset: uint64(offset),
 				Len:    uint32(chunkSize),
 			})
@@ -1217,7 +1238,9 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 				if err != nil {
 					// return the offset as the start + how much we read before the error.
 					errCh <- rErr{packet.off + int64(n), err}
-					return
+
+					// DO NOT return.
+					// We want to ensure that workCh is drained before wg.Wait returns.
 				}
 			}
 		}()
@@ -1695,6 +1718,8 @@ func (f *File) WriteAt(b []byte, off int64) (written int, err error) {
 	return f.writeAt(b, off)
 }
 
+// writeAt must be called while holding either the Read or Write mutex in File.
+// This code is concurrent safe with itself, but not with Close.
 func (f *File) writeAt(b []byte, off int64) (written int, err error) {
 	if len(b) <= f.c.maxPacket {
 		// We can do this in one write.
