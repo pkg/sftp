@@ -1107,20 +1107,6 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 		return 0, os.ErrClosed
 	}
 
-	// We need to make a local copy of this handle in order to prevent aberrent race detection.
-	// Because the value is referenced in a sub-goroutine while holding a RWMutex,
-	// the race detector flags that use as a race-condition.
-	// By bringing this into a local variable, we are not actually resolving the concurrency issue,
-	// since the sub-goroutine could erroneously be using a stale handle value after a Close.
-	//
-	// However, this use is not erroneous, so long as this function cannot return before that goroutine ends.
-	// This is guaranteed because:
-	// 1. This main goroutine returns strictly after `errCh` closes.
-	// 2. A goroutine is using `wg.Wait` to close `errCh`.
-	// 3. The goroutines consuming `workCh` call `wg.Done` in a defer, and returns only when `workCh` is closed..
-	// 4. The goroutine referencing `handle` closes `workCh` in a defer.
-	// TODO: handle := f.handle
-
 	if len(b) <= f.c.maxPacket {
 		// This should be able to be serviced with 1/2 requests.
 		// So, just do it directly.
@@ -1322,7 +1308,6 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	if f.handle == "" {
 		return 0, os.ErrClosed
 	}
-	handle := f.handle // need a local copy to prevent aberrent race detection
 
 	if f.c.disableConcurrentReads {
 		return f.writeToSequential(w)
@@ -1408,7 +1393,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 			f.c.dispatchRequest(res, &sshFxpReadPacket{
 				ID:     id,
-				Handle: handle,
+				Handle: f.handle,
 				Offset: uint64(off),
 				Len:    uint32(chunkSize),
 			})
@@ -1474,9 +1459,8 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 					return
 				}
 
-				if err != nil {
-					return
-				}
+				// DO NOT return.
+				// We want to ensure that readCh is drained before wg.Wait returns.
 			}
 		}()
 	}
@@ -1770,7 +1754,6 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 	if f.handle == "" {
 		return 0, os.ErrClosed
 	}
-	handle := f.handle // need a local copy to prevent aberrent race detection
 
 	// Split the write into multiple maxPacket sized concurrent writes.
 	// This allows writes with a suitably large reader
@@ -1816,7 +1799,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 
 				f.c.dispatchRequest(res, &sshFxpWritePacket{
 					ID:     id,
-					Handle: handle,
+					Handle: f.handle,
 					Offset: uint64(off),
 					Length: uint32(n),
 					Data:   b[:n],
@@ -1863,6 +1846,9 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 
 				if err != nil {
 					errCh <- rwErr{work.off, err}
+
+					// DO NOT return.
+					// We want to ensure that workCh is drained before wg.Wait returns.
 				}
 			}
 		}()
