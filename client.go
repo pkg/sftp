@@ -1456,7 +1456,6 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				select {
 				case readWork.cur <- writeWork:
 				case <-cancel:
-					return
 				}
 
 				// DO NOT return.
