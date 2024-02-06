@@ -513,25 +513,17 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 
 	fs, err := p.unmarshalFileStat(p.Flags)
 
-	if (p.Flags & sshFileXferAttrSize) != 0 {
-		if err == nil {
-			err = os.Truncate(path, int64(fs.Size))
-		}
+	if err == nil && (p.Flags & sshFileXferAttrSize) != 0 {
+		err = os.Truncate(path, int64(fs.Size))
 	}
-	if (p.Flags & sshFileXferAttrPermissions) != 0 {
-		if err == nil {
-			err = os.Chmod(path, fs.FileMode())
-		}
+	if err == nil && (p.Flags & sshFileXferAttrPermissions) != 0 {
+		err = os.Chmod(path, fs.FileMode())
 	}
-	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
-		if err == nil {
-			err = os.Chown(path, int(fs.UID), int(fs.GID))
-		}
+	if err == nil && (p.Flags & sshFileXferAttrUIDGID) != 0 {
+		err = os.Chown(path, int(fs.UID), int(fs.GID))
 	}
-	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
-		if err == nil {
-			err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
-		}
+	if err == nil && (p.Flags & sshFileXferAttrACmodTime) != 0 {
+		err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
 	}
 
 	return statusFromError(p.ID, err)
@@ -549,32 +541,26 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 
 	fs, err := p.unmarshalFileStat(p.Flags)
 
-	if (p.Flags & sshFileXferAttrSize) != 0 {
-		if err == nil {
-			err = f.Truncate(int64(fs.Size))
-		}
+	if err == nil && (p.Flags & sshFileXferAttrSize) != 0 {
+		err = f.Truncate(int64(fs.Size))
 	}
-	if (p.Flags & sshFileXferAttrPermissions) != 0 {
-		if err == nil {
-			err = f.Chmod(fs.FileMode())
-		}
+	if err == nil && (p.Flags & sshFileXferAttrPermissions) != 0 {
+		err = f.Chmod(fs.FileMode())
 	}
-	if (p.Flags & sshFileXferAttrUIDGID) != 0 {
-		if err == nil {
-			err = f.Chown(int(fs.UID), int(fs.GID))
-		}
+	if err == nil && (p.Flags & sshFileXferAttrUIDGID) != 0 {
+		err = f.Chown(int(fs.UID), int(fs.GID))
 	}
-	if (p.Flags & sshFileXferAttrACmodTime) != 0 {
-		if err == nil {
-			switch f := interface{}(f).(type) {
-			case interface {
-				Chtimes(atime, mtime time.Time) error
-			}:
-				// future-compatible, if any when *os.File supports Chtimes.
-				err = f.Chtimes(fs.AccessTime(), fs.ModTime())
-			default:
-				err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
-			}
+	if err == nil && (p.Flags & sshFileXferAttrACmodTime) != 0 {
+		type chtimer interface {
+			Chtimes(atime, mtime time.Time) error
+		}
+
+		switch f := interface{}(f).(type) {
+		case chtimer:
+			// future-compatible, for when/if *os.File supports Chtimes.
+			err = f.Chtimes(fs.AccessTime(), fs.ModTime())
+		default:
+			err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
 		}
 	}
 
