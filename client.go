@@ -439,6 +439,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 		}
 		attr, _, err := unmarshalAttrs(data)
 		if err != nil {
+			// avoid returning a valid value from fileInfoFromStats if err != nil.
 			return nil, err
 		}
 		return fileInfoFromStat(attr, path.Base(p)), nil
@@ -667,9 +668,6 @@ func (c *Client) stat(path string) (*FileStat, error) {
 			return nil, &unexpectedIDErr{id, sid}
 		}
 		attr, _, err := unmarshalAttrs(data)
-		if err != nil {
-			return nil, err
-		}
 		return attr, err
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
