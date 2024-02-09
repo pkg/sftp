@@ -37,7 +37,8 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	return fs.OpenFile(r)
+	// Needs to be readable by the owner.
+	return fs.openFileModeCheck(r, 0o400)
 }
 
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
@@ -47,10 +48,16 @@ func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	return fs.OpenFile(r)
+	// Needs to be writable by the owner.
+	return fs.openFileModeCheck(r, 0o200)
 }
 
 func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
+	// Needs to be readable and writable by the owner.
+	return fs.openFileModeCheck(r, 0o200|0o400)
+}
+
+func (fs *root) openFileModeCheck(r *Request, mode uint32) (WriterAtReaderAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
@@ -59,7 +66,16 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	return fs.openfile(r.Filepath, r.Flags)
+	f, err := fs.openfile(r.Filepath, r.Flags)
+	if err != nil {
+		return nil, err
+	}
+
+	if f.mode&mode != mode {
+		return nil, os.ErrPermission
+	}
+
+	return f, nil
 }
 
 func (fs *root) putfile(pathname string, file *memFile) error {
@@ -72,7 +88,7 @@ func (fs *root) putfile(pathname string, file *memFile) error {
 		return os.ErrInvalid
 	}
 
-	if _, err := fs.lfetch(pathname); err != os.ErrNotExist {
+	if _, err := fs.lfetch(pathname); !errors.Is(err, os.ErrNotExist) {
 		return os.ErrExist
 	}
 
@@ -108,8 +124,10 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 			link, err = fs.lfetch(pathname)
 		}
 
+		// The mode is currently hard coded because this library doesn't parse out the mode at file open time.
 		file := &memFile{
 			modtime: time.Now(),
+			mode:    0644,
 		}
 
 		if err := fs.putfile(pathname, file); err != nil {
@@ -151,15 +169,30 @@ func (fs *root) Filecmd(r *Request) error {
 
 	switch r.Method {
 	case "Setstat":
+		// Some notes:
+		//
+		// openfile will follow symlinks, however as best as I can tell this is the correct POSIX behavior for chmod.
+		//
+		// openfile does not currently support opening a directory, and at this time we do not implement directory permissions.
+		flags := r.AttrFlags()
+		attrs := r.Attributes()
 		file, err := fs.openfile(r.Filepath, sshFxfWrite)
 		if err != nil {
 			return err
 		}
 
-		if r.AttrFlags().Size {
-			return file.Truncate(int64(r.Attributes().Size))
+		if flags.Size {
+			if err := file.Truncate(int64(attrs.Size)); err != nil {
+				return err
+			}
 		}
-
+		if flags.Permissions {
+			file.chmod(attrs.Mode)
+		}
+		// We only have mtime, not atime.
+		if flags.Acmodtime {
+			file.modtime = time.Unix(int64(attrs.Mtime), 0)
+		}
 		return nil
 
 	case "Rename":
@@ -209,7 +242,7 @@ func (fs *root) rename(oldpath, newpath string) error {
 	}
 
 	target, err := fs.lfetch(newpath)
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		if target == file {
 			// IEEE 1003.1: if oldpath and newpath are the same directory entry,
 			// then return no error, and perform no further action.
@@ -507,7 +540,7 @@ func (fs *root) exists(path string) bool {
 
 	_, err = fs.lfetch(path)
 
-	return err != os.ErrNotExist
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func (fs *root) fetch(pathname string) (*memFile, error) {
@@ -544,6 +577,7 @@ type memFile struct {
 	modtime time.Time
 	symlink string
 	isdir   bool
+	mode    uint32
 
 	mu      sync.RWMutex
 	content []byte
@@ -563,13 +597,15 @@ func (f *memFile) Size() int64 {
 	return f.size()
 }
 func (f *memFile) Mode() os.FileMode {
+	// At this time, we do not implement directory modes.
 	if f.isdir {
 		return os.FileMode(0755) | os.ModeDir
 	}
+	// Under POSIX, symlinks have a fixed mode which can not be changed.
 	if f.symlink != "" {
 		return os.FileMode(0777) | os.ModeSymlink
 	}
-	return os.FileMode(0644)
+	return os.FileMode(f.mode)
 }
 func (f *memFile) ModTime() time.Time { return f.modtime }
 func (f *memFile) IsDir() bool        { return f.isdir }
@@ -644,4 +680,9 @@ func (f *memFile) TransferError(err error) {
 	defer f.mu.Unlock()
 
 	f.err = err
+}
+
+func (f *memFile) chmod(mode uint32) {
+	const mask = uint32(os.ModePerm | s_ISUID | s_ISGID | s_ISVTX)
+	f.mode = (f.mode &^ mask) | (mode & mask)
 }

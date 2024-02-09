@@ -22,6 +22,29 @@ func newFileOpenFlags(flags uint32) FileOpenFlags {
 	}
 }
 
+func (fof FileOpenFlags) ForRequest() (flags uint32) {
+	if fof.Read {
+		flags |= sshFxfRead
+	}
+	if fof.Write {
+		flags |= sshFxfWrite
+	}
+	if fof.Append {
+		flags |= sshFxfAppend
+	}
+	if fof.Creat {
+		flags |= sshFxfCreat
+	}
+	if fof.Trunc {
+		flags |= sshFxfTrunc
+	}
+	if fof.Excl {
+		flags |= sshFxfExcl
+	}
+
+	return flags
+}
+
 // Pflags converts the bitmap/uint32 from SFTP Open packet pflag values,
 // into a FileOpenFlags struct with booleans set for flags set in bitmap.
 func (r *Request) Pflags() FileOpenFlags {
@@ -33,6 +56,23 @@ func (r *Request) Pflags() FileOpenFlags {
 // object returned by Attributes method. Used with SetStat.
 type FileAttrFlags struct {
 	Size, UidGid, Permissions, Acmodtime bool
+}
+
+func (faf FileAttrFlags) ForRequest() (flags uint32) {
+	if faf.Size {
+		flags |= sshFileXferAttrSize
+	}
+	if faf.UidGid {
+		flags |= sshFileXferAttrUIDGID
+	}
+	if faf.Permissions {
+		flags |= sshFileXferAttrPermissions
+	}
+	if faf.Acmodtime {
+		flags |= sshFileXferAttrACmodTime
+	}
+
+	return flags
 }
 
 func newFileAttrFlags(flags uint32) FileAttrFlags {
