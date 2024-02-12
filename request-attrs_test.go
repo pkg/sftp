@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRequestPflags(t *testing.T) {
@@ -33,7 +34,8 @@ func TestRequestAttributes(t *testing.T) {
 	at := []byte{}
 	at = marshalUint32(at, 1)
 	at = marshalUint32(at, 2)
-	testFs, _ := unmarshalFileStat(fl, at)
+	testFs, _, err := unmarshalFileStat(fl, at)
+	require.NoError(t, err)
 	assert.Equal(t, fa, *testFs)
 	// Size and Mode
 	fa = FileStat{Mode: 0700, Size: 99}
@@ -41,7 +43,8 @@ func TestRequestAttributes(t *testing.T) {
 	at = []byte{}
 	at = marshalUint64(at, 99)
 	at = marshalUint32(at, 0700)
-	testFs, _ = unmarshalFileStat(fl, at)
+	testFs, _, err = unmarshalFileStat(fl, at)
+	require.NoError(t, err)
 	assert.Equal(t, fa, *testFs)
 	// FileMode
 	assert.True(t, testFs.FileMode().IsRegular())
@@ -50,7 +53,16 @@ func TestRequestAttributes(t *testing.T) {
 }
 
 func TestRequestAttributesEmpty(t *testing.T) {
-	fs, b := unmarshalFileStat(sshFileXferAttrAll, nil)
+	fs, b, err := unmarshalFileStat(sshFileXferAttrAll, []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size
+		0x00, 0x00, 0x00, 0x00, // mode
+		0x00, 0x00, 0x00, 0x00, // mtime
+		0x00, 0x00, 0x00, 0x00, // atime
+		0x00, 0x00, 0x00, 0x00, // uid
+		0x00, 0x00, 0x00, 0x00, // gid
+		0x00, 0x00, 0x00, 0x00, // extended_count
+	})
+	require.NoError(t, err)
 	assert.Equal(t, &FileStat{
 		Extended: []StatExtended{},
 	}, fs)

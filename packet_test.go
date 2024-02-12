@@ -284,7 +284,10 @@ func TestUnmarshalAttrs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, _ := unmarshalAttrs(tt.b)
+		got, _, err := unmarshalAttrs(tt.b)
+		if err != nil {
+			t.Fatal("unexpected error:", err)
+		}
 		if !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("unmarshalAttrs(% X):\n-  got: %#v\n- want: %#v", tt.b, got, tt.want)
 		}
@@ -376,7 +379,7 @@ func TestSendPacket(t *testing.T) {
 			packet: &sshFxpOpenPacket{
 				ID:     1,
 				Path:   "/foo",
-				Pflags: flags(os.O_RDONLY),
+				Pflags: toPflags(os.O_RDONLY),
 			},
 			want: []byte{
 				0x0, 0x0, 0x0, 0x15,
@@ -385,6 +388,26 @@ func TestSendPacket(t *testing.T) {
 				0x0, 0x0, 0x0, 0x4, '/', 'f', 'o', 'o',
 				0x0, 0x0, 0x0, 0x1,
 				0x0, 0x0, 0x0, 0x0,
+			},
+		},
+		{
+			packet: &sshFxpOpenPacket{
+				ID:     3,
+				Path:   "/foo",
+				Pflags: toPflags(os.O_WRONLY | os.O_CREATE | os.O_TRUNC),
+				Flags:  sshFileXferAttrPermissions,
+				Attrs: &FileStat{
+					Mode: 0o755,
+				},
+			},
+			want: []byte{
+				0x0, 0x0, 0x0, 0x19,
+				0x3,
+				0x0, 0x0, 0x0, 0x3,
+				0x0, 0x0, 0x0, 0x4, '/', 'f', 'o', 'o',
+				0x0, 0x0, 0x0, 0x1a,
+				0x0, 0x0, 0x0, 0x4,
+				0x0, 0x0, 0x1, 0xed,
 			},
 		},
 		{
@@ -409,10 +432,7 @@ func TestSendPacket(t *testing.T) {
 				ID:    31,
 				Path:  "/bar",
 				Flags: sshFileXferAttrUIDGID,
-				Attrs: struct {
-					UID uint32
-					GID uint32
-				}{
+				Attrs: &FileStat{
 					UID: 1000,
 					GID: 100,
 				},
@@ -611,7 +631,7 @@ func BenchmarkMarshalOpen(b *testing.B) {
 	benchMarshal(b, &sshFxpOpenPacket{
 		ID:     1,
 		Path:   "/home/test/some/random/path",
-		Pflags: flags(os.O_RDONLY),
+		Pflags: toPflags(os.O_RDONLY),
 	})
 }
 

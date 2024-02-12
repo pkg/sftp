@@ -178,21 +178,22 @@ func TestOpenStatRace(t *testing.T) {
 	// openpacket finishes to fast to trigger race in tests
 	// need to add a small sleep on server to openpackets somehow
 	tmppath := path.Join(os.TempDir(), "stat_race")
-	pflags := flags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
+	pflags := toPflags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
 	ch := make(chan result, 3)
 	id1 := client.nextID()
+	id2 := client.nextID()
 	client.dispatchRequest(ch, &sshFxpOpenPacket{
 		ID:     id1,
 		Path:   tmppath,
 		Pflags: pflags,
 	})
-	id2 := client.nextID()
 	client.dispatchRequest(ch, &sshFxpLstatPacket{
 		ID:   id2,
 		Path: tmppath,
 	})
 	testreply := func(id uint32) {
 		r := <-ch
+		require.NoError(t, r.err)
 		switch r.typ {
 		case sshFxpAttrs, sshFxpHandle: // ignore
 		case sshFxpStatus:
@@ -205,6 +206,83 @@ func TestOpenStatRace(t *testing.T) {
 	testreply(id1)
 	testreply(id2)
 	os.Remove(tmppath)
+	checkServerAllocator(t, server)
+}
+
+func TestOpenWithPermissions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	skipIfWindows(t)
+
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	tmppath := path.Join(os.TempDir(), "open_permissions")
+	defer os.Remove(tmppath)
+
+	pflags := toPflags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
+
+	id1 := client.nextID()
+	id2 := client.nextID()
+
+	typ, data, err := client.sendPacket(ctx, nil, &sshFxpOpenPacket{
+		ID:     id1,
+		Path:   tmppath,
+		Pflags: pflags,
+		Flags:  sshFileXferAttrPermissions,
+		Attrs: &FileStat{
+			Mode: 0o745,
+		},
+	})
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+	switch typ {
+	case sshFxpHandle:
+		// do nothing, we can just leave the handle open.
+	case sshFxpStatus:
+		t.Fatal("unexpected status:", normaliseError(unmarshalStatus(id1, data)))
+	default:
+		t.Fatal("unpexpected packet type:", unimplementedPacketErr(typ))
+	}
+
+	stat, err := os.Stat(tmppath)
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+
+	if stat.Mode()&os.ModePerm != 0o745 {
+		t.Errorf("stat.Mode() = %v was expecting 0o745", stat.Mode())
+	}
+
+	// Existing files should not have their permissions changed.
+	typ, data, err = client.sendPacket(ctx, nil, &sshFxpOpenPacket{
+		ID:     id2,
+		Path:   tmppath,
+		Pflags: pflags,
+		Flags:  sshFileXferAttrPermissions,
+		Attrs: &FileStat{
+			Mode: 0o755,
+		},
+	})
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+	switch typ {
+	case sshFxpHandle:
+		// do nothing, we can just leave the handle open.
+	case sshFxpStatus:
+		t.Fatal("unexpected status:", normaliseError(unmarshalStatus(id2, data)))
+	default:
+		t.Fatal("unpexpected packet type:", unimplementedPacketErr(typ))
+	}
+
+	if stat.Mode()&os.ModePerm != 0o745 {
+		t.Errorf("stat.Mode() = %v, was expecting unchanged 0o745", stat.Mode())
+	}
+
 	checkServerAllocator(t, server)
 }
 

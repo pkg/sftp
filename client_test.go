@@ -81,7 +81,7 @@ var flagsTests = []struct {
 
 func TestFlags(t *testing.T) {
 	for i, tt := range flagsTests {
-		got := flags(tt.flags)
+		got := toPflags(tt.flags)
 		if got != tt.want {
 			t.Errorf("test %v: flags(%x): want: %x, got: %x", i, tt.flags, tt.want, got)
 		}
