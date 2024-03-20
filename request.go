@@ -121,6 +121,22 @@ func (s *state) getListerAt() ListerAt {
 	return s.listerAt
 }
 
+func (s *state) closeListerAt() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var err error
+
+	if s.listerAt != nil {
+		if c, ok := s.listerAt.(io.Closer); ok {
+			err = c.Close()
+		}
+		s.listerAt = nil
+	}
+
+	return err
+}
+
 // Request contains the data and state for the incoming service request.
 type Request struct {
 	// Get, Put, Setstat, Stat, Rename, Remove
@@ -230,9 +246,9 @@ func (r *Request) close() error {
 		}
 	}()
 
-	rd, wr, rw := r.getAllReaderWriters()
+	err := r.state.closeListerAt()
 
-	var err error
+	rd, wr, rw := r.getAllReaderWriters()
 
 	// Close errors on a Writer are far more likely to be the important one.
 	// As they can be information that there was a loss of data.
