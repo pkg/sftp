@@ -1,6 +1,5 @@
-//go:build !plan9 && !zos
-// +build !plan9
-// +build !zos
+//go:build zos
+// +build zos
 
 package sftp
 
@@ -10,6 +9,19 @@ import (
 )
 
 const EBADF = syscall.EBADF
+
+// z/OS syscall constants are not compatible with the stat structure returned
+// from the server. Define the OpenBSD ones here instead.
+const (
+	S_IFMT   = 0xF000
+	S_IFIFO  = 0x1000
+	S_IFCHR  = 0x2000
+	S_IFDIR  = 0x4000
+	S_IFBLK  = 0x6000
+	S_IFREG  = 0x8000
+	S_IFLNK  = 0xA000
+	S_IFSOCK = 0xC000
+)
 
 func wrapPathError(filepath string, err error) error {
 	if errno, ok := err.(syscall.Errno); ok {
@@ -47,7 +59,7 @@ func translateSyscallError(err error) (uint32, bool) {
 
 // isRegular returns true if the mode describes a regular file.
 func isRegular(mode uint32) bool {
-	return mode&S_IFMT == syscall.S_IFREG
+	return mode&S_IFMT == S_IFREG
 }
 
 // toFileMode converts sftp filemode bits to the os.FileMode specification
@@ -55,19 +67,19 @@ func toFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
 
 	switch mode & S_IFMT {
-	case syscall.S_IFBLK:
+	case S_IFBLK:
 		fm |= os.ModeDevice
-	case syscall.S_IFCHR:
+	case S_IFCHR:
 		fm |= os.ModeDevice | os.ModeCharDevice
-	case syscall.S_IFDIR:
+	case S_IFDIR:
 		fm |= os.ModeDir
-	case syscall.S_IFIFO:
+	case S_IFIFO:
 		fm |= os.ModeNamedPipe
-	case syscall.S_IFLNK:
+	case S_IFLNK:
 		fm |= os.ModeSymlink
-	case syscall.S_IFREG:
+	case S_IFREG:
 		// nothing to do
-	case syscall.S_IFSOCK:
+	case S_IFSOCK:
 		fm |= os.ModeSocket
 	}
 
@@ -90,19 +102,19 @@ func fromFileMode(mode os.FileMode) uint32 {
 
 	switch mode & os.ModeType {
 	case os.ModeDevice | os.ModeCharDevice:
-		ret |= syscall.S_IFCHR
+		ret |= S_IFCHR
 	case os.ModeDevice:
-		ret |= syscall.S_IFBLK
+		ret |= S_IFBLK
 	case os.ModeDir:
-		ret |= syscall.S_IFDIR
+		ret |= S_IFDIR
 	case os.ModeNamedPipe:
-		ret |= syscall.S_IFIFO
+		ret |= S_IFIFO
 	case os.ModeSymlink:
-		ret |= syscall.S_IFLNK
+		ret |= S_IFLNK
 	case 0:
-		ret |= syscall.S_IFREG
+		ret |= S_IFREG
 	case os.ModeSocket:
-		ret |= syscall.S_IFSOCK
+		ret |= S_IFSOCK
 	}
 
 	if mode&os.ModeSetuid != 0 {

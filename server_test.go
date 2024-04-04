@@ -99,9 +99,14 @@ func TestInvalidExtendedPacket(t *testing.T) {
 // test that server handles concurrent requests correctly
 func TestConcurrentRequests(t *testing.T) {
 	skipIfWindows(t)
-	filename := "/etc/passwd"
-	if runtime.GOOS == "plan9" {
+	var filename string
+	switch runtime.GOOS {
+	case "plan9":
 		filename = "/lib/ndb/local"
+	case "zos":
+		filename = "/etc/.shrc"
+	default:
+		filename = "/etc/passwd"
 	}
 	client, server := clientServerPair(t)
 	defer client.Close()

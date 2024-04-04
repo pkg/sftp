@@ -2113,13 +2113,12 @@ func normaliseError(err error) error {
 // Unsupported flags are ignored.
 func toPflags(f int) uint32 {
 	var out uint32
-	switch f & os.O_WRONLY {
-	case os.O_WRONLY:
-		out |= sshFxfWrite
+	switch f & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR) {
 	case os.O_RDONLY:
 		out |= sshFxfRead
-	}
-	if f&os.O_RDWR == os.O_RDWR {
+	case os.O_WRONLY:
+		out |= sshFxfWrite
+	case os.O_RDWR:
 		out |= sshFxfRead | sshFxfWrite
 	}
 	if f&os.O_APPEND == os.O_APPEND {
