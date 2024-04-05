@@ -1,12 +1,13 @@
-//go:build !plan9 && !zos
+//go:build !plan9
 // +build !plan9
-// +build !zos
 
 package sftp
 
 import (
 	"os"
 	"syscall"
+
+	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
 
 const EBADF = syscall.EBADF
@@ -47,37 +48,37 @@ func translateSyscallError(err error) (uint32, bool) {
 
 // isRegular returns true if the mode describes a regular file.
 func isRegular(mode uint32) bool {
-	return mode&S_IFMT == syscall.S_IFREG
+	return sshfx.FileMode(mode)&sshfx.ModeType == sshfx.ModeRegular
 }
 
 // toFileMode converts sftp filemode bits to the os.FileMode specification
 func toFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
 
-	switch mode & S_IFMT {
-	case syscall.S_IFBLK:
+	switch sshfx.FileMode(mode) & sshfx.ModeType {
+	case sshfx.ModeDevice:
 		fm |= os.ModeDevice
-	case syscall.S_IFCHR:
+	case sshfx.ModeCharDevice:
 		fm |= os.ModeDevice | os.ModeCharDevice
-	case syscall.S_IFDIR:
+	case sshfx.ModeDir:
 		fm |= os.ModeDir
-	case syscall.S_IFIFO:
+	case sshfx.ModeNamedPipe:
 		fm |= os.ModeNamedPipe
-	case syscall.S_IFLNK:
+	case sshfx.ModeSymlink:
 		fm |= os.ModeSymlink
-	case syscall.S_IFREG:
+	case sshfx.ModeRegular:
 		// nothing to do
-	case syscall.S_IFSOCK:
+	case sshfx.ModeSocket:
 		fm |= os.ModeSocket
 	}
 
-	if mode&syscall.S_ISUID != 0 {
+	if sshfx.FileMode(mode)&sshfx.ModeSetUID != 0 {
 		fm |= os.ModeSetuid
 	}
-	if mode&syscall.S_ISGID != 0 {
+	if sshfx.FileMode(mode)&sshfx.ModeSetGID != 0 {
 		fm |= os.ModeSetgid
 	}
-	if mode&syscall.S_ISVTX != 0 {
+	if sshfx.FileMode(mode)&sshfx.ModeSticky != 0 {
 		fm |= os.ModeSticky
 	}
 
@@ -86,40 +87,40 @@ func toFileMode(mode uint32) os.FileMode {
 
 // fromFileMode converts from the os.FileMode specification to sftp filemode bits
 func fromFileMode(mode os.FileMode) uint32 {
-	ret := uint32(mode & os.ModePerm)
+	ret := sshfx.FileMode(mode & os.ModePerm)
 
 	switch mode & os.ModeType {
 	case os.ModeDevice | os.ModeCharDevice:
-		ret |= syscall.S_IFCHR
+		ret |= sshfx.ModeCharDevice
 	case os.ModeDevice:
-		ret |= syscall.S_IFBLK
+		ret |= sshfx.ModeDevice
 	case os.ModeDir:
-		ret |= syscall.S_IFDIR
+		ret |= sshfx.ModeDir
 	case os.ModeNamedPipe:
-		ret |= syscall.S_IFIFO
+		ret |= sshfx.ModeNamedPipe
 	case os.ModeSymlink:
-		ret |= syscall.S_IFLNK
+		ret |= sshfx.ModeSymlink
 	case 0:
-		ret |= syscall.S_IFREG
+		ret |= sshfx.ModeRegular
 	case os.ModeSocket:
-		ret |= syscall.S_IFSOCK
+		ret |= sshfx.ModeSocket
 	}
 
 	if mode&os.ModeSetuid != 0 {
-		ret |= syscall.S_ISUID
+		ret |= sshfx.ModeSetUID
 	}
 	if mode&os.ModeSetgid != 0 {
-		ret |= syscall.S_ISGID
+		ret |= sshfx.ModeSetGID
 	}
 	if mode&os.ModeSticky != 0 {
-		ret |= syscall.S_ISVTX
+		ret |= sshfx.ModeSticky
 	}
 
-	return ret
+	return uint32(ret)
 }
 
 const (
-	s_ISUID = syscall.S_ISUID
-	s_ISGID = syscall.S_ISGID
-	s_ISVTX = syscall.S_ISVTX
+	s_ISUID = uint32(sshfx.ModeSetUID)
+	s_ISGID = uint32(sshfx.ModeSetGID)
+	s_ISVTX = uint32(sshfx.ModeSticky)
 )

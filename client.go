@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"math"
 	"os"
 	"path"
@@ -2142,7 +2143,7 @@ func toPflags(f int) uint32 {
 // setuid, setgid and sticky in m, because we've historically supported those
 // bits, and we mask off any non-permission bits.
 func toChmodPerm(m os.FileMode) (perm uint32) {
-	const mask = os.ModePerm | s_ISUID | s_ISGID | s_ISVTX
+	const mask = os.ModePerm | iofs.FileMode(s_ISUID|s_ISGID|s_ISVTX)
 	perm = uint32(m & mask)
 
 	if m&os.ModeSetuid != 0 {
