@@ -1,50 +1,10 @@
-//go:build !plan9
-// +build !plan9
-
 package sftp
 
 import (
 	"os"
-	"syscall"
 
 	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
 )
-
-const EBADF = syscall.EBADF
-
-func wrapPathError(filepath string, err error) error {
-	if errno, ok := err.(syscall.Errno); ok {
-		return &os.PathError{Path: filepath, Err: errno}
-	}
-	return err
-}
-
-// translateErrno translates a syscall error number to a SFTP error code.
-func translateErrno(errno syscall.Errno) uint32 {
-	switch errno {
-	case 0:
-		return sshFxOk
-	case syscall.ENOENT:
-		return sshFxNoSuchFile
-	case syscall.EACCES, syscall.EPERM:
-		return sshFxPermissionDenied
-	}
-
-	return sshFxFailure
-}
-
-func translateSyscallError(err error) (uint32, bool) {
-	switch e := err.(type) {
-	case syscall.Errno:
-		return translateErrno(e), true
-	case *os.PathError:
-		debug("statusFromError,pathError: error is %T %#v", e.Err, e.Err)
-		if errno, ok := e.Err.(syscall.Errno); ok {
-			return translateErrno(errno), true
-		}
-	}
-	return 0, false
-}
 
 // isRegular returns true if the mode describes a regular file.
 func isRegular(mode uint32) bool {
@@ -124,3 +84,10 @@ const (
 	s_ISGID = uint32(sshfx.ModeSetGID)
 	s_ISVTX = uint32(sshfx.ModeSticky)
 )
+
+// Legacy export:
+//
+// Go defines S_IFMT on windows, plan9 and js/wasm as 0x1f000 instead of
+// 0xf000. None of the the other S_IFxyz values include the "1" (in 0x1f000)
+// which prevents them from matching the bitmask.
+const S_IFMT = uint32(sshfx.ModeType)

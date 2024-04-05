@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	iofs "io/fs"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -975,7 +974,7 @@ func TestClientSetuid(t *testing.T) {
 	f.Close()
 
 	const allPerm = os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky |
-		iofs.FileMode(s_ISUID|s_ISGID|s_ISVTX)
+		os.FileMode(s_ISUID|s_ISGID|s_ISVTX)
 
 	for _, c := range []struct {
 		goPerm    os.FileMode
