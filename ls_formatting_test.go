@@ -3,6 +3,7 @@ package sftp
 import (
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +101,12 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 	perms, linkCnt, user, group, size := fields[0], fields[1], fields[2], fields[3], fields[4]
 	dateTime := strings.Join(fields[5:8], " ")
 	filename := fields[8]
+
+	if runtime.GOOS == "zos" {
+		// User and Group are always only uppercase characters on z/OS
+		user = strings.ToLower(user)
+		group = strings.ToLower(group)
+	}
 
 	// permissions (len 10, "drwxr-xr-x")
 	const (

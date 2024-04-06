@@ -2113,13 +2113,12 @@ func normaliseError(err error) error {
 // Unsupported flags are ignored.
 func toPflags(f int) uint32 {
 	var out uint32
-	switch f & os.O_WRONLY {
-	case os.O_WRONLY:
-		out |= sshFxfWrite
+	switch f & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR) {
 	case os.O_RDONLY:
 		out |= sshFxfRead
-	}
-	if f&os.O_RDWR == os.O_RDWR {
+	case os.O_WRONLY:
+		out |= sshFxfWrite
+	case os.O_RDWR:
 		out |= sshFxfRead | sshFxfWrite
 	}
 	if f&os.O_APPEND == os.O_APPEND {
@@ -2143,7 +2142,7 @@ func toPflags(f int) uint32 {
 // setuid, setgid and sticky in m, because we've historically supported those
 // bits, and we mask off any non-permission bits.
 func toChmodPerm(m os.FileMode) (perm uint32) {
-	const mask = os.ModePerm | s_ISUID | s_ISGID | s_ISVTX
+	const mask = os.ModePerm | os.FileMode(s_ISUID|s_ISGID|s_ISVTX)
 	perm = uint32(m & mask)
 
 	if m&os.ModeSetuid != 0 {
