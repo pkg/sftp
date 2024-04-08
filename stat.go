@@ -85,5 +85,10 @@ const (
 	s_ISVTX = uint32(sshfx.ModeSticky)
 )
 
-// S_IFMT is a legacy export. `sshfx.ModeType` should be used instead
+// S_IFMT is a legacy export, and was brought in to support GOOS environments whose sysconfig.S_IFMT may be different from the value used internally by SFTP standards.
+// There should be no reason why you need to import it, or use it, but unexporting it could cause code to break in a way that cannot be readily fixed.
+// As such, we continue to export this value as the value used in the SFTP standard.
+//
+// Deprecated: Remove use of this value, and avoid any future use as well.
+// There is no alternative provided, you should never need to access this value.
 const S_IFMT = uint32(sshfx.ModeType)
