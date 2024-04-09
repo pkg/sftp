@@ -591,18 +591,25 @@ ls -l /usr/bin/
 			goWords := spaceRegex.Split(goLine, -1)
 			opWords := spaceRegex.Split(opLine, -1)
 			// some fields are allowed to be different..
-			// words[2] and [3] as these are users & groups
-			// words[1] as the link count for directories like proc is unstable
 			// during testing as processes are created/destroyed.
-			// words[7] as timestamp on dirs can very for things like /tmp
 			for j, goWord := range goWords {
 				if j >= len(opWords) {
 					bad = true
 					break
 				}
 				opWord := opWords[j]
-				if goWord != opWord && j != 1 && j != 2 && j != 3 && j != 7 {
-					bad = true
+				if goWord != opWord {
+					switch j {
+					case 1, 2, 3, 7:
+						// words[1] as the link count for directories like proc is unstable
+						// words[2] and [3] as these are users & groups
+						// words[7] as timestamps on dirs can vary for things like /tmp
+					case 8:
+						// words[8] can either have full path or just the filename
+						bad = !strings.HasSuffix(opWord, "/"+goWord)
+					default:
+						bad = true
+					}
 				}
 			}
 		}
