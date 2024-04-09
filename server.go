@@ -495,7 +495,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		mode = fs.FileMode() & os.ModePerm
 	}
 
-	f, err := os.OpenFile(svr.toLocalPath(p.Path), osFlags, mode)
+	f, err := svr.openfile(svr.toLocalPath(p.Path), osFlags, mode)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
