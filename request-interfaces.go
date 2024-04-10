@@ -144,6 +144,8 @@ type NameLookupFileLister interface {
 //
 // If a populated entry implements [FileInfoExtendedData], extended attributes will also be returned to the client.
 //
+// The request server code will call Close() on ListerAt if an io.Closer type assertion succeeds.
+//
 // Note in cases of an error, the error text will be sent to the client.
 type ListerAt interface {
 	ListAt([]os.FileInfo, int64) (int, error)
