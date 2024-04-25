@@ -300,14 +300,14 @@ func (r *Request) transferError(err error) {
 }
 
 // called from worker to handle packet/request
-func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	switch r.Method {
 	case "Get":
-		return fileget(handlers.FileGet, r, pkt, alloc, orderID)
+		return fileget(handlers.FileGet, r, pkt, alloc, orderID, maxTxPacket)
 	case "Put":
-		return fileput(handlers.FilePut, r, pkt, alloc, orderID)
+		return fileput(handlers.FilePut, r, pkt, alloc, orderID, maxTxPacket)
 	case "Open":
-		return fileputget(handlers.FilePut, r, pkt, alloc, orderID)
+		return fileputget(handlers.FilePut, r, pkt, alloc, orderID, maxTxPacket)
 	case "Setstat", "Rename", "Rmdir", "Mkdir", "Link", "Symlink", "Remove", "PosixRename", "StatVFS":
 		return filecmd(handlers.FileCmd, r, pkt)
 	case "List":
@@ -392,13 +392,13 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 }
 
 // wrap FileReader handler
-func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	rd := r.getReaderAt()
 	if rd == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected read packet"))
 	}
 
-	data, offset, _ := packetData(pkt, alloc, orderID)
+	data, offset, _ := packetData(pkt, alloc, orderID, maxTxPacket)
 
 	n, err := rd.ReadAt(data, offset)
 	// only return EOF error if no data left to read
@@ -414,20 +414,20 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 }
 
 // wrap FileWriter handler
-func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	wr := r.getWriterAt()
 	if wr == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected write packet"))
 	}
 
-	data, offset, _ := packetData(pkt, alloc, orderID)
+	data, offset, _ := packetData(pkt, alloc, orderID, maxTxPacket)
 
 	_, err := wr.WriteAt(data, offset)
 	return statusFromError(pkt.id(), err)
 }
 
 // wrap OpenFileWriter handler
-func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32) responsePacket {
+func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	rw := r.getWriterAtReaderAt()
 	if rw == nil {
 		return statusFromError(pkt.id(), errors.New("unexpected write and read packet"))
@@ -435,7 +435,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 
 	switch p := pkt.(type) {
 	case *sshFxpReadPacket:
-		data, offset := p.getDataSlice(alloc, orderID), int64(p.Offset)
+		data, offset := p.getDataSlice(alloc, orderID, maxTxPacket), int64(p.Offset)
 
 		n, err := rw.ReadAt(data, offset)
 		// only return EOF error if no data left to read
@@ -461,10 +461,10 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 }
 
 // file data for additional read/write packets
-func packetData(p requestPacket, alloc *allocator, orderID uint32) (data []byte, offset int64, length uint32) {
+func packetData(p requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) (data []byte, offset int64, length uint32) {
 	switch p := p.(type) {
 	case *sshFxpReadPacket:
-		return p.getDataSlice(alloc, orderID), int64(p.Offset), p.Len
+		return p.getDataSlice(alloc, orderID, maxTxPacket), int64(p.Offset), p.Len
 	case *sshFxpWritePacket:
 		return p.Data, int64(p.Offset), p.Length
 	}

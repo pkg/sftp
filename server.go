@@ -34,6 +34,7 @@ type Server struct {
 	openFilesLock sync.RWMutex
 	handleCount   int
 	workDir       string
+	maxTxPacket   uint32
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -86,6 +87,7 @@ func NewServer(rwc io.ReadWriteCloser, options ...ServerOption) (*Server, error)
 		debugStream: ioutil.Discard,
 		pktMgr:      newPktMgr(svrConn),
 		openFiles:   make(map[string]*os.File),
+		maxTxPacket: defaultMaxTxPacket,
 	}
 
 	for _, o := range options {
@@ -135,6 +137,24 @@ func WithAllocator() ServerOption {
 func WithServerWorkingDirectory(workDir string) ServerOption {
 	return func(s *Server) error {
 		s.workDir = cleanPath(workDir)
+		return nil
+	}
+}
+
+// WithMaxTxPacket sets the maximum size of the payload returned to the client,
+// measured in bytes. The default value is 32768 bytes, and this option
+// can only be used to increase it. Setting this option to a larger value
+// should be safe, because the client decides the size of the requested payload.
+//
+// The default maximum packet size is 32768 bytes.
+func WithMaxTxPacket(size uint32) ServerOption {
+	return func(s *Server) error {
+		if size < defaultMaxTxPacket {
+			return errors.New("size must be greater than or equal to 32768")
+		}
+
+		s.maxTxPacket = size
+
 		return nil
 	}
 }
@@ -287,7 +307,7 @@ func handlePacket(s *Server, p orderedRequest) error {
 		f, ok := s.getHandle(p.Handle)
 		if ok {
 			err = nil
-			data := p.getDataSlice(s.pktMgr.alloc, orderID)
+			data := p.getDataSlice(s.pktMgr.alloc, orderID, s.maxTxPacket)
 			n, _err := f.ReadAt(data, int64(p.Offset))
 			if _err != nil && (_err != io.EOF || n == 0) {
 				err = _err
@@ -513,16 +533,16 @@ func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {
 
 	fs, err := p.unmarshalFileStat(p.Flags)
 
-	if err == nil && (p.Flags & sshFileXferAttrSize) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrSize) != 0 {
 		err = os.Truncate(path, int64(fs.Size))
 	}
-	if err == nil && (p.Flags & sshFileXferAttrPermissions) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrPermissions) != 0 {
 		err = os.Chmod(path, fs.FileMode())
 	}
-	if err == nil && (p.Flags & sshFileXferAttrUIDGID) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrUIDGID) != 0 {
 		err = os.Chown(path, int(fs.UID), int(fs.GID))
 	}
-	if err == nil && (p.Flags & sshFileXferAttrACmodTime) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrACmodTime) != 0 {
 		err = os.Chtimes(path, fs.AccessTime(), fs.ModTime())
 	}
 
@@ -541,16 +561,16 @@ func (p *sshFxpFsetstatPacket) respond(svr *Server) responsePacket {
 
 	fs, err := p.unmarshalFileStat(p.Flags)
 
-	if err == nil && (p.Flags & sshFileXferAttrSize) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrSize) != 0 {
 		err = f.Truncate(int64(fs.Size))
 	}
-	if err == nil && (p.Flags & sshFileXferAttrPermissions) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrPermissions) != 0 {
 		err = f.Chmod(fs.FileMode())
 	}
-	if err == nil && (p.Flags & sshFileXferAttrUIDGID) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrUIDGID) != 0 {
 		err = f.Chown(int(fs.UID), int(fs.GID))
 	}
-	if err == nil && (p.Flags & sshFileXferAttrACmodTime) != 0 {
+	if err == nil && (p.Flags&sshFileXferAttrACmodTime) != 0 {
 		type chtimer interface {
 			Chtimes(atime, mtime time.Time) error
 		}
