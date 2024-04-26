@@ -823,7 +823,7 @@ func (p *sshFxpReadPacket) UnmarshalBinary(b []byte) error {
 // So, we need: uint32(length) + byte(type) + uint32(id) + uint32(data_length)
 const dataHeaderLen = 4 + 1 + 4 + 4
 
-func (p *sshFxpReadPacket) getDataSlice(alloc *allocator, orderID uint32) []byte {
+func (p *sshFxpReadPacket) getDataSlice(alloc *allocator, orderID uint32, maxTxPacket uint32) []byte {
 	dataLen := p.Len
 	if dataLen > maxTxPacket {
 		dataLen = maxTxPacket

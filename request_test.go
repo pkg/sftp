@@ -149,7 +149,7 @@ func TestRequestGet(t *testing.T) {
 	for i, txt := range []string{"file-", "data."} {
 		pkt := &sshFxpReadPacket{ID: uint32(i), Handle: "a",
 			Offset: uint64(i * 5), Len: 5}
-		rpkt := request.call(handlers, pkt, nil, 0)
+		rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 		dpkt := rpkt.(*sshFxpDataPacket)
 		assert.Equal(t, dpkt.id(), uint32(i))
 		assert.Equal(t, string(dpkt.Data), txt)
@@ -162,7 +162,7 @@ func TestRequestCustomError(t *testing.T) {
 	pkt := fakePacket{myid: 1}
 	cmdErr := errors.New("stat not supported")
 	handlers.returnError(cmdErr)
-	rpkt := request.call(handlers, pkt, nil, 0)
+	rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	assert.Equal(t, rpkt, statusFromError(pkt.myid, cmdErr))
 }
 
@@ -173,11 +173,11 @@ func TestRequestPut(t *testing.T) {
 	request.state.writerAt, _ = handlers.FilePut.Filewrite(request)
 	pkt := &sshFxpWritePacket{ID: 0, Handle: "a", Offset: 0, Length: 5,
 		Data: []byte("file-")}
-	rpkt := request.call(handlers, pkt, nil, 0)
+	rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	checkOkStatus(t, rpkt)
 	pkt = &sshFxpWritePacket{ID: 1, Handle: "a", Offset: 5, Length: 5,
 		Data: []byte("data.")}
-	rpkt = request.call(handlers, pkt, nil, 0)
+	rpkt = request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	checkOkStatus(t, rpkt)
 	assert.Equal(t, "file-data.", handlers.getOutString())
 }
@@ -186,11 +186,11 @@ func TestRequestCmdr(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Mkdir")
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt, nil, 0)
+	rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	checkOkStatus(t, rpkt)
 
 	handlers.returnError(errTest)
-	rpkt = request.call(handlers, pkt, nil, 0)
+	rpkt = request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	assert.Equal(t, rpkt, statusFromError(pkt.myid, errTest))
 }
 
@@ -198,7 +198,7 @@ func TestRequestInfoStat(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Stat")
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt, nil, 0)
+	rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	spkt, ok := rpkt.(*sshFxpStatResponse)
 	assert.True(t, ok)
 	assert.Equal(t, spkt.info.Name(), "request_test.go")
@@ -215,13 +215,13 @@ func TestRequestInfoList(t *testing.T) {
 		assert.Equal(t, hpkt.Handle, "1")
 	}
 	pkt = fakePacket{myid: 2}
-	request.call(handlers, pkt, nil, 0)
+	request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 }
 func TestRequestInfoReadlink(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Readlink")
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt, nil, 0)
+	rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	npkt, ok := rpkt.(*sshFxpNamePacket)
 	if assert.True(t, ok) {
 		assert.IsType(t, &sshFxpNameAttr{}, npkt.NameAttrs[0])
@@ -234,7 +234,7 @@ func TestOpendirHandleReuse(t *testing.T) {
 	request := testRequest("Stat")
 	request.handle = "1"
 	pkt := fakePacket{myid: 1}
-	rpkt := request.call(handlers, pkt, nil, 0)
+	rpkt := request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	assert.IsType(t, &sshFxpStatResponse{}, rpkt)
 
 	request.Method = "List"
@@ -244,6 +244,6 @@ func TestOpendirHandleReuse(t *testing.T) {
 		hpkt := rpkt.(*sshFxpHandlePacket)
 		assert.Equal(t, hpkt.Handle, "1")
 	}
-	rpkt = request.call(handlers, pkt, nil, 0)
+	rpkt = request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	assert.IsType(t, &sshFxpNamePacket{}, rpkt)
 }
