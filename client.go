@@ -593,6 +593,20 @@ func (c *Client) Truncate(path string, size int64) error {
 	return c.setstat(path, sshFileXferAttrSize, uint64(size))
 }
 
+// SetExtendedData sets extended attributes of the named file. It uses the
+// SSH_FILEXFER_ATTR_EXTENDED flag in the setstat request.
+//
+// This flag provides a general extension mechanism for vendor-specific extensions.
+// Names of the attributes should be a string of the format "name@domain", where "domain"
+// is a valid, registered domain name and "name" identifies the method. Server
+// implementations SHOULD ignore extended data fields that they do not understand.
+func (c *Client) SetExtendedData(path string, extended []StatExtended) error {
+	attrs := &FileStat{
+		Extended: extended,
+	}
+	return c.setstat(path, sshFileXferAttrExtended, attrs)
+}
+
 // Open opens the named file for reading. If successful, methods on the
 // returned file can be used for reading; the associated file descriptor
 // has mode O_RDONLY.
@@ -2042,6 +2056,28 @@ func (f *File) Chmod(mode os.FileMode) error {
 	}
 
 	return f.c.fsetstat(f.handle, sshFileXferAttrPermissions, toChmodPerm(mode))
+}
+
+// SetExtendedData sets extended attributes of the current file. It uses the
+// SSH_FILEXFER_ATTR_EXTENDED flag in the setstat request.
+//
+// This flag provides a general extension mechanism for vendor-specific extensions.
+// Names of the attributes should be a string of the format "name@domain", where "domain"
+// is a valid, registered domain name and "name" identifies the method. Server
+// implementations SHOULD ignore extended data fields that they do not understand.
+func (f *File) SetExtendedData(path string, extended []StatExtended) error {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	if f.handle == "" {
+		return os.ErrClosed
+	}
+
+	attrs := &FileStat{
+		Extended: extended,
+	}
+
+	return f.c.fsetstat(f.handle, sshFileXferAttrExtended, attrs)
 }
 
 // Truncate sets the size of the current file. Although it may be safely assumed
