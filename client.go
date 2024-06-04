@@ -1756,6 +1756,8 @@ func (f *File) writeAt(b []byte, off int64) (written int, err error) {
 // Giving a concurrency of less than one will default to the Client’s max concurrency.
 //
 // Otherwise, the given concurrency will be capped by the Client's max concurrency.
+//
+// This method is preferred over calling ReadFrom to guarantee concurrent reads/writes.
 func (f *File) ReadFromWithConcurrency(r io.Reader, concurrency int) (read int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1916,6 +1918,17 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 // This method is preferred over calling Write multiple times
 // to maximise throughput for transferring the entire file,
 // especially over high-latency links.
+//
+// If client uses concurrent writes, given r needs to implement one of the interfaces:
+//
+//	Len()  int
+//	Size() int64
+//	Stat() (os.FileInfo, error)
+//
+// or be an instance of [io.LimitedReader] to determine the number of possible
+// concurrent requests. Otherwise, reads/writes are performed in nonparallel, sliced
+// in chunks with the max packet size. ReadFromWithConcurrency explicit call can
+// guarantee concurrent processing of the reader.
 func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
