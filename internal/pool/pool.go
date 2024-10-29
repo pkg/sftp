@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 )
 
-type metrics struct{
-	hits atomic.Uint64
+type metrics struct {
+	hits   atomic.Uint64
 	misses atomic.Uint64
 }
 
@@ -25,25 +25,25 @@ func (m *metrics) Hits() (hits, total uint64) {
 }
 
 // BufPool provides a pool of slices that will return nil when a miss occurs.
-type SlicePool[S []T, T any] struct{
+type SlicePool[S []T, T any] struct {
 	metrics
 
 	ch     chan S
 	length int
 }
 
-func NewSlicePool[S []T, T any](depth, cullLength int) *SlicePool[S,T] {
+func NewSlicePool[S []T, T any](depth, cullLength int) *SlicePool[S, T] {
 	if cullLength <= 0 {
 		panic("sftp: bufPool: new buffer creation length must be greater than zero")
 	}
 
-	return &SlicePool[S,T]{
+	return &SlicePool[S, T]{
 		ch:     make(chan S, depth),
 		length: cullLength,
 	}
 }
 
-func (p *SlicePool[S,T]) Get() S {
+func (p *SlicePool[S, T]) Get() S {
 	if p == nil {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (p *SlicePool[S,T]) Get() S {
 	}
 }
 
-func (p *SlicePool[S,T]) Put(b S) {
+func (p *SlicePool[S, T]) Put(b S) {
 	if p == nil {
 		// functional default: no reuse
 		return
@@ -78,15 +78,15 @@ func (p *SlicePool[S,T]) Put(b S) {
 }
 
 // Pool provides a pool of types that should be called with new(T) when a miss occurs.
-type Pool[T any] struct{
+type Pool[T any] struct {
 	metrics
 
-	ch     chan *T
+	ch chan *T
 }
 
 func NewPool[T any](depth int) *Pool[T] {
 	return &Pool[T]{
-		ch:     make(chan *T, depth),
+		ch: make(chan *T, depth),
 	}
 }
 
@@ -122,14 +122,14 @@ func (p *Pool[T]) Put(v *T) {
 }
 
 // WorkPool provides a pool of types that blocks when the pool is empty.
-type WorkPool[T any] struct{
+type WorkPool[T any] struct {
 	ch chan chan T
 	wg sync.WaitGroup
 }
 
 func NewWorkPool[T any](depth int) *WorkPool[T] {
 	p := &WorkPool[T]{
-		ch:   make(chan chan T, depth),
+		ch: make(chan chan T, depth),
 	}
 
 	for len(p.ch) < cap(p.ch) {

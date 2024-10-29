@@ -251,7 +251,7 @@ func (p *PathPseudoPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 		Path: e.Filename,
 	}
 
-	for range count-1 {
+	for range count - 1 {
 		var e NameEntry
 		if err := e.UnmarshalFrom(buf); err != nil {
 			return err

@@ -251,8 +251,8 @@ var _ Packet = &PathPseudoPacket{}
 
 func TestPathPseudoPacket(t *testing.T) {
 	const (
-		id                = 42
-		filename          = "foo"
+		id       = 42
+		filename = "foo"
 	)
 
 	p := &PathPseudoPacket{
@@ -265,7 +265,7 @@ func TestPathPseudoPacket(t *testing.T) {
 	}
 
 	want := []byte{
-		0x00, 0x00, 0x00, 16+8,
+		0x00, 0x00, 0x00, 16 + 8,
 		104,
 		0x00, 0x00, 0x00, 42,
 		0x00, 0x00, 0x00, 0x01,

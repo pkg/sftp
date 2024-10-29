@@ -126,8 +126,8 @@ func (f PacketType) String() string {
 }
 
 var (
-	readPool = pool.NewPool[ReadPacket](64)
-	writePool = pool.NewPool[WritePacket](64)
+	readPool   = pool.NewPool[ReadPacket](64)
+	writePool  = pool.NewPool[WritePacket](64)
 	wrDataPool = pool.NewSlicePool[[]byte](64, DefaultMaxDataLength)
 )
 
@@ -207,5 +207,3 @@ func newPacketFromType(typ PacketType) (Packet, error) {
 
 	return newRequestPacketFromType(typ)
 }
-
-

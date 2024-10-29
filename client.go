@@ -297,7 +297,7 @@ func WithMaxInflight(count int) ClientOption {
 // It will generate an error if one attempts to set the length beyond the 2^32-1 limitation of the sftp protocol.
 // There may also be compatibility issues if setting the value above 2^31-1.
 func WithMaxDataLength(length int) ClientOption {
-	withPktLen := WithMaxPacketLength(length + (sshfx.DefaultMaxPacketLength - sshfx.DefaultMaxDataLength))
+	withPktLen := WithMaxPacketLength(length + sshfx.MaxPacketLengthOverhead)
 
 	return func(cl *Client) error {
 		if err := withPktLen(cl); err != nil {

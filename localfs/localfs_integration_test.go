@@ -897,4 +897,3 @@ func BenchmarkReadFrom10MiB(b *testing.B) {
 func BenchmarkReadFrom64MiB(b *testing.B) {
 	benchHelperReadFrom(b, 1<<26)
 }
-

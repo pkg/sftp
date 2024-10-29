@@ -6,5 +6,5 @@ import (
 
 var handler = &ServerHandler{}
 
-//var _ sftp.HardlinkServerHandler = handler
+// var _ sftp.HardlinkServerHandler = handler
 var _ sftp.POSIXRenameServerHandler = handler

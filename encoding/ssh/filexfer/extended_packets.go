@@ -13,7 +13,7 @@ type ExtendedData = interface {
 }
 
 // ExtendedRequestPacket defines the interface an extended request packet should implement.
-type ExtendedRequestPacket interface{
+type ExtendedRequestPacket interface {
 	ExtendedData
 
 	// Type ensures it is packet-like, it should always return PacketTypeExtended.
@@ -24,7 +24,7 @@ type ExtendedRequestPacket interface{
 }
 
 // extendedDataConstructor defines a function that returns a new(ArbitraryExtendedPacket).
-type extendedDataConstructor struct{
+type extendedDataConstructor struct {
 	typ reflect.Type
 	new func() ExtendedData
 }
@@ -37,7 +37,10 @@ var extendedPacketTypes struct {
 // RegisterExtendedPacketType defines a specific ExtendedDataConstructor for the given extended request name.
 //
 // This operation is idempotent so long as the ExtendedRequest name is only being registered with the same type.
-func RegisterExtendedPacketType[PKT any, EXT interface{ ExtendedRequestPacket ; *PKT }]() {
+func RegisterExtendedPacketType[PKT any, EXT interface {
+	ExtendedRequestPacket
+	*PKT
+}]() {
 	extendedPacketTypes.mu.Lock()
 	defer extendedPacketTypes.mu.Unlock()
 

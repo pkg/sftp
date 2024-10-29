@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	readOnly = flag.Bool("read-only", false, "read-only server")
+	readOnly    = flag.Bool("read-only", false, "read-only server")
 	debugStderr = flag.Bool("debug", false, "debug to stderr")
 )
 
@@ -129,7 +129,7 @@ func main() {
 		}
 
 		srv := &sftp.Server{
-			Handler:  &localfs.ServerHandler{
+			Handler: &localfs.ServerHandler{
 				ReadOnly: *readOnly,
 			},
 			Debug: debug,
