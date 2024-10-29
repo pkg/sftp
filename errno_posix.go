@@ -22,7 +22,7 @@ func translateErrno(errno syscall.Errno) sshfx.Status {
 	case syscall.EACCES, syscall.EPERM:
 		return sshfx.StatusPermissionDenied
 	case syscall.ENOTSUP:
-		return sshfx.StatusOPUnsupported
+		return sshfx.StatusOpUnsupported
 	}
 
 	return sshfx.StatusFailure

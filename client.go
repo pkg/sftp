@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"iter"
+	"math"
 	"os"
 	"path"
 	"slices"
@@ -266,8 +268,90 @@ func (c *clientConn) send(ctx context.Context, req sshfx.PacketMarshaller) (*ssh
 	return c.recv(ctx, reqid, ch)
 }
 
-type ClientOption func(*Client)
+// ClientOption specifies an optional that can be set on a client.
+type ClientOption func(*Client) error
 
+// WithMaxInflight sets the maximum number of inflight packets at one time.
+//
+// It will generate an error if one attempts to set it to a value less than one.
+func WithMaxInflight(count int) ClientOption {
+	return func(cl *Client) error {
+		if count < 1 {
+			return fmt.Errorf("max inflight packets cannot be less than 1, was: %d", count)
+		}
+
+		cl.maxInflight = count
+
+		return nil
+	}
+}
+
+// WithMaxDataLength sets the maximum length of a data that will be used in SSH_FX_READ and SSH_FX_WRITE requests.
+// This will also adjust the maximum packet length to at least the data length + 1232 bytes as overhead room.
+// (This is the difference between the 34000 byte packet size vs 32768 data packet size.)
+//
+// The maximum data length can only be increased,
+// if an attempt is made to set this value lower than it currently is,
+// it will simply not perform any operation.
+//
+// It will generate an error if one attempts to set the length beyond the 2^32-1 limitation of the sftp protocol.
+// There may also be compatibility issues if setting the value above 2^31-1.
+func WithMaxDataLength(length int) ClientOption {
+	withPktLen := WithMaxPacketLength(length + (sshfx.DefaultMaxPacketLength - sshfx.DefaultMaxDataLength))
+
+	return func(cl *Client) error {
+		if err := withPktLen(cl); err != nil {
+			return err
+		}
+
+		// This has to be cast to int64 to safely perform this test on 32-bit archs.
+		// It should be identified as always false, and elided for them anyways.
+		if int64(length) > math.MaxUint32 {
+			return fmt.Errorf("sftp: max data length must fit in a uint32: %d", length)
+		}
+
+		if int64(length) > math.MaxInt {
+			return fmt.Errorf("sftp: max data length must fit in a int: %d", length)
+		}
+
+		// Negative values will be stomped by the max with cl.maxDataLen.
+		cl.maxDataLen = max(cl.maxDataLen, length)
+
+		return nil
+	}
+}
+
+// WithMaxPacketLength sets the maximum length of a packet that the client will accept.
+//
+// The maximum packet length can only be increased,
+// if an attempt is made to set this value lower than it currently is,
+// it will simply not perform any operation.
+func WithMaxPacketLength(length int) ClientOption {
+	return func(cl *Client) error {
+
+		// This has to be cast to int64 to safely perform this test on 32-bit archs.
+		// It should be identified as always false, and elided for them anyways.
+		if int64(length) > math.MaxUint32 {
+			return fmt.Errorf("sftp: max packet length must fit in a uint32: %d", length)
+		}
+
+		if int64(length) > math.MaxInt {
+			return fmt.Errorf("sftp: max packet length must fit in a int: %d", length)
+		}
+
+		if length < 0 {
+			// Short circuit to avoid a negative value handling during the cast to uint32.
+			return nil
+		}
+
+		cl.maxPacket = max(cl.maxPacket, uint32(length))
+		return nil
+	}
+}
+
+// Client represents an SFTP session on a *ssh.ClientConn SSH connection.
+// Multiple clients can be active on a single SSH connection,
+// and a client may be called concurrently from multiple goroutines.
 type Client struct {
 	conn clientConn
 
@@ -411,7 +495,7 @@ func (cl *Client) getDataBuf(size int) []byte {
 
 // NewClient creates a new SFTP client on conn.
 // The context is only used during initialization, and handshake.
-func NewClient(ctx context.Context, conn *ssh.Client) (*Client, error) {
+func NewClient(ctx context.Context, conn *ssh.Client, opts ...ClientOption) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
 		return nil, err
@@ -434,13 +518,14 @@ func NewClient(ctx context.Context, conn *ssh.Client) (*Client, error) {
 		return nil, err
 	}
 
-	return NewClientPipe(ctx, r, w)
+	return NewClientPipe(ctx, r, w, opts...)
 }
 
-// NewClientPipe attempts to negotiate an SFTP session with the given read and write channels.
+// NewClientPipe creates a new SFTP client given a Reader and WriteCloser.
+// This can be used for connecting an SFTP server over TCP/TLS, or by using the system's ssh client program.
 //
 // The given context is only used for the negotiation of init and version packets.
-func NewClientPipe(ctx context.Context, rd io.Reader, wr io.WriteCloser) (*Client, error) {
+func NewClientPipe(ctx context.Context, rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Client, error) {
 	cl := &Client{
 		conn: clientConn{
 			rd:     rd,
@@ -451,6 +536,12 @@ func NewClientPipe(ctx context.Context, rd io.Reader, wr io.WriteCloser) (*Clien
 		maxPacket:   sshfx.DefaultMaxPacketLength,
 		maxDataLen:  sshfx.DefaultMaxDataLength,
 		maxInflight: 64,
+	}
+
+	for _, opt := range opts {
+		if err := opt(cl); err != nil {
+			return nil, err
+		}
 	}
 
 	exts, err := cl.conn.handshake(ctx, cl.maxPacket)
@@ -474,7 +565,9 @@ func NewClientPipe(ctx context.Context, rd io.Reader, wr io.WriteCloser) (*Clien
 	return cl, nil
 }
 
-func (cl *Client) ReportMetrics(wr io.Writer) {
+// ReportPoolMetrics writes buffer pool metrics to the given writer.
+// It is expected that this is only useful during testing, and benchmarking.
+func (cl *Client) ReportPoolMetrics(wr io.Writer) {
 	if cl.conn.bufPool != nil {
 		hits, total := cl.conn.bufPool.Hits()
 
@@ -482,12 +575,16 @@ func (cl *Client) ReportMetrics(wr io.Writer) {
 	}
 }
 
+// Close closes the SFTP session.
 func (cl *Client) Close() error {
 	cl.conn.disconnect(nil)
 	cl.conn.wr.Close()
 	return nil
 }
 
+// Mkdir creates the specified directory.
+// An error will be returned if a file or directory with the specified path already exists,
+// or if the directory's parent folder does not exist.
 func (cl *Client) Mkdir(name string, perm fs.FileMode) error {
 	err := cl.sendPacket(context.Background(), &sshfx.MkdirPacket{
 		Path: name,
@@ -503,6 +600,8 @@ func (cl *Client) Mkdir(name string, perm fs.FileMode) error {
 	return nil
 }
 
+// MkdirAll creates a directory named path, along with any necessary parents.
+// If a path is already a directory, MkdirAll does nothing and returns nil.
 func (cl *Client) MkdirAll(name string, perm fs.FileMode) error {
 	// Fast path: if we can tell whether name is a directory or file, stop with success or error.
 	dir, err := cl.Stat(name)
@@ -538,6 +637,12 @@ func (cl *Client) MkdirAll(name string, perm fs.FileMode) error {
 	return nil
 }
 
+// Remove removes the named file or (empty) directory.
+//
+// If both operations fail, then Remove will stat the named filesystem object.
+// It then returns the error from that SSH_FX_STAT request if one occurs,
+// or the error from the SSH_FX_RMDIR request if it is a directory,
+// otherwise returning the error from the SSH_FX_REMOVE request.
 func (cl *Client) Remove(name string) error {
 	ctx := context.Background()
 
@@ -584,6 +689,8 @@ func (cl *Client) setstat(ctx context.Context, name string, attrs *sshfx.Attribu
 	return nil
 }
 
+// Truncate changes the size of the named file.
+// If the file is a symbolic link, it changes the size of the link's target.
 func (cl *Client) Truncate(name string, size int64) error {
 	return cl.setstat(context.Background(), name, &sshfx.Attributes{
 		Flags: sshfx.AttrSize,
@@ -591,6 +698,12 @@ func (cl *Client) Truncate(name string, size int64) error {
 	})
 }
 
+// Chmod changes the mode of the named file to mode.
+// If the file is a symbolic link, it changes the mode of the link's target.
+//
+// The Go FileMdoe, will be converted to a "portable" POSIX file permission, and then sent to the server.
+// The server is then responsible for interpreting that permission.
+// It is possible the server and this client disagree on what some flags mean.
 func (cl *Client) Chmod(name string, mode fs.FileMode) error {
 	return cl.setstat(context.Background(), name, &sshfx.Attributes{
 		Flags:       sshfx.AttrPermissions,
@@ -598,6 +711,12 @@ func (cl *Client) Chmod(name string, mode fs.FileMode) error {
 	})
 }
 
+// Chown changes the numeric uid and gid of the named file.
+// If the file is a symbolic link, it changes the uid and gid of the link's target.
+//
+// [os.Chown] provides that a uid or gid of -1 means to not change that value,
+// but we cannot guarantee the same semantics here.
+// The server is told to set the uid and gid as given, and it is up to the server to define that behavior.
 func (cl *Client) Chown(name string, uid, gid int) error {
 	return cl.setstat(context.Background(), name, &sshfx.Attributes{
 		Flags: sshfx.AttrUIDGID,
@@ -606,6 +725,17 @@ func (cl *Client) Chown(name string, uid, gid int) error {
 	})
 }
 
+// Chtimes changes the access and modification times of the named file,
+// similar to the Unix utime() or utimes() functions.
+//
+// The SFTP protocol only supports an accuracy to the second,
+// so these times will be truncated to the second before being sent to the server.
+// The server may additional truncate or round the values to an even less precise time unit.
+//
+// [os.Chtimes] provides that a zero [time.Time] value will leave the corresponding file time unchanged,
+// but we cannot guarantee the same semantics here.
+// The server is told to set the atime and mtime as given,
+// and it is up to the server to define that behavior.
 func (cl *Client) Chtimes(name string, atime, mtime time.Time) error {
 	return cl.setstat(context.Background(), name, &sshfx.Attributes{
 		Flags: sshfx.AttrACModTime,
@@ -614,6 +744,9 @@ func (cl *Client) Chtimes(name string, atime, mtime time.Time) error {
 	})
 }
 
+// RealPath returns the server canonicalized absolute path for the given path name.
+// This is useful for converting path names containing ".." components,
+// or relative pathnames without a leading slash into absolute paths.
 func (cl *Client) RealPath(name string) (string, error) {
 	pkt, err := getPacket[sshfx.PathPseudoPacket](context.Background(), cl, &sshfx.RealPathPacket{
 		Path: name,
@@ -625,6 +758,10 @@ func (cl *Client) RealPath(name string) (string, error) {
 	return pkt.Path, nil
 }
 
+// ReadLink returns the destination of the named symbolic link.
+//
+// The client cannot guarantee any specific way that a server handles a relative link destination.
+// That is, you may receive a relative link destination, one that has been converted to an absolute path.
 func (cl *Client) ReadLink(name string) (string, error) {
 	pkt, err := getPacket[sshfx.PathPseudoPacket](context.Background(), cl, &sshfx.ReadLinkPacket{
 		Path: name,
@@ -636,6 +773,10 @@ func (cl *Client) ReadLink(name string) (string, error) {
 	return pkt.Path, nil
 }
 
+// Rename renames (moves) oldpath to newpath.
+// If newpath already exists and is not a directory, Rename replaces it.
+// Server-specific restrictions may apply when old path and new path are in different directories.
+// Even within the same directory, on non-Unix servers Rename is not guaranteed to be an atomic operation.
 func (cl *Client) Rename(oldpath, newpath string) error {
 	if cl.hasExtension(openssh.ExtensionPOSIXRename()) {
 		err := cl.sendPacket(context.Background(), &openssh.POSIXRenameExtendedPacket{
@@ -660,6 +801,8 @@ func (cl *Client) Rename(oldpath, newpath string) error {
 	return nil
 }
 
+// Symlink creates newname as a symbolic link to oldname.
+// There is no guarantee for how a server may handle the request if oldname does not exist.
 func (cl *Client) Symlink(oldname, newname string) error {
 	err := cl.sendPacket(context.Background(), &sshfx.SymlinkPacket{
 		LinkPath:   newname,
@@ -676,9 +819,14 @@ func (cl *Client) hasExtension(ext *sshfx.ExtensionPair) bool {
 	return cl.exts[ext.Name] == ext.Data
 }
 
+// Link creates newname as a hard link to oldname file.
+//
+// If the server did not announce support for the "hardlink@openssh.com" extension,
+// then no request will be sent,
+// and Link returns an *fs.LinkError wrapping sshfx.StatusOpUnsupported.
 func (cl *Client) Link(oldname, newname string) error {
 	if !cl.hasExtension(openssh.ExtensionHardlink()) {
-		return &os.LinkError{Op: "hardlink", Old: oldname, New: newname, Err: sshfx.StatusOPUnsupported}
+		return &os.LinkError{Op: "hardlink", Old: oldname, New: newname, Err: sshfx.StatusOpUnsupported}
 	}
 
 	err := cl.sendPacket(context.Background(), &openssh.HardlinkExtendedPacket{
@@ -692,6 +840,9 @@ func (cl *Client) Link(oldname, newname string) error {
 	return nil
 }
 
+// Readdir reads the named directory, returning all its directory entries as [fs.FileInfo] sorted by filename.
+// If an error occurs reading the directory,
+// Readdir returns the entries it was able to read before the error, along with the error.
 func (cl *Client) Readdir(name string) ([]fs.FileInfo, error) {
 	d, err := cl.OpenDir(name)
 	if err != nil {
@@ -699,17 +850,39 @@ func (cl *Client) Readdir(name string) ([]fs.FileInfo, error) {
 	}
 	defer d.Close()
 
-	return d.Readdir(0)
+	fis, err := d.Readdir(0)
+
+	slices.SortFunc(fis, func(a, b fs.FileInfo) int {
+		return cmp.Compare(a.Name(), b.Name())
+	})
+
+	return fis, err
 }
 
+// ReadDir reads the named directory, returning all its directory entries sorted by filename.
+// If an error occurs reading the directory,
+// ReadDir returns the entries it was able to read before the error, along with the error.
 func (cl *Client) ReadDir(name string) ([]fs.DirEntry, error) {
+	return cl.ReadDirContext(context.Background(), name)
+}
+
+// ReadDirContext reads the named directory, returning all its directory entries sorted by filename.
+// If an error occurs reading the directory, including the context being canceled,
+// ReadDir returns the entries is was able to read before the error, along with the error.
+func (cl *Client) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntry, error) {
 	d, err := cl.OpenDir(name)
 	if err != nil {
 		return nil, err
 	}
 	defer d.Close()
 
-	return d.ReadDir(0)
+	fis, err := d.ReadDir(0)
+
+	slices.SortFunc(fis, func(a, b fs.DirEntry) int {
+		return cmp.Compare(a.Name(), b.Name())
+	})
+
+	return fis, err
 }
 
 func (cl *Client) stat(name string) (*sshfx.NameEntry, error) {
@@ -726,10 +899,17 @@ func (cl *Client) stat(name string) (*sshfx.NameEntry, error) {
 	}, nil
 }
 
+// Stat returns a FileInfo describing the named file.
+// If the file is a symbolic link, the returned FileInfo describes the link's target.
 func (cl *Client) Stat(name string) (fs.FileInfo, error) {
 	return cl.stat(name)
 }
 
+// LStat returns a FileInfo describing the named file.
+// If the file is a symbolic link, the returned FileInfo describes the symbolic link
+// LStat makes no attempte to follow the link.
+//
+// The description returned may have server specific caveats and special cases that cannot be covered here.
 func (cl *Client) LStat(name string) (fs.FileInfo, error) {
 	pkt, err := getPacket[sshfx.AttrsPacket](context.Background(), cl, &sshfx.LStatPacket{
 		Path: name,
@@ -744,6 +924,9 @@ func (cl *Client) LStat(name string) (fs.FileInfo, error) {
 	}, nil
 }
 
+// Dir represents an open directory handle.
+//
+// The methods of Dir are safe for concurrent use.
 type Dir struct {
 	cl   *Client
 	name string
@@ -753,8 +936,16 @@ type Dir struct {
 	entries []*sshfx.NameEntry
 }
 
+// OpenDir opens the named directory for reading.
+// If successful, methods on the returned Dir can be used for reading.
+//
+// The semantics of SSH_FX_OPENDIR is such that the associated file handle is in a read-only mode.
 func (cl *Client) OpenDir(name string) (*Dir, error) {
-	pkt, err := getPacket[sshfx.HandlePacket](context.Background(), cl, &sshfx.OpenDirPacket{
+	return cl.openDir(context.Background(), name)
+}
+
+func (cl *Client) openDir(ctx context.Context, name string) (*Dir, error) {
+	pkt, err := getPacket[sshfx.HandlePacket](ctx, cl, &sshfx.OpenDirPacket{
 		Path: name,
 	})
 	if err != nil {
@@ -768,6 +959,8 @@ func (cl *Client) OpenDir(name string) (*Dir, error) {
 	}, nil
 }
 
+// Close closes the Dir, rendering it unusable for I/O.
+// Close will not send any request, and return an error if it has already been called.
 func (d *Dir) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -795,24 +988,78 @@ func (d *Dir) Close() error {
 	return nil
 }
 
+// Name returns the name of the directory as presented to OpenDir.
 func (d *Dir) Name() string {
 	return d.name
 }
 
-// readdir performs a single SSH_FXP_READDIR request.
+// readdir returns an iterator over the directory entries of the directory.
+// We do not expose an iterator, because none have been defined yet,
+// and we do not want to accidentally implement an inconsistent API.
+// However, for internal usage, we can definitely make use of this to simplify the common parts of ReadDir and Readdir.
+//
 // Callers must guarantee synchronization by either holding the file lock, or holding an exclusive reference.
-func (d *Dir) readdir() ([]*sshfx.NameEntry, error) {
-	pkt, err := getPacket[sshfx.NamePacket](context.Background(), d.cl, &sshfx.ReadDirPacket{
-		Handle: d.handle,
-	})
-	if err != nil {
-		return nil, &fs.PathError{Op: "readdir", Path: d.name, Err: err}
-	}
+func (d *Dir) readdir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
+	return func(yield func(v *sshfx.NameEntry, err error) bool) {
+		// We have saved entries, use those first.
+		if len(d.entries) > 0 {
+			for i, ent := range d.entries {
+				if !yield(ent, nil) {
+					// Early break, delete the entries we have yielded.
+					d.entries = slices.Delete(d.entries, 0, i+1)
+					return
+				}
+			}
 
-	return pkt.Entries, nil
+			// We got through all the remaining entries, delete all the entries.
+			d.entries = slices.Delete(d.entries, 0, len(d.entries))
+		}
+
+		for {
+			pkt, err := getPacket[sshfx.NamePacket](ctx, d.cl, &sshfx.ReadDirPacket{
+				Handle: d.handle,
+			})
+			if err != nil {
+				// There are no remaining entries to save here,
+				// SFTP can only return either an error or a result, never both.
+				if err == io.EOF {
+					yield(nil, io.EOF)
+					return
+				}
+
+				yield(nil, &fs.PathError{Op: "readdir", Path: d.name, Err: err})
+				return
+			}
+
+			for i, entry := range pkt.Entries {
+				if !yield(entry, nil) {
+					// Early break, save the remaining entries we got for maybe later.
+					d.entries = append(d.entries, pkt.Entries[i+1:]...)
+					return
+				}
+			}
+		}
+	}
 }
 
+// Readdir calls [ReaddirContext] with the background context.
 func (d *Dir) Readdir(n int) ([]fs.FileInfo, error) {
+	return d.ReaddirContext(context.Background(), n)
+}
+
+// ReaddirContext reads the contents of the directory and returns a slice of up to n [fs.FileInfo] values,
+// as they were returned from the server,
+// in directory order.
+// Subsequent calls to the same file will yield later FileInfo records in the directory.
+//
+// If n > 0, ReaddirContext returns as most n FileInfo records.
+// In this case, if ReadDirContext returns an empty slice,
+// it will return an error explaining why.
+// At the end of a directory, the error is io.EOF.
+//
+// If n <= 0, ReaddirContext returns all the FileInfo records remaining in the directory.
+// When it succeeds, it returns a nil error (not io.EOF).
+func (d *Dir) ReaddirContext(ctx context.Context, n int) ([]fs.FileInfo, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -822,47 +1069,43 @@ func (d *Dir) Readdir(n int) ([]fs.FileInfo, error) {
 
 	var ret []fs.FileInfo
 
-	// We have saved entries, use those to first try and satisfy the request.
-	if len(d.entries) > 0 {
-		for _, ent := range d.entries {
-			if n > 0 && len(ret) >= n {
-				break
-			}
-
-			ret = append(ret, ent)
-		}
-
-		remaining := copy(d.entries, d.entries[len(ret):])
-		clear(d.entries[remaining:])
-		d.entries = d.entries[:remaining]
-	}
-
-	for n <= 0 || len(ret) < n {
-		entries, err := d.readdir()
-
-		for i, ent := range entries {
-			if n > 0 && len(ret) >= n {
-				// copy entries into a new slice, to avoid aliasing and pinning the earlier entries.
-				d.entries = append(d.entries, entries[i:]...)
-				break
-			}
-
-			ret = append(ret, ent)
-		}
-
+	for ent, err := range d.readdir(ctx) {
 		if err != nil {
-			if len(ret) == 0 {
-				return nil, err
+			if err == io.EOF && n <= 0 {
+				return ret, nil
 			}
 
-			return ret, nil
+			return ret, err
+		}
+
+		ret = append(ret, ent)
+
+		if n > 0 && len(ret) >= n {
+			break
 		}
 	}
 
 	return ret, nil
 }
 
+// ReadDir calls [ReadDirContext] with the background context.
 func (d *Dir) ReadDir(n int) ([]fs.DirEntry, error) {
+	return d.ReadDirContext(context.Background(), n)
+}
+
+// ReadDirContext reads the contents of the directory and returns a slice of up to n [fs.DirEntry] values,
+// as they were returned from the server,
+// in directory order.
+// Subsequent calls to the same file will yield later DirEntry records in the directory.
+//
+// If n > 0, ReadDirContext returns as most n DirEntry records.
+// In this case, if ReadDirContext returns an empty slice,
+// it will return an error explaining why.
+// At the end of a directory, the error is io.EOF.
+//
+// If n <= 0, ReadDirContext returns all the DirEntry records remaining in the directory.
+// When it succeeds, it returns a nil error (not io.EOF).
+func (d *Dir) ReadDirContext(ctx context.Context, n int) ([]fs.DirEntry, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -872,46 +1115,28 @@ func (d *Dir) ReadDir(n int) ([]fs.DirEntry, error) {
 
 	var ret []fs.DirEntry
 
-	// We have saved entries, use those to first try and satisfy the request.
-	if len(d.entries) > 0 {
-		for _, ent := range d.entries {
-			if n > 0 && len(ret) >= n {
-				break
-			}
-
-			ret = append(ret, ent)
-		}
-
-		remaining := copy(d.entries, d.entries[len(ret):])
-		clear(d.entries[remaining:])
-		d.entries = d.entries[:remaining]
-	}
-
-	for n <= 0 || len(ret) < n {
-		entries, err := d.readdir()
-
-		for i, ent := range entries {
-			if n > 0 && len(ret) >= n {
-				// copy entries into a new slice, to avoid aliasing and pinning the earlier entries.
-				d.entries = append(d.entries, entries[i:]...)
-				break
-			}
-
-			ret = append(ret, ent)
-		}
-
+	for ent, err := range d.readdir(ctx) {
 		if err != nil {
-			if len(ret) == 0 {
-				return nil, err
+			if err == io.EOF && n <= 0 {
+				return ret, nil
 			}
 
-			return ret, nil
+			return ret, err
+		}
+
+		ret = append(ret, ent)
+
+		if n > 0 && len(ret) >= n {
+			break
 		}
 	}
 
 	return ret, nil
 }
 
+// File represents an open file handle.
+//
+// The methods of File are safe for concurrent use.
 type File struct {
 	cl   *Client
 	name string
@@ -961,14 +1186,30 @@ func toPortableFlags(f int) uint32 {
 	return out
 }
 
+// Open opens the named file for reading.
+// If successful, methods on the returned file can be used for reading;
+// the associated file handle has mode OpenFlagReadOnly.
 func (cl *Client) Open(name string) (*File, error) {
 	return cl.OpenFile(name, OpenFlagReadOnly, 0)
 }
 
+// Create creates of truncates the named file.
+// If the file already exists, it is truncated.
+// If the file does not exist, it is created with mode 0o666 (before umask).
+// If successful, methods on the returned File can be used for I/O;
+// the associated file handle has mode OpenFlagReadWrite.
 func (cl *Client) Create(name string) (*File, error) {
 	return cl.OpenFile(name, OpenFlagReadWrite|OpenFlagCreate|OpenFlagTruncate, 0666)
 }
 
+// OpenFile is the generalized open call;
+// most users can use the simplified Open or Create methods instead.
+// It opens the named file with the specified flag (OpenFlagReadOnly, etc.).
+// If the file does not exist, and the OpenFileCreate flag is passed, it is created with mode perm (before umask).
+// If successful, methods on the returned File can be used for I/O.
+//
+// Note well: since all Write operations are down through an offset-specifying operation,
+// the OpenFlagAppend flag is currently ignored.
 func (cl *Client) OpenFile(name string, flag int, perm fs.FileMode) (*File, error) {
 	pkt, err := getPacket[sshfx.HandlePacket](context.Background(), cl, &sshfx.OpenPacket{
 		Filename: name,
@@ -989,6 +1230,8 @@ func (cl *Client) OpenFile(name string, flag int, perm fs.FileMode) (*File, erro
 	}, nil
 }
 
+// Close closes the File, rendering it unusable for I/O.
+// Close will not send any request, and return an error if it has already been called.
 func (f *File) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1016,6 +1259,9 @@ func (f *File) Close() error {
 	return nil
 }
 
+// Name returns the name of the file as presented to Open.
+//
+// It is safe to call Name after Close.
 func (f *File) Name() string {
 	return f.name
 }
@@ -1039,6 +1285,8 @@ func (f *File) setstat(ctx context.Context, attrs *sshfx.Attributes) error {
 	return nil
 }
 
+// Truncate changes the size of the file.
+// It does not change the I/O offset.
 func (f *File) Truncate(size int64) error {
 	return f.setstat(context.Background(), &sshfx.Attributes{
 		Flags: sshfx.AttrSize,
@@ -1046,6 +1294,11 @@ func (f *File) Truncate(size int64) error {
 	})
 }
 
+// Chmod changes the mode of the file to mode.
+//
+// The Go FileMode will be converted to a "portable" POSIX file permission, and then sent to the server.
+// The server is then responsible for interpreting that permission.
+// It is possible the server and this client disagree on what some flags mean.
 func (f *File) Chmod(mode fs.FileMode) error {
 	return f.setstat(context.Background(), &sshfx.Attributes{
 		Flags:       sshfx.AttrPermissions,
@@ -1053,6 +1306,8 @@ func (f *File) Chmod(mode fs.FileMode) error {
 	})
 }
 
+// Chown changes the numeric uid and gid of the named file.
+// The server is told to set the uid and gid as given, and it is up to the server to define that behavior.
 func (f *File) Chown(uid, gid int) error {
 	return f.setstat(context.Background(), &sshfx.Attributes{
 		Flags: sshfx.AttrUIDGID,
@@ -1061,6 +1316,10 @@ func (f *File) Chown(uid, gid int) error {
 	})
 }
 
+// Chtimes sends a request to change the access and modification times of the file.
+//
+// Be careful, the server may later alter the access or modification time upon Close of this file.
+// To ensure the times stick, you should Close the file, and then use [Client.Chtimes] to update the times.
 func (f *File) Chtimes(atime, mtime time.Time) error {
 	return f.setstat(context.Background(), &sshfx.Attributes{
 		Flags: sshfx.AttrACModTime,
@@ -1083,6 +1342,7 @@ func (f *File) stat() (*sshfx.NameEntry, error) {
 	}, nil
 }
 
+// Stat returns the FileInfo structure describing file.
 func (f *File) Stat() (fs.FileInfo, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1243,6 +1503,9 @@ func (f *File) writeAt(ctx context.Context, b []byte, off int64) (written int, e
 	return written, nil
 }
 
+// WriteAt writes len(b) bytes to the File starting at byte offset off.
+// It returns the number of bytes written and an error, if any.
+// WriteAt returns a non-nil error when n != len(b).
 func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -1250,6 +1513,9 @@ func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 	return f.writeAt(context.Background(), b, off)
 }
 
+// Write writes len(b) bytes from b to the File.
+// It returns the number of bytes written and an error, if any.
+// Write returns a non-nil error when n != len(b)
 func (f *File) Write(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1260,6 +1526,7 @@ func (f *File) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// WriteString is like Write, but writes the contents of the string s rather than a slice of bytes.
 func (f *File) WriteString(s string) (n int, err error) {
 	b := unsafe.Slice(unsafe.StringData(s), len(s))
 	return f.Write(b)
@@ -1634,6 +1901,10 @@ func (f *File) readAt(ctx context.Context, b []byte, off int64) (read int, err e
 	return len(b), nil
 }
 
+// ReadAt reads len(b) bytes from the File starting at byte offset off.
+// It returns the number of bytes read and the error, if any.
+// ReadAt always returns a non-nil error when n < len(b).
+// At the end of file, the error is io.EOF.
 func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -1641,6 +1912,9 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	return f.readAt(context.Background(), b, off)
 }
 
+// Read reads up to len(b) bytes from the File and stores them in b.
+// It returns the number of bytes read and any error encountered.
+// At end of file, Read returns 0, io.EOF.
 func (f *File) Read(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1648,6 +1922,10 @@ func (f *File) Read(b []byte) (int, error) {
 	n, err := f.readAt(context.Background(), b, f.offset)
 
 	f.offset += int64(n)
+
+	if err == io.EOF && n != 0 {
+		return n, nil
+	}
 
 	return n, err
 }
@@ -1696,7 +1974,7 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 }
 
 // WriteTo writes the file to the given Writer.
-// The return value is the number of bytes written.
+// The return value is the number of bytes written, which may be different than the bytes read.
 // Any error encountered during the write is also returned.
 //
 // This method is preferred over calling Read mulitple times
@@ -1817,6 +2095,11 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	return written, writeErr
 }
 
+// WriteFile writes data to the named file, creating it if neccessary.
+// If the file does not exist, WriteFile creates it with permissions perm (before umask);
+// otherwise WriteFile truncates it before writing, without changing permissions.
+// Since WriteFile requires multiple system calls to complete,
+// a failure mid-operation can leave the file in a partially written state.
 func (cl *Client) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	f, err := cl.OpenFile(name, OpenFlagWriteOnly|OpenFlagCreate|OpenFlagTruncate, perm)
 	if err != nil {
@@ -1828,6 +2111,9 @@ func (cl *Client) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	return cmp.Or(err, f.Close())
 }
 
+// ReadFile reads the named file and returns the contents.
+// A successful call returns err == nil, not err == EOF.
+// Because ReadFile reads the whole file, it does not treat an EOF from Read as an error to be reported.
 func (cl *Client) ReadFile(name string) ([]byte, error) {
 	f, err := cl.Open(name)
 	if err != nil {
@@ -1849,15 +2135,23 @@ func (cl *Client) ReadFile(name string) ([]byte, error) {
 	return buf.Bytes(), cmp.Or(err, f.Close())
 }
 
+// These aliases to the io package values are provided as a convenience to avoid needing two imports to use Seek.
 const (
 	SeekStart   = io.SeekStart   // seek relative to the origin of the file
 	SeekCurrent = io.SeekCurrent // seek relative to the current offset
 	SeekEnd     = io.SeekEnd     // seek relative to the end
 )
 
-// Seek implements io.Seeker by setting the client offset for the next Read or
-// Write. It returns the next offset read. Seeking before or after the end of
-// the file is undefined. Seeking relative to the end calls Stat.
+// Seek sets the offset for the next Read or Write on file to offset,
+// interpreted accoreding to whence:
+// SeekStart means relative to the origin of the file,
+// SeekCurrent means relative to the current offset,
+// and SeekEnd means relative to the end.
+// It returns the new offset and an error, if any.
+//
+// Note well, a whence of SeekEnd will make an SSH_FX_FSTAT request on the file handle.
+// In some cases, this may mark a "mailbox"-style file as successfuly read,
+// and the server will delete the file, and return an error for all later operations.
 func (f *File) Seek(offset int64, whence int) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1866,18 +2160,20 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrClosed}
 	}
 
+	var abs int64
 	switch whence {
 	case SeekStart:
+		abs = offset
 	case SeekCurrent:
-		offset += f.offset
+		abs = f.offset + offset
 	case SeekEnd:
 		fi, err := f.Stat()
 		if err != nil {
-			return f.offset, err
+			return 0, err
 		}
-		offset += fi.Size()
+		abs = fi.Size() + offset
 	default:
-		return f.offset, &fs.PathError{
+		return 0, &fs.PathError{
 			Op:   "seek",
 			Path: f.name,
 			Err:  fmt.Errorf("%w: invalid whence: %d", fs.ErrInvalid, whence),
@@ -1892,13 +2188,19 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 		}
 	}
 
-	f.offset = offset
-	return f.offset, nil
+	f.offset = abs
+	return abs, nil
 }
 
+// Sync commits the current contents of the file to stable storage.
+// Typically, this means flushing the file system's in-memory copy of recently written data to disk.
+//
+// If the server did not announce support for the "fsync@openssh.com" extension,
+// then no request will be sent,
+// and Sync returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
 func (f *File) Sync() error {
 	if !f.cl.hasExtension(openssh.ExtensionFSync()) {
-		return &fs.PathError{Op: "fsync", Path: f.name, Err: sshfx.StatusOPUnsupported}
+		return &fs.PathError{Op: "fsync", Path: f.name, Err: sshfx.StatusOpUnsupported}
 	}
 
 	err := f.cl.sendPacket(context.Background(), &openssh.FSyncExtendedPacket{

@@ -490,13 +490,13 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 			// Return a different message when it is entirely unregisted into the system.
 			// This allows one to more easily identify the sitaution.
 			return nil, &sshfx.StatusPacket{
-				StatusCode:   sshfx.StatusOPUnsupported,
+				StatusCode:   sshfx.StatusOpUnsupported,
 				ErrorMessage: fmt.Sprintf("unregistered extended packet: %s", req.ExtendedRequest),
 			}
 		}
 
 		return nil, &sshfx.StatusPacket{
-			StatusCode:   sshfx.StatusOPUnsupported,
+			StatusCode:   sshfx.StatusOpUnsupported,
 			ErrorMessage: fmt.Sprintf("unsupported extended packet: %s", req.ExtendedRequest),
 		}
 
@@ -602,7 +602,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 	}
 
 	return nil, &sshfx.StatusPacket{
-		StatusCode:   sshfx.StatusOPUnsupported,
+		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprintf("unsupported packet: %s", req.Type()),
 	}
 }

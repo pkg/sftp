@@ -8,6 +8,7 @@ import (
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
 )
 
+// NameLookup defines an interface to lookup user names and group names in a portable manner.
 type NameLookup interface {
 	LookupUserName(string) string
 	LookupGroupName(string) string

@@ -22,7 +22,7 @@ const (
 	StatusBadMessage
 	StatusNoConnection
 	StatusConnectionLost
-	StatusOPUnsupported
+	StatusOpUnsupported
 
 	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-03.txt#section-7
 	StatusV4InvalidHandle
@@ -113,7 +113,7 @@ func (s Status) String() string {
 		return "SSH_FX_NO_CONNECTION"
 	case StatusConnectionLost:
 		return "SSH_FX_CONNECTION_LOST"
-	case StatusOPUnsupported:
+	case StatusOpUnsupported:
 		return "SSH_FX_OP_UNSUPPORTED"
 	case StatusV4InvalidHandle:
 		return "SSH_FX_INVALID_HANDLE"

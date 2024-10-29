@@ -326,7 +326,7 @@ func runClient(m *testing.M, rd io.Reader, wr io.WriteCloser) error {
 	defer cl.Close()
 
 	defer func() {
-		cl.ReportMetrics(os.Stdout)
+		cl.ReportPoolMetrics(os.Stdout)
 	}()
 
 	cwd, err = cl.RealPath(".")
