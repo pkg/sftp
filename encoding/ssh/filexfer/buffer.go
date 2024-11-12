@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/pkg/sftp/v2/internal/pool"
+	"github.com/pkg/sftp/v2/internal/sync"
 )
 
 // Various encoding errors.
@@ -22,7 +22,7 @@ type Buffer struct {
 	Err error
 }
 
-var bufPool = pool.NewPool[Buffer](64)
+var bufPool = sync.NewPool[Buffer](64)
 
 // NewBuffer creates and initializes a new buffer using buf as its initial contents.
 // The new buffer takes ownership of buf, and the caller should not use buf after this call.

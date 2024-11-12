@@ -1,21 +1,23 @@
 package sftp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"math"
-	"sync"
+	"time"
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
 	"github.com/pkg/sftp/v2/encoding/ssh/filexfer/openssh"
-	"github.com/pkg/sftp/v2/internal/pool"
+	"github.com/pkg/sftp/v2/internal/sync"
 )
 
 var errInvalidHandle = errors.New("invalid handle")
 
+// ServerHandler defines an interface that an SFTP service must implement in order to be handled by [Server] code.
 type ServerHandler interface {
 	Mkdir(ctx context.Context, req *sshfx.MkdirPacket) error
 	Remove(ctx context.Context, req *sshfx.RemovePacket) error
@@ -32,23 +34,29 @@ type ServerHandler interface {
 
 	Open(ctx context.Context, req *sshfx.OpenPacket) (FileHandler, error)
 	OpenDir(ctx context.Context, req *sshfx.OpenDirPacket) (DirHandler, error)
+
+	mustEmbedUnimplementedServerHandler()
 }
 
+// HardlinkServerHandler is an extension interface for supporting the "hardlink@openssh.com" extension.
 type HardlinkServerHandler interface {
 	ServerHandler
 	Hardlink(ctx context.Context, req *openssh.HardlinkExtendedPacket) error
 }
 
+// POSIXRenameServerHandler is an extension interface for supporting the "posix-rename@openssh.com" extension.
 type POSIXRenameServerHandler interface {
 	ServerHandler
 	POSIXRename(ctx context.Context, req *openssh.POSIXRenameExtendedPacket) error
 }
 
+// StatVFSServerHandler is an extension interface for supporting the "statvfs@openssh.com" extension.
 type StatVFSServerHandler interface {
 	ServerHandler
 	StatVFS(ctx context.Context, req *openssh.StatVFSExtendedPacket) (*openssh.StatVFSExtendedReplyPacket, error)
 }
 
+// FileHandler defines an interface that the Server code can use to support file-handle request packets.
 type FileHandler interface {
 	io.Closer
 	io.ReaderAt
@@ -57,16 +65,123 @@ type FileHandler interface {
 	Name() string
 	Handle() string
 	Stat() (*sshfx.Attributes, error)
-	SetStat(attrs *sshfx.Attributes) error
 	Sync() error
 }
 
+// SetStatFileHandler is an extension interface for handling the SSH_FXP_FSETSTAT request packet.
+type SetStatFileHandler interface {
+	FileHandler
+	SetStat(attrs *sshfx.Attributes) error
+}
+
+func noop() error {
+	return nil
+}
+
+// TruncateFileHandler is an extension interface for handling the truncate subfunction of an SSH_FXP_FSETSTAT request.
+type TruncateFileHandler interface {
+	FileHandler
+	Truncate(size int64) error
+}
+
+func trunc(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
+	sz, has := attr.GetSize()
+	if !has {
+		return noop, nil
+	}
+
+	if truncater, ok := f.(TruncateFileHandler); ok {
+		return func() error {
+			return truncater.Truncate(int64(sz))
+		}, nil
+	}
+
+	return nil, &sshfx.StatusPacket{
+		StatusCode:   sshfx.StatusOpUnsupported,
+		ErrorMessage: "unsupported fsetstat: ftruncate",
+	}
+}
+
+// ChownFileHandler is an extension interface for handling the chown subfunction of an SSH_FXP_FSETSTAT request.
+type ChownFileHandler interface {
+	FileHandler
+	Chown(uid, gid int) error
+}
+
+func chown(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
+	uid, gid, has := attr.GetUIDGID()
+	if !has {
+		return noop, nil
+	}
+
+	if chowner, ok := f.(ChownFileHandler); ok {
+		return func() error {
+			return chowner.Chown(int(uid), int(gid))
+		}, nil
+	}
+
+	return nil, &sshfx.StatusPacket{
+		StatusCode:   sshfx.StatusOpUnsupported,
+		ErrorMessage: "unsupported fsetstat: fchown",
+	}
+}
+
+// ChmodFileHandler is an extension interface for handling the chmod subfunction of an SSH_FXP_FSETSTAT request.
+type ChmodFileHandler interface {
+	FileHandler
+	Chmod(mode fs.FileMode) error
+}
+
+func chmod(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
+	mode, has := attr.GetPermissions()
+	if !has {
+		return noop, nil
+	}
+
+	if chmoder, ok := f.(ChmodFileHandler); ok {
+		return func() error {
+			return chmoder.Chmod(sshfx.ToGoFileMode(mode))
+		}, nil
+	}
+
+	return nil, &sshfx.StatusPacket{
+		StatusCode:   sshfx.StatusOpUnsupported,
+		ErrorMessage: "unsupported fsetstat: fchmod",
+	}
+}
+
+// ChtimesFileHandler is an extension interface for handling the chmod subfunction of an SSH_FXP_FSETSTAT request.
+type ChtimesFileHandler interface {
+	FileHandler
+	Chtimes(atime, mtime time.Time) error
+}
+
+func chtimes(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
+	atime, mtime, has := attr.GetACModTime()
+	if !has {
+		return noop, nil
+	}
+
+	if chtimeser, ok := f.(ChtimesFileHandler); ok {
+		return func() error {
+			return chtimeser.Chtimes(time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0))
+		}, nil
+	}
+
+	return nil, &sshfx.StatusPacket{
+		StatusCode:   sshfx.StatusOpUnsupported,
+		ErrorMessage: "unsupported fsetstat: fchtimes",
+	}
+}
+
+// StatVFSFileHandler is an extension interface for supporting the "fstatvfs@openssh.com" extension.
 type StatVFSFileHandler interface {
 	FileHandler
 
 	StatVFS() (*openssh.StatVFSExtendedReplyPacket, error)
 }
 
+// DirHandler defines an interface that the Server code can use to support directory-handle request packets.
 type DirHandler interface {
 	io.Closer
 
@@ -77,6 +192,16 @@ type DirHandler interface {
 
 type wrapHandler func(ctx context.Context, req sshfx.Packet) (sshfx.Packet, error)
 
+// handle is the intersection of FileHandler and DirHandler
+type handle interface {
+	io.Closer
+
+	Name() string
+	Handle() string
+}
+
+// A Server defines parameters for running an SFTP server.
+// The zero value for Server is a valid configuration.
 type Server struct {
 	Handler ServerHandler
 
@@ -87,16 +212,17 @@ type Server struct {
 	Debug io.Writer
 
 	wg      sync.WaitGroup
-	handles sync.Map
+	handles sync.Map[string, handle]
 	hijacks map[sshfx.PacketType]wrapHandler
 
-	dataPktPool *pool.Pool[sshfx.DataPacket]
+	dataPktPool *sync.Pool[sshfx.DataPacket]
 
 	mu       sync.Mutex
 	shutdown chan struct{}
 	err      error
 }
 
+// GracefulStop stops the SFTP server gracefully.
 func (srv *Server) GracefulStop() error {
 	srv.mu.Lock()
 	select {
@@ -110,14 +236,9 @@ func (srv *Server) GracefulStop() error {
 
 	srv.wg.Wait()
 
-	srv.handles.Range(func(k, v any) bool {
-		handle, _ := k.(string)
-		f, _ := v.(interface{ Name() string })
-
+	for handle, f := range srv.handles.Range {
 		fmt.Fprintf(srv.Debug, "sftp server file with handle %q left open: %T", handle, f.Name())
-
-		return true
-	})
+	}
 
 	return srv.err
 }
@@ -175,6 +296,9 @@ func (srv *Server) handshake(conn io.ReadWriter, maxPktLen uint32) error {
 	return nil
 }
 
+// FileFromHandle returns the FileHandler associated with the given handle.
+// It returns an error if there is no handler associated with the handle,
+// or if the handler is not a FileHandler.
 func (srv *Server) FileFromHandle(handle string) (FileHandler, error) {
 	f, _ := srv.handles.Load(handle)
 	file, _ := f.(FileHandler)
@@ -184,6 +308,9 @@ func (srv *Server) FileFromHandle(handle string) (FileHandler, error) {
 	return file, nil
 }
 
+// DirFromHandle returns the DirHandler associated with the given handle.
+// It returns an error if there is no handler associated with the handle,
+// or if the handler is not a FileHandler.
 func (srv *Server) DirFromHandle(handle string) (DirHandler, error) {
 	f, _ := srv.handles.Load(handle)
 	file, _ := f.(DirHandler)
@@ -201,6 +328,11 @@ func (srv *Server) DirFromHandle(handle string) (DirHandler, error) {
 	return nil
 } */
 
+// Hijack registers a hijacking function that will be called to handle the given SFTP request packet,
+// rather than the standard Server code calling into the ServerHandler.
+// The error returned by the function will be turned into a SSH_FXP_STATUS package,
+// and a nil error return will reply back with an SSH_FX_OK.
+// This is really only useful for supporting newer versions of the SFTP standard.
 func Hijack[REQ sshfx.Packet](srv *Server, fn func(context.Context, REQ) error) error {
 	wrap := wrapHandler(func(ctx context.Context, req sshfx.Packet) (sshfx.Packet, error) {
 		return nil, fn(ctx, req.(REQ))
@@ -211,6 +343,12 @@ func Hijack[REQ sshfx.Packet](srv *Server, fn func(context.Context, REQ) error) 
 	return srv.register(pkt.Type(), wrap)
 }
 
+// HijackWithResponse registers a hijacking function that will be called to handle the given SFTP request packet,
+// rather than the standard Server code calling into the ServerHandler.
+// If a non-nil error is returned by the function, it will be turned into a SSH_FXP_STATUS package,
+// and any returned response packet will be ignored.
+// Otherwise, the returned response packet will be sent to the client.
+// This is really only useful for supporting newer versions of the SFTP standard.
 func HijackWithResponse[REQ, RESP sshfx.Packet](srv *Server, fn func(context.Context, REQ) (RESP, error)) error {
 	wrap := wrapHandler(func(ctx context.Context, req sshfx.Packet) (sshfx.Packet, error) {
 		return fn(ctx, req.(REQ))
@@ -237,6 +375,13 @@ func (srv *Server) register(typ sshfx.PacketType, wrap wrapHandler) error {
 	return nil
 }
 
+// Serve accepts incoming connections on the socket conn.
+// The server reads SFTP requests and then calls the registered handlers to reply to them.
+// Serve returns when a read returns any error other than sshfx.ErrBadMessage,
+// or a write returns any error.
+// conn will be closed when this method returns.
+// Serve will return a non-nil error unless GracefulStop is called,
+// or an EOF is encountered at the end of a complete packet.
 func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 	srv.mu.Lock()
 	if srv.shutdown != nil {
@@ -290,7 +435,7 @@ func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 	dataHint := make([]byte, maxDataLen)
 	outHint := make([]byte, maxPktLen)
 
-	srv.dataPktPool = pool.NewPool[sshfx.DataPacket](64)
+	srv.dataPktPool = sync.NewPool[sshfx.DataPacket](64)
 
 	for {
 		select {
@@ -461,10 +606,9 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 			}
 
 		case interface{ GetHandle() string }:
-			f, _ := srv.handles.Load(req.GetHandle())
-			file, _ := f.(FileHandler)
-			if file == nil {
-				return nil, errInvalidHandle
+			file, err := srv.FileFromHandle(req.GetHandle())
+			if err != nil {
+				return nil, err
 			}
 
 			switch req.(type) {
@@ -488,7 +632,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 		if _, ok := req.Data.(*sshfx.Buffer); ok {
 			// Return a different message when it is entirely unregisted into the system.
-			// This allows one to more easily identify the sitaution.
+			// This allows one to more easily identify the situation.
 			return nil, &sshfx.StatusPacket{
 				StatusCode:   sshfx.StatusOpUnsupported,
 				ErrorMessage: fmt.Sprintf("unregistered extended packet: %s", req.ExtendedRequest),
@@ -515,22 +659,21 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 		}, nil
 
 	case *sshfx.OpenDirPacket:
-		file, err := get(srv, req, srv.Handler.OpenDir)
+		dir, err := get(srv, req, srv.Handler.OpenDir)
 		if err != nil {
 			return nil, err
 		}
 
-		handle := file.Handle()
+		handle := dir.Handle()
 
-		srv.handles.Store(handle, file)
+		srv.handles.Store(handle, dir)
 
 		return &sshfx.HandlePacket{
 			Handle: handle,
 		}, nil
 
 	case *sshfx.ClosePacket:
-		f, _ := srv.handles.LoadAndDelete(req.Handle)
-		file, _ := f.(io.Closer)
+		file, _ := srv.handles.LoadAndDelete(req.Handle)
 		if file == nil {
 			return nil, errInvalidHandle
 		}
@@ -566,6 +709,8 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 			n, err := file.ReadAt(hint, int64(req.Offset))
 			if err != nil {
+				// We cannot return results AND a status like SSH_FX_EOF,
+				// so we return io.EOF only if we didn't read anything at all.
 				if !errors.Is(err, io.EOF) || n == 0 {
 					return nil, err
 				}
@@ -583,6 +728,9 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 			}
 
 			if n != len(req.Data) {
+				// We have no way to return the length of bytes written,
+				// so we have to instead return a short write error,
+				// otherwise the client might not ever know we didn't write the whole request.
 				return nil, io.ErrShortWrite
 			}
 
@@ -597,7 +745,43 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 			return &sshfx.AttrsPacket{Attrs: *attrs}, nil
 
 		case *sshfx.FSetStatPacket:
-			return nil, file.SetStat(&req.Attrs)
+			if file, ok := file.(SetStatFileHandler); ok {
+				return nil, file.SetStat(&req.Attrs)
+			}
+
+			if len(req.Attrs.ExtendedAttributes) > 0 {
+				return nil, &sshfx.StatusPacket{
+					StatusCode:   sshfx.StatusOpUnsupported,
+					ErrorMessage: "unsupported fsetstat: extended attributes",
+				}
+			}
+
+			trunc, err := trunc(&req.Attrs, file)
+			if err != nil {
+				return nil, err
+			}
+
+			chown, err := chown(&req.Attrs, file)
+			if err != nil {
+				return nil, err
+			}
+
+			chmod, err := chmod(&req.Attrs, file)
+			if err != nil {
+				return nil, err
+			}
+
+			chtimes, err := chtimes(&req.Attrs, file)
+			if err != nil {
+				return nil, err
+			}
+
+			return nil, cmp.Or(
+				trunc(),
+				chown(),
+				chmod(),
+				chtimes(),
+			)
 		}
 	}
 

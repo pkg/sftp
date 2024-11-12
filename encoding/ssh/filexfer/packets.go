@@ -86,6 +86,8 @@ func (p *RawPacket) UnmarshalBinary(data []byte) error {
 	return p.UnmarshalFrom(NewBuffer(clone[:n]))
 }
 
+// PacketBody unmarshals and returns the concretely typed Packet that this raw packet encodes.
+// It returns an error if the packet type is not recognized, or unmarshalling the packet fails.
 func (p *RawPacket) PacketBody() (Packet, error) {
 	body, err := newPacketFromType(p.PacketType)
 	if err != nil {

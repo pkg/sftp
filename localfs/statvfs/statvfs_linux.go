@@ -11,6 +11,7 @@ const (
 	mountFlagNoSUID   = 0x02 // ST_NOSUID
 )
 
+// StatVFS converts the syscall.Statfs from the Linux syscall to OpenSSH StatVFS.
 func StatVFS(name string) (*openssh.StatVFSExtendedReplyPacket, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(name, &stat); err != nil {

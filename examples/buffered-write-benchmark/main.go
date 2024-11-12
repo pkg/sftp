@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/sftp/v2"
 )
 
+// Various flags to control the benchmark.
 var (
 	User = flag.String("user", os.Getenv("USER"), "ssh username")
 	Pass = flag.String("pass", os.Getenv("SOCKSIE_SSH_PASSWORD"), "ssh password")

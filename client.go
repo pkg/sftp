@@ -13,7 +13,6 @@ import (
 	"os"
 	"path"
 	"slices"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -21,7 +20,7 @@ import (
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
 	"github.com/pkg/sftp/v2/encoding/ssh/filexfer/openssh"
-	"github.com/pkg/sftp/v2/internal/pool"
+	"github.com/pkg/sftp/v2/internal/sync"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -35,10 +34,10 @@ type clientConn struct {
 	reqid atomic.Uint32
 	rd    io.Reader
 
-	resPool *pool.WorkPool[result]
+	resPool *sync.WorkPool[result]
 
-	bufPool *pool.SlicePool[[]byte, byte]
-	pktPool *pool.Pool[sshfx.RawPacket]
+	bufPool *sync.SlicePool[[]byte, byte]
+	pktPool *sync.Pool[sshfx.RawPacket]
 
 	mu       sync.Mutex
 	closed   chan struct{}
@@ -551,10 +550,10 @@ func NewClientPipe(ctx context.Context, rd io.Reader, wr io.WriteCloser, opts ..
 
 	cl.exts = exts
 
-	cl.conn.resPool = pool.NewWorkPool[result](cl.maxInflight)
+	cl.conn.resPool = sync.NewWorkPool[result](cl.maxInflight)
 
-	cl.conn.bufPool = pool.NewSlicePool[[]byte](cl.maxInflight, int(cl.maxPacket))
-	cl.conn.pktPool = pool.NewPool[sshfx.RawPacket](cl.maxInflight)
+	cl.conn.bufPool = sync.NewSlicePool[[]byte](cl.maxInflight, int(cl.maxPacket))
+	cl.conn.pktPool = sync.NewPool[sshfx.RawPacket](cl.maxInflight)
 
 	go func() {
 		if err := cl.conn.recvLoop(cl.maxPacket); err != nil {
@@ -565,8 +564,10 @@ func NewClientPipe(ctx context.Context, rd io.Reader, wr io.WriteCloser, opts ..
 	return cl, nil
 }
 
-// ReportPoolMetrics writes buffer pool metrics to the given writer.
+// ReportPoolMetrics writes buffer pool metrics to the given writer, if pool metrics are enabled.
 // It is expected that this is only useful during testing, and benchmarking.
+//
+// To enable you must include `-tag sftp.sync.metrics` to your go command-line.
 func (cl *Client) ReportPoolMetrics(wr io.Writer) {
 	if cl.conn.bufPool != nil {
 		hits, total := cl.conn.bufPool.Hits()
@@ -993,27 +994,25 @@ func (d *Dir) Name() string {
 	return d.name
 }
 
-// readdir returns an iterator over the directory entries of the directory.
-// We do not expose an iterator, because none have been defined yet,
+// rangedir returns an iterator over the directory entries of the directory.
+// We do not expose an iterator, because none has been standardized yet.
 // and we do not want to accidentally implement an inconsistent API.
 // However, for internal usage, we can definitely make use of this to simplify the common parts of ReadDir and Readdir.
 //
 // Callers must guarantee synchronization by either holding the file lock, or holding an exclusive reference.
-func (d *Dir) readdir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
+func (d *Dir) rangedir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
 	return func(yield func(v *sshfx.NameEntry, err error) bool) {
-		// We have saved entries, use those first.
-		if len(d.entries) > 0 {
-			for i, ent := range d.entries {
-				if !yield(ent, nil) {
-					// Early break, delete the entries we have yielded.
-					d.entries = slices.Delete(d.entries, 0, i+1)
-					return
-				}
+		// Pull from saved entries first.
+		for i, ent := range d.entries {
+			if !yield(ent, nil) {
+				// Early break, delete the entries we have yielded.
+				d.entries = slices.Delete(d.entries, 0, i+1)
+				return
 			}
-
-			// We got through all the remaining entries, delete all the entries.
-			d.entries = slices.Delete(d.entries, 0, len(d.entries))
 		}
+
+		// We got through all the remaining entries, delete all the entries.
+		d.entries = slices.Delete(d.entries, 0, len(d.entries))
 
 		for {
 			pkt, err := getPacket[sshfx.NamePacket](ctx, d.cl, &sshfx.ReadDirPacket{
@@ -1022,7 +1021,7 @@ func (d *Dir) readdir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
 			if err != nil {
 				// There are no remaining entries to save here,
 				// SFTP can only return either an error or a result, never both.
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					yield(nil, io.EOF)
 					return
 				}
@@ -1069,9 +1068,9 @@ func (d *Dir) ReaddirContext(ctx context.Context, n int) ([]fs.FileInfo, error) 
 
 	var ret []fs.FileInfo
 
-	for ent, err := range d.readdir(ctx) {
+	for ent, err := range d.rangedir(ctx) {
 		if err != nil {
-			if err == io.EOF && n <= 0 {
+			if errors.Is(err, io.EOF) && n <= 0 {
 				return ret, nil
 			}
 
@@ -1115,9 +1114,9 @@ func (d *Dir) ReadDirContext(ctx context.Context, n int) ([]fs.DirEntry, error) 
 
 	var ret []fs.DirEntry
 
-	for ent, err := range d.readdir(ctx) {
+	for ent, err := range d.rangedir(ctx) {
 		if err != nil {
-			if err == io.EOF && n <= 0 {
+			if errors.Is(err, io.EOF) && n <= 0 {
 				return ret, nil
 			}
 
@@ -1923,7 +1922,7 @@ func (f *File) Read(b []byte) (int, error) {
 
 	f.offset += int64(n)
 
-	if err == io.EOF && n != 0 {
+	if errors.Is(err, io.EOF) && n != 0 {
 		return n, nil
 	}
 

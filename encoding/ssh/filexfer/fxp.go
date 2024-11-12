@@ -3,7 +3,7 @@ package sshfx
 import (
 	"fmt"
 
-	"github.com/pkg/sftp/v2/internal/pool"
+	"github.com/pkg/sftp/v2/internal/sync"
 )
 
 // PacketType defines the various SFTP packet types.
@@ -126,11 +126,16 @@ func (f PacketType) String() string {
 }
 
 var (
-	readPool   = pool.NewPool[ReadPacket](64)
-	writePool  = pool.NewPool[WritePacket](64)
-	wrDataPool = pool.NewSlicePool[[]byte](64, DefaultMaxDataLength)
+	readPool   = sync.NewPool[ReadPacket](64)
+	writePool  = sync.NewPool[WritePacket](64)
+	wrDataPool = sync.NewSlicePool[[]byte](64, DefaultMaxDataLength)
 )
 
+// PoolReturn adds a packet to an internal pool for its type, if one exists.
+// If a pool has not been setup, then it is a no-op.
+//
+// Currently, this is only setup for [ReadPacket] and [WritePacket],
+// as these are generally the most heavily used packet types.
 func PoolReturn(p Packet) {
 	switch p := p.(type) {
 	case *ReadPacket:

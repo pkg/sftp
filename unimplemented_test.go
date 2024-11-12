@@ -6,7 +6,7 @@ import (
 
 func TestUnimplemented(t *testing.T) {
 	type S struct {
-		UnimplementedHandler
+		UnimplementedServerHandler
 	}
 
 	var _ ServerHandler = &S{}

@@ -6,19 +6,21 @@ ifneq ($(DELAY),0)
 DELAY_FLAG=-delay $(DELAY)
 endif
 
+TAGS=integration,sftp.sync.metrics
+
 integration:
-	go test -v $(DELAY_FLAG) -tags=integration
-	go test -v  $(DELAY_FLAG) -testserver=false -tags=integration
+	go test -v $(DELAY_FLAG) -tags=$(TAGS)
+	go test -v $(DELAY_FLAG) -testserver=false -tags=$(TAGS)
 
 integration_w_race:
-	go test -race -v $(DELAY_FLAG) -tags=integration
-	go test -v -testserver=false $(DELAY_FLAG) -tags=integration
+	go test -race -v $(DELAY_FLAG) -tags=$(TAGS)
+	go test -v $(DELAY_FLAG) -testserver=false -tags=$(TAGS)
 
 COUNT ?= 1
 BENCHMARK_PATTERN ?= "."
 
 benchmark:
-	go test -v -run=NONE -bench=$(BENCHMARK_PATTERN) -benchmem -count=$(COUNT) $(DELAY_FLAG) -tags=integration
+	go test -v -run=NONE -bench=$(BENCHMARK_PATTERN) -benchmem -count=$(COUNT) $(DELAY_FLAG) -tags=$(TAGS)
 
 benchmark_w_memprofile:
 ifneq ($(DELAY),0)
@@ -28,4 +30,3 @@ endif
 	go test -v -run=NONE -bench=$(BENCHMARK_PATTERN) -benchmem -count=$(COUNT) -memprofile memprofile.out -tags=integration
 	go tool pprof -sample_index=alloc_space -svg -output=memprofile-space.svg memprofile.out
 	go tool pprof -sample_index=alloc_objects -svg -output=memprofile-allocs.svg memprofile.out
-

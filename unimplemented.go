@@ -7,46 +7,38 @@ import (
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
 )
 
-type UnimplementedHandler struct{}
+// UnimplementedServerHandler must be embedded to both ensure forward compatible implementations,
+// but also stubs out any functions that you do not wish to implement.
+type UnimplementedServerHandler struct{}
 
-func (UnimplementedHandler) Mkdir(_ context.Context, req *sshfx.MkdirPacket) error {
+func (UnimplementedServerHandler) mustEmbedUnimplementedServerHandler() {}
+
+// Mkdir returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Mkdir(_ context.Context, req *sshfx.MkdirPacket) error {
 	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) Remove(_ context.Context, req *sshfx.RemovePacket) error {
+// Remove returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Remove(_ context.Context, req *sshfx.RemovePacket) error {
 	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) Rename(_ context.Context, req *sshfx.RenamePacket) error {
+// Rename returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Rename(_ context.Context, req *sshfx.RenamePacket) error {
 	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) Rmdir(_ context.Context, req *sshfx.RmdirPacket) error {
-	return &sshfx.StatusPacket{
-		StatusCode:   sshfx.StatusOpUnsupported,
-		ErrorMessage: fmt.Sprint(req.Type()),
-	}
-	return sshfx.StatusOpUnsupported
-}
-
-func (UnimplementedHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) error {
-	return &sshfx.StatusPacket{
-		StatusCode:   sshfx.StatusOpUnsupported,
-		ErrorMessage: fmt.Sprint(req.Type()),
-	}
-	return sshfx.StatusOpUnsupported
-}
-
-func (UnimplementedHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket) error {
+// Rmdir returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Rmdir(_ context.Context, req *sshfx.RmdirPacket) error {
 	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
@@ -54,59 +46,68 @@ func (UnimplementedHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket)
 	return sshfx.StatusOpUnsupported
 }
 
-func (UnimplementedHandler) LStat(_ context.Context, req *sshfx.LStatPacket) (*sshfx.Attributes, error) {
+// SetStat returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) error {
+	return &sshfx.StatusPacket{
+		StatusCode:   sshfx.StatusOpUnsupported,
+		ErrorMessage: fmt.Sprint(req.Type()),
+	}
+	return sshfx.StatusOpUnsupported
+}
+
+// Symlink returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket) error {
+	return &sshfx.StatusPacket{
+		StatusCode:   sshfx.StatusOpUnsupported,
+		ErrorMessage: fmt.Sprint(req.Type()),
+	}
+	return sshfx.StatusOpUnsupported
+}
+
+// LStat returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) LStat(_ context.Context, req *sshfx.LStatPacket) (*sshfx.Attributes, error) {
 	return nil, &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) Stat(_ context.Context, req *sshfx.StatPacket) (*sshfx.Attributes, error) {
+// Stat returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Stat(_ context.Context, req *sshfx.StatPacket) (*sshfx.Attributes, error) {
 	return nil, &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) ReadLink(_ context.Context, req *sshfx.ReadLinkPacket) (string, error) {
+// ReadLink returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) ReadLink(_ context.Context, req *sshfx.ReadLinkPacket) (string, error) {
 	return "", &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) RealPath(_ context.Context, req *sshfx.RealPathPacket) (string, error) {
+// RealPath returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) RealPath(_ context.Context, req *sshfx.RealPathPacket) (string, error) {
 	return "", &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) Open(_ context.Context, req *sshfx.OpenPacket) (FileHandler, error) {
+// Open returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) Open(_ context.Context, req *sshfx.OpenPacket) (FileHandler, error) {
 	return nil, &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
 }
 
-func (UnimplementedHandler) OpenDir(_ context.Context, req *sshfx.OpenDirPacket) (DirHandler, error) {
+// OpenDir returns an sshfx.StatusOpUnsupported error.
+func (UnimplementedServerHandler) OpenDir(_ context.Context, req *sshfx.OpenDirPacket) (DirHandler, error) {
 	return nil, &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
-}
-
-var directImpl = map[string]bool{
-	"Mkdir":    true,
-	"Remove":   true,
-	"Rename":   true,
-	"Rmdir":    true,
-	"SetStat":  true,
-	"Symlink":  true,
-	"LStat":    true,
-	"Stat":     true,
-	"ReadLink": true,
-	"RealPath": true,
-	"Open":     true,
-	"OpenDir":  true,
 }

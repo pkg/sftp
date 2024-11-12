@@ -251,6 +251,8 @@ func (e *ExtendedAttribute) UnmarshalBinary(data []byte) error {
 
 // NameEntry implements the SSH_FXP_NAME repeated data type from draft-ietf-secsh-filexfer-02
 //
+// It implements both [fs.FileInfo] and [fs.DirEntry].
+//
 // This type is incompatible with versions 4 or higher.
 type NameEntry struct {
 	Filename string
@@ -258,34 +260,43 @@ type NameEntry struct {
 	Attrs    Attributes
 }
 
+// Name implements [fs.FileInfo].
 func (e *NameEntry) Name() string {
 	return path.Base(e.Filename)
 }
 
+// Size implements [fs.FileInfo].
 func (e *NameEntry) Size() int64 {
 	return int64(e.Attrs.Size)
 }
 
+// Mode implements [fs.FileInfo].
 func (e *NameEntry) Mode() fs.FileMode {
 	return ToGoFileMode(e.Attrs.Permissions)
 }
 
+// ModTime implements [fs.FileInfo].
 func (e *NameEntry) ModTime() time.Time {
 	return time.Unix(int64(e.Attrs.MTime), 0)
 }
 
+// IsDir implements [fs.FileInfo].
 func (e *NameEntry) IsDir() bool {
 	return e.Attrs.Permissions.IsDir()
 }
 
+// Sys implements [fs.FileInfo].
+// It returns a pointer of type *Attribute to the Attr field of this name entry.
 func (e *NameEntry) Sys() any {
 	return &e.Attrs
 }
 
+// Type implements [fs.DirEntry].
 func (e *NameEntry) Type() fs.FileMode {
 	return ToGoFileMode(e.Attrs.Permissions).Type()
 }
 
+// Info implements [fs.DirEntry].
 func (e *NameEntry) Info() (fs.FileInfo, error) {
 	return e, nil
 }

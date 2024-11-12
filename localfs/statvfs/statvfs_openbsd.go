@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/sftp/v2/encoding/ssh/filexfer/openssh"
 )
 
+// StatVFS converts the syscall.Statfs from the OpenBSD syscall to OpenSSH StatVFS.
 func StatVFS(name string) (*openssh.StatVFSExtendedReplyPacket, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(name, &stat); err != nil {
