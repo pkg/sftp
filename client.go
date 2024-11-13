@@ -1217,7 +1217,7 @@ const (
 	OpenFlagReadOnly  = os.O_RDONLY
 	OpenFlagWriteOnly = os.O_WRONLY
 	OpenFlagReadWrite = os.O_RDWR
-	// The remaining values may be or’ed in to control behavior.
+	// The remaining values may be or'ed in to control behavior.
 	OpenFlagAppend    = os.O_APPEND
 	OpenFlagCreate    = os.O_CREATE
 	OpenFlagTruncate  = os.O_TRUNC
@@ -1552,7 +1552,7 @@ func (f *File) writeat(ctx context.Context, b []byte, off int64) (written int, e
 		return int(written), f.wrapErr("writeat", firstErr.err)
 	}
 
-	// We didn’t hit any errors, so we must have written all the bytes in the buffer.
+	// We didn't hit any errors, so we must have written all the bytes in the buffer.
 	written = len(b)
 	f.offset += int64(written)
 
@@ -1792,7 +1792,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 		return read, f.wrapErr("readfrom", firstErr.err)
 	}
 
-	// We didn’t hit any errors, so we must have written all the bytes that we read until EOF.
+	// We didn't hit any errors, so we must have written all the bytes that we read until EOF.
 	f.offset += read
 	return read, nil
 }
