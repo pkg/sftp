@@ -3,6 +3,7 @@ package localfs
 import (
 	"cmp"
 	"io/fs"
+	"iter"
 	"os"
 	"slices"
 	"sync"
@@ -21,7 +22,8 @@ type File struct {
 	idLookup sftp.NameLookup
 
 	mu      sync.Mutex
-	dirErr  error
+	lastErr error
+	lastEnt *sshfx.NameEntry
 	entries []fs.FileInfo
 }
 
@@ -43,45 +45,42 @@ func (f *File) Stat() (*sshfx.Attributes, error) {
 
 // rangedir returns an iterator over the directory entries of the directory.
 // It will only ever yield either a [fs.FileInfo] or an error, never both.
-// No error will be yielded until all available FileInfos have been yielded,
-// and thereafter the same error will be yielded indefinitely,
-// however only one error will be yielded per invocation.
-// If yield returns false, then the directory entry is considered unconsumed,
-// and will be the first yield at the next call to rangedir.
+// No error will be yielded until all available FileInfos have been yielded.
+// Only one error will be yielded per invocation.
 //
 // We do not expose an iterator, because none has been standardized yet,
 // and we do not want to accidentally implement an API inconsistent with future standards.
 // However, for internal usage, we can separate the paginated Readdir code from the conversion to SFTP entries.
 //
 // Callers must guarantee synchronization by either holding the file lock, or holding an exclusive reference.
-func (f *File) rangedir(yield func(fs.FileInfo, error) bool) {
-	for {
-		for i, entry := range f.entries {
-			if !yield(entry, nil) {
-				// This is break condition.
-				// As per our semantics, this means this entry has not been consumed.
-				// So we remove only the entries ahead of this one.
-				f.entries = slices.Delete(f.entries, 0, i)
+func (f *File) rangedir(grow func(int)) iter.Seq2[fs.FileInfo, error] {
+	return func(yield func(fs.FileInfo, error) bool) {
+		for {
+			grow(len(f.entries))
+
+			for i, entry := range f.entries {
+				if !yield(entry, nil) {
+					// This is a break condition.
+					// We need to remove all entries that have been consumed,
+					// and that includes the one we are currently on.
+					f.entries = slices.Delete(f.entries, 0, i+1)
+					return
+				}
+			}
+
+			// We have consumed all of the saved entries, so we remove everything.
+			f.entries = slices.Delete(f.entries, 0, len(f.entries))
+
+			if f.lastErr != nil {
+				yield(nil, f.lastErr)
+				f.lastErr = nil
 				return
 			}
+
+			// We cannot guarantee we only get entries, or an error, never both.
+			// So we need to just save these, and loop.
+			f.entries, f.lastErr = f.Readdir(128)
 		}
-
-		// We have consumed all of the saved entries, so we remove everything.
-		f.entries = slices.Delete(f.entries, 0, len(f.entries))
-
-		if f.dirErr != nil {
-			// No need to try acquiring more entries,
-			// we’re already in the error state.
-			yield(nil, f.dirErr)
-			return
-		}
-
-		ents, err := f.Readdir(128)
-		if err != nil {
-			f.dirErr = err
-		}
-
-		f.entries = ents
 	}
 }
 
@@ -91,8 +90,18 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if f.lastEnt != nil {
+		// Last ReadDir left an entry for us to include in this call.
+		entries = append(entries, f.lastEnt)
+		f.lastEnt = nil
+	}
+
+	grow := func(more int) {
+		entries = slices.Grow(entries, more)
+	}
+
 	var size int
-	for fi, err := range f.rangedir {
+	for fi, err := range f.rangedir(grow) {
 		if err != nil {
 			if len(entries) != 0 {
 				return entries, nil
@@ -112,7 +121,10 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 		size += entry.Len()
 
 		if size > int(maxDataLen) {
-			// rangedir will take care of starting the next range with this entry.
+			// This would exceed the packet data length,
+			// so save this one for the next call,
+			// and return.
+			f.lastEnt = entry
 			break
 		}
 

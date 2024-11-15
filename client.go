@@ -1103,26 +1103,34 @@ func (d *Dir) Name() string {
 }
 
 // rangedir returns an iterator over the directory entries of the directory.
+// It will only ever yield either a *sshfx.NameEntry or an error, never both.
+// No error will be yielded until all available name entries have been yielded.
+// Only one error will be yielded per invocation.
+//
 // We do not expose an iterator, because none has been standardized yet.
-// and we do not want to accidentally implement an inconsistent API.
-// However, for internal usage, we can definitely make use of this to simplify the common parts of ReadDir and Readdir.
+// and we do not want to accidentally implement an API inconsistent with future standards.
+// However, for internal usage, we can separate the paginated ReadDir request code from the conversion to Go entries.
 //
 // Callers must guarantee synchronization by either holding the directory lock, or holding an exclusive reference.
-func (d *Dir) rangedir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
+func (d *Dir) rangedir(ctx context.Context, grow func(int)) iter.Seq2[*sshfx.NameEntry, error] {
 	return func(yield func(v *sshfx.NameEntry, err error) bool) {
-		// Pull from saved entries first.
-		for i, ent := range d.entries {
-			if !yield(ent, nil) {
-				// Early break, delete the entries we have yielded.
-				d.entries = slices.Delete(d.entries, 0, i+1)
-				return
-			}
-		}
-
-		// We got through all the remaining entries, delete all the entries.
-		d.entries = slices.Delete(d.entries, 0, len(d.entries))
-
 		for {
+			grow(len(d.entries))
+
+			// Pull from saved entries first.
+			for i, ent := range d.entries {
+				if !yield(ent, nil) {
+					// This is a break condition.
+					// We need to remove all entries that have been consumed,
+					// and that includes the one that we are currently on.
+					d.entries = slices.Delete(d.entries, 0, i+1)
+					return
+				}
+			}
+
+			// We got through all the remaining entries, delete all the entries.
+			d.entries = slices.Delete(d.entries, 0, len(d.entries))
+
 			_, closed, err := d.handle.get()
 			if err != nil {
 				yield(nil, err)
@@ -1131,19 +1139,12 @@ func (d *Dir) rangedir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
 
 			entries, err := d.cl.getNames(ctx, closed, &d.req)
 			if err != nil {
-				// There are no remaining entries to save here,
-				// SFTP can only return either an error or a result, never both.
+				// No need to loop, SFTP can only return either an error or a result, never both.
 				yield(nil, err)
 				return
 			}
 
-			for i, entry := range entries {
-				if !yield(entry, nil) {
-					// Early break, save the remaining entries we got for maybe later.
-					d.entries = append(d.entries, entries[i+1:]...)
-					return
-				}
-			}
+			d.entries = entries
 		}
 	}
 }
@@ -1175,7 +1176,16 @@ func (d *Dir) ReaddirContext(ctx context.Context, n int) ([]fs.FileInfo, error) 
 
 	var ret []fs.FileInfo
 
-	for ent, err := range d.rangedir(ctx) {
+	grow := func(more int) {
+		if n > 0 {
+			// the lesser of what's coming, and how much remains.
+			more = min(more, n-len(ret))
+		}
+
+		ret = slices.Grow(ret, more)
+	}
+
+	for ent, err := range d.rangedir(ctx, grow) {
 		if err != nil {
 			if errors.Is(err, io.EOF) && n <= 0 {
 				return ret, nil
@@ -1221,7 +1231,16 @@ func (d *Dir) ReadDirContext(ctx context.Context, n int) ([]fs.DirEntry, error) 
 
 	var ret []fs.DirEntry
 
-	for ent, err := range d.rangedir(ctx) {
+	grow := func(more int) {
+		if n > 0 {
+			// the lesser of what's coming, and how much remains.
+			more = min(more, n-len(ret))
+		}
+
+		ret = slices.Grow(ret, more)
+	}
+
+	for ent, err := range d.rangedir(ctx, grow) {
 		if err != nil {
 			if errors.Is(err, io.EOF) && n <= 0 {
 				return ret, nil
