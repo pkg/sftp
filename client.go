@@ -1465,7 +1465,7 @@ func (f *File) Stat() (fs.FileInfo, error) {
 	}, nil
 }
 
-func (f *File) writeatFull(ctx context.Context, b []byte, off int64) (written int, err error) {
+func (f *File) writeatSeq(ctx context.Context, b []byte, off int64) (written int, err error) {
 	handle, closed, err := f.handle.get()
 	if err != nil {
 		return 0, err
@@ -1498,8 +1498,8 @@ func (f *File) writeatFull(ctx context.Context, b []byte, off int64) (written in
 func (f *File) writeat(ctx context.Context, b []byte, off int64) (written int, err error) {
 	if len(b) <= f.cl.maxDataLen {
 		// This should be able to be serviced with just 1 request.
-		// So, just do it directly.
-		return f.writeatFull(ctx, b, off)
+		// So, just do it sequentially.
+		return f.writeatSeq(ctx, b, off)
 	}
 
 	handle, closed, err := f.handle.get()
@@ -1858,11 +1858,9 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 	return read, nil
 }
 
-// readatFull attempts to read the whole entire length of the buffer from the file starting at the offset.
+// readatSeq attempts to read the whole entire length of the buffer from the file starting at the offset.
 // It will continue progressively reading into the buffer until it fills the whole buffer, or an error occurs.
-//
-// This is prefered over io.ReadFull, because it can reuse read and data packet allocations.
-func (f *File) readatFull(ctx context.Context, b []byte, off int64) (read int, err error) {
+func (f *File) readatSeq(ctx context.Context, b []byte, off int64) (read int, err error) {
 	handle, closed, err := f.handle.get()
 	if err != nil {
 		return 0, f.wrapErr("readat", err)
@@ -1913,7 +1911,7 @@ func (f *File) readat(ctx context.Context, b []byte, off int64) (read int, err e
 	if len(b) <= f.cl.maxDataLen {
 		// This should be able to be serviced most times with only 1 request.
 		// So, just do it sequentially.
-		return f.readatFull(ctx, b, off)
+		return f.readatSeq(ctx, b, off)
 	}
 
 	handle, closed, err := f.handle.get()
@@ -1994,7 +1992,7 @@ func (f *File) readat(ctx context.Context, b []byte, off int64) (read int, err e
 		var resp sshfx.DataPacket
 
 		for work := range workCh {
-			// See readatFull for an explanation for why we use slices.Clip here.
+			// See readatSeq for an explanation for why we use slices.Clip here.
 			resp.Data = slices.Clip(work.b)
 
 			n, err := f.cl.recvData(ctx, work.reqid, work.res, &resp)
