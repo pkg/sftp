@@ -192,8 +192,8 @@ type DirHandler interface {
 
 type wrapHandler func(ctx context.Context, req sshfx.Packet) (sshfx.Packet, error)
 
-// srvHandle is the intersection of FileHandler and DirHandler
-type srvHandle interface {
+// commonHandle is the intersection of FileHandler and DirHandler
+type commonHandle interface {
 	io.Closer
 
 	Name() string
@@ -212,7 +212,7 @@ type Server struct {
 	Debug io.Writer
 
 	wg      sync.WaitGroup
-	handles sync.Map[string, srvHandle]
+	handles sync.Map[string, commonHandle]
 	hijacks map[sshfx.PacketType]wrapHandler
 
 	dataPktPool *sync.Pool[sshfx.DataPacket]

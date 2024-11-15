@@ -948,17 +948,17 @@ func (cl *Client) LStat(name string) (fs.FileInfo, error) {
 	}, nil
 }
 
-type clHandle struct {
+type handle struct {
 	value  atomic.Pointer[string]
 	closed chan struct{}
 }
 
-func (h *clHandle) init(handle string) {
+func (h *handle) init(handle string) {
 	h.value.Store(&handle)
 	h.closed = make(chan struct{})
 }
 
-func (h *clHandle) get() (handle string, cancel <-chan struct{}, err error) {
+func (h *handle) get() (handle string, cancel <-chan struct{}, err error) {
 	p := h.value.Load()
 	if p == nil {
 		return "", nil, fs.ErrClosed
@@ -966,7 +966,7 @@ func (h *clHandle) get() (handle string, cancel <-chan struct{}, err error) {
 	return *p, h.closed, nil
 }
 
-func (h *clHandle) close(cl *Client) error {
+func (h *handle) close(cl *Client) error {
 	// The design principle here is that when `openssh-portable/sftp-server.c` is doing `handle_close`,
 	// it will unconditionally mark the handle as unused,
 	// so we need to also unconditionally mark this handle as invalid.
@@ -988,7 +988,7 @@ func (h *clHandle) close(cl *Client) error {
 	// but since an outstanding method could still be holding the handle, we still need a close signal.
 	// Since this close HAPPENS BEFORE the sendPacket below,
 	// this ensures that after closing this channel, no further requests will be dispatched.
-	// Meaning we know that the close request below will be the final request from this clHandle.
+	// Meaning we know that the close request below will be the final request from this handle.
 	close(h.closed)
 
 	// One might assume we could just simply use the closed channel alone,
@@ -1011,7 +1011,7 @@ type Dir struct {
 	cl   *Client
 	name string
 
-	handle clHandle
+	handle handle
 
 	mu      sync.RWMutex
 	entries []*sshfx.NameEntry
@@ -1205,7 +1205,7 @@ type File struct {
 	cl   *Client
 	name string
 
-	handle clHandle
+	handle handle
 
 	mu     sync.RWMutex
 	offset int64 // current offset within remote file
