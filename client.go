@@ -414,14 +414,6 @@ func getPacket[RESP respPacket[PKT], PKT any](ctx context.Context, cancel <-chan
 	}
 }
 
-func (cl *Client) getPath(ctx context.Context, cancel <-chan struct{}, req sshfx.PacketMarshaller) (string, error) {
-	resp, err := getPacket[*sshfx.PathPseudoPacket](ctx, cancel, cl, req)
-	if err != nil {
-		return "", err
-	}
-	return resp.Path, nil
-}
-
 func (cl *Client) getHandle(ctx context.Context, cancel <-chan struct{}, req sshfx.PacketMarshaller) (string, error) {
 	resp, err := getPacket[*sshfx.HandlePacket](ctx, cancel, cl, req)
 	if err != nil {
@@ -436,6 +428,14 @@ func (cl *Client) getNames(ctx context.Context, cancel <-chan struct{}, req sshf
 		return nil, err
 	}
 	return resp.Entries, nil
+}
+
+func (cl *Client) getPath(ctx context.Context, cancel <-chan struct{}, req sshfx.PacketMarshaller) (string, error) {
+	resp, err := getPacket[*sshfx.PathPseudoPacket](ctx, cancel, cl, req)
+	if err != nil {
+		return "", err
+	}
+	return resp.Path, nil
 }
 
 func (cl *Client) getAttrs(ctx context.Context, cancel <-chan struct{}, req sshfx.PacketMarshaller) (*sshfx.Attributes, error) {
@@ -650,6 +650,15 @@ func wrapPathError(op, path string, err error) error {
 	return &fs.PathError{Op: op, Path: path, Err: err}
 }
 
+func valOrPathError[T any](op, path string, v T, err error) (T, error) {
+	if err != nil {
+		var z T
+		return z, wrapPathError(op, path, err)
+	}
+
+	return v, nil
+}
+
 func wrapLinkError(op, oldpath, newpath string, err error) error {
 	if err == nil {
 		return nil
@@ -724,25 +733,25 @@ func (cl *Client) MkdirAll(name string, perm fs.FileMode) error {
 func (cl *Client) Remove(name string) error {
 	ctx := context.Background()
 
-	errFile := cl.sendPacket(ctx, nil, &sshfx.RemovePacket{
+	errF := cl.sendPacket(ctx, nil, &sshfx.RemovePacket{
 		Path: name,
 	})
-	if errFile == nil {
+	if errF == nil {
 		return nil
 	}
 
-	errDir := cl.sendPacket(ctx, nil, &sshfx.RmdirPacket{
+	errD := cl.sendPacket(ctx, nil, &sshfx.RmdirPacket{
 		Path: name,
 	})
-	if errDir == nil {
+	if errD == nil {
 		return nil
 	}
 
 	// Both failed: figure out which error to return.
 
-	if errFile == errDir {
+	if errF == errD {
 		// If they are the same error, then just return that.
-		return wrapPathError("remove", name, errFile)
+		return wrapPathError("remove", name, errF)
 	}
 
 	attrs, err := cl.getAttrs(ctx, nil, &sshfx.StatPacket{
@@ -753,10 +762,10 @@ func (cl *Client) Remove(name string) error {
 	}
 
 	if perm, ok := attrs.GetPermissions(); ok && perm.IsDir() {
-		return wrapPathError("remove", name, errDir)
+		return wrapPathError("remove", name, errD)
 	}
 
-	return wrapPathError("remove", name, errFile)
+	return wrapPathError("remove", name, errF)
 }
 
 func (cl *Client) setstat(ctx context.Context, name string, attrs *sshfx.Attributes) error {
@@ -830,11 +839,7 @@ func (cl *Client) RealPath(name string) (string, error) {
 	path, err := cl.getPath(context.Background(), nil, &sshfx.RealPathPacket{
 		Path: name,
 	})
-	if err != nil {
-		return "", wrapPathError("realpath", name, err)
-	}
-
-	return path, nil
+	return valOrPathError("realpath", name, path, err)
 }
 
 // ReadLink returns the destination of the named symbolic link.
@@ -845,11 +850,7 @@ func (cl *Client) ReadLink(name string) (string, error) {
 	path, err := cl.getPath(context.Background(), nil, &sshfx.ReadLinkPacket{
 		Path: name,
 	})
-	if err != nil {
-		return "", wrapPathError("readlink", name, err)
-	}
-
-	return path, nil
+	return valOrPathError("readlink", name, path, err)
 }
 
 // Rename renames (moves) oldpath to newpath.
@@ -1051,8 +1052,9 @@ type Dir struct {
 	name string
 
 	handle handle
+	req    sshfx.ReadDirPacket // save on allocations with a scratch request packet.
 
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	entries []*sshfx.NameEntry
 }
 
@@ -1071,6 +1073,9 @@ func (cl *Client) OpenDir(name string) (*Dir, error) {
 	d := &Dir{
 		cl:   cl,
 		name: name,
+		req: sshfx.ReadDirPacket{
+			Handle: handle,
+		},
 	}
 
 	d.handle.init(handle)
@@ -1102,7 +1107,7 @@ func (d *Dir) Name() string {
 // and we do not want to accidentally implement an inconsistent API.
 // However, for internal usage, we can definitely make use of this to simplify the common parts of ReadDir and Readdir.
 //
-// Callers must guarantee synchronization by either holding the file lock, or holding an exclusive reference.
+// Callers must guarantee synchronization by either holding the directory lock, or holding an exclusive reference.
 func (d *Dir) rangedir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
 	return func(yield func(v *sshfx.NameEntry, err error) bool) {
 		// Pull from saved entries first.
@@ -1118,15 +1123,13 @@ func (d *Dir) rangedir(ctx context.Context) iter.Seq2[*sshfx.NameEntry, error] {
 		d.entries = slices.Delete(d.entries, 0, len(d.entries))
 
 		for {
-			handle, closed, err := d.handle.get()
+			_, closed, err := d.handle.get()
 			if err != nil {
 				yield(nil, err)
 				return
 			}
 
-			entries, err := d.cl.getNames(ctx, closed, &sshfx.ReadDirPacket{
-				Handle: handle,
-			})
+			entries, err := d.cl.getNames(ctx, closed, &d.req)
 			if err != nil {
 				// There are no remaining entries to save here,
 				// SFTP can only return either an error or a result, never both.
