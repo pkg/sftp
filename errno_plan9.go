@@ -18,7 +18,7 @@ func translateErrorString(errno syscall.ErrorString) sshfx.Status {
 	case syscall.EACCES, syscall.EPERM:
 		return sshfx.StatusPermissionDenied
 	case syscall.EPLAN9:
-		return sshfx.StatusOPUnsupported
+		return sshfx.StatusOpUnsupported
 	}
 
 	return sshfx.StatusFailure

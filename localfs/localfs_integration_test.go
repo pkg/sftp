@@ -761,12 +761,12 @@ func benchHelperWriteTo(b *testing.B, length int) {
 	target := filepath.Join(dir, "bench-writeto")
 	remote := toRemotePath(target)
 
-	if err := os.WriteFile(remote, nil, 0644); err != nil {
+	if err := os.WriteFile(target, nil, 0644); err != nil {
 		b.Fatal(err)
 	}
 	defer os.Remove(remote)
 
-	if err := os.Truncate(remote, int64(length)); err != nil {
+	if err := os.Truncate(target, int64(length)); err != nil {
 		b.Fatal(err)
 	}
 
@@ -834,7 +834,7 @@ func benchHelperReadFrom(b *testing.B, length int) {
 	target := filepath.Join(dir, "bench-readfrom")
 	remote := toRemotePath(target)
 
-	if err := os.WriteFile(remote, nil, 0644); err != nil {
+	if err := os.WriteFile(target, nil, 0644); err != nil {
 		b.Fatal(err)
 	}
 	defer os.Remove(remote)
