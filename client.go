@@ -944,7 +944,7 @@ func (cl *Client) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntr
 	}
 	defer d.Close()
 
-	fis, err := d.ReadDir(0)
+	fis, err := d.ReadDirContext(ctx, 0)
 
 	slices.SortFunc(fis, func(a, b fs.DirEntry) int {
 		return cmp.Compare(a.Name(), b.Name())
