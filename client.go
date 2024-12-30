@@ -909,7 +909,7 @@ func (c *Client) Mkdir(path string) error {
 // MkdirAll creates a directory named path, along with any necessary parents,
 // and returns nil, or else returns an error.
 // If path is already a directory, MkdirAll does nothing and returns nil.
-// If path contains a regular file, an error is returned
+// If, while making any directory, that path is found to already be a regular file, an error is returned.
 func (c *Client) MkdirAll(path string) error {
 	// Most of this code mimics https://golang.org/src/os/path.go?s=514:561#L13
 	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
