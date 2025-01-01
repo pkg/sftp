@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -156,4 +157,35 @@ func (s *Server) openfile(path string, flag int, mode fs.FileMode) (file, error)
 		return newWinRoot()
 	}
 	return os.OpenFile(path, flag, mode)
+}
+
+type winRootFileInfo struct {
+	fs.FileInfo
+	name string
+}
+
+func (w winRootFileInfo) Name() string       { return w.name }
+func (w winRootFileInfo) Size() int64        { return 0 }
+func (w winRootFileInfo) Mode() fs.FileMode  { return fs.ModeDir | 0555 } // read+execute for all
+func (w winRootFileInfo) ModTime() time.Time { return time.Time{} }
+func (w winRootFileInfo) IsDir() bool        { return true }
+func (w winRootFileInfo) Sys() interface{}   { return nil }
+
+// Create a new root FileInfo
+var rootFileInfo = winRootFileInfo{
+	name: "/",
+}
+
+func (s *Server) lstat(name string) (os.FileInfo, error) {
+	if name == `\\.\` && s.winRoot {
+		return rootFileInfo, nil
+	}
+	return os.Lstat(name)
+}
+
+func (s *Server) stat(name string) (os.FileInfo, error) {
+	if name == `\\.\` && s.winRoot {
+		return rootFileInfo, nil
+	}
+	return os.Stat(name)
 }
