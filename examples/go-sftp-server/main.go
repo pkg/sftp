@@ -20,10 +20,13 @@ func main() {
 	var (
 		readOnly    bool
 		debugStderr bool
+		winRoot     bool
 	)
 
 	flag.BoolVar(&readOnly, "R", false, "read-only server")
 	flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
+	flag.BoolVar(&winRoot, "wr", false, "windows root")
+
 	flag.Parse()
 
 	debugStream := io.Discard
@@ -126,6 +129,11 @@ func main() {
 			fmt.Fprintf(debugStream, "Read-only server\n")
 		} else {
 			fmt.Fprintf(debugStream, "Read write server\n")
+		}
+
+		if winRoot {
+			serverOptions = append(serverOptions, sftp.WindowsRootEnumeratesDrives())
+			fmt.Fprintf(debugStream, "Windows root enabled\n")
 		}
 
 		server, err := sftp.NewServer(
