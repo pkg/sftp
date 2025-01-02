@@ -58,7 +58,7 @@ func bitsToDrives(bitmap uint32) []string {
 	var drive rune = 'a'
 	var drives []string
 
-	for bitmap != 0 {
+	for bitmap != 0 && drive <= 'z' {
 		if bitmap&1 == 1 {
 			drives = append(drives, string(drive)+":")
 		}
@@ -128,7 +128,7 @@ func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 }
 
 func (f *winRoot) Stat() (os.FileInfo, error) {
-	return nil, os.ErrPermission
+	return rootFileInfo, nil
 }
 func (f *winRoot) ReadAt(b []byte, off int64) (int, error) {
 	return 0, os.ErrPermission
@@ -149,6 +149,7 @@ func (f *winRoot) Chown(uid, gid int) error {
 	return os.ErrPermission
 }
 func (f *winRoot) Close() error {
+	f.drives = nil
 	return nil
 }
 
@@ -160,20 +161,21 @@ func (s *Server) openfile(path string, flag int, mode fs.FileMode) (file, error)
 }
 
 type winRootFileInfo struct {
-	fs.FileInfo
-	name string
+	name    string
+	modTime time.Time
 }
 
-func (w winRootFileInfo) Name() string       { return w.name }
-func (w winRootFileInfo) Size() int64        { return 0 }
-func (w winRootFileInfo) Mode() fs.FileMode  { return fs.ModeDir | 0555 } // read+execute for all
-func (w winRootFileInfo) ModTime() time.Time { return time.Time{} }
-func (w winRootFileInfo) IsDir() bool        { return true }
-func (w winRootFileInfo) Sys() interface{}   { return nil }
+func (w *winRootFileInfo) Name() string       { return w.name }
+func (w *winRootFileInfo) Size() int64        { return 0 }
+func (w *winRootFileInfo) Mode() fs.FileMode  { return fs.ModeDir | 0555 } // read+execute for all
+func (w *winRootFileInfo) ModTime() time.Time { return w.modTime }
+func (w *winRootFileInfo) IsDir() bool        { return true }
+func (w *winRootFileInfo) Sys() interface{}   { return nil }
 
 // Create a new root FileInfo
-var rootFileInfo = winRootFileInfo{
-	name: "/",
+var rootFileInfo = &winRootFileInfo{
+	name:    "/",
+	modTime: time.Now(),
 }
 
 func (s *Server) lstat(name string) (os.FileInfo, error) {
