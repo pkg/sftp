@@ -1,5 +1,5 @@
-//go:build (!js && !darwin && !freebsd && !netbsd && !dragonfly && !linux && !openbsd && !solaris && !aix && !zos && !plan9 && !windows) || android
-// +build !js,!darwin,!freebsd,!netbsd,!dragonfly,!linux,!openbsd,!solaris,!aix,!zos,!plan9,!windows android
+//go:build (!js && !wasip1 && !darwin && !freebsd && !netbsd && !dragonfly && !linux && !openbsd && !solaris && !aix && !zos && !plan9 && !windows) || android
+// +build !js,!wasip1,!darwin,!freebsd,!netbsd,!dragonfly,!linux,!openbsd,!solaris,!aix,!zos,!plan9,!windows android
 
 package localfs
 
