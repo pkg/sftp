@@ -800,10 +800,14 @@ func (c *Client) removeFile(path string) error {
 	}
 	switch typ {
 	case sshFxpStatus:
-		return &PathError{
+		err = normaliseError(unmarshalStatus(id, data))
+		if err == nil {
+			return nil
+		}
+		return &os.PathError{
 			Op:   "remove",
 			Path: path,
-			Err:  normaliseError(unmarshalStatus(id, data)),
+			Err:  err,
 		}
 	default:
 		return unimplementedPacketErr(typ)
@@ -822,10 +826,14 @@ func (c *Client) RemoveDirectory(path string) error {
 	}
 	switch typ {
 	case sshFxpStatus:
-		return &PathError{
-			Op:   "rmdir",
+		err = normaliseError(unmarshalStatus(id, data))
+		if err == nil {
+			return nil
+		}
+		return &os.PathError{
+			Op:   "remove",
 			Path: path,
-			Err:  normaliseError(unmarshalStatus(id, data)),
+			Err:  err,
 		}
 	default:
 		return unimplementedPacketErr(typ)
