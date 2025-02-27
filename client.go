@@ -17,6 +17,8 @@ import (
 
 	"github.com/kr/fs"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/pkg/sftp/internal/encoding/ssh/filexfer/openssh"
 )
 
 var (
@@ -758,20 +760,33 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // file or directory with the specified path exists, or if the specified directory
 // is not empty.
 func (c *Client) Remove(path string) error {
-	err := c.removeFile(path)
-	// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
-	// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
-	// EPERM is converted to os.ErrPermission so it is not a StatusError
-	if err, ok := err.(*StatusError); ok {
-		switch err.Code {
-		case sshFxFailure, sshFxFileIsADirectory:
-			return c.RemoveDirectory(path)
-		}
+	errF := c.removeFile(path)
+	if errF == nil {
+		return nil
 	}
-	if os.IsPermission(err) {
-		return c.RemoveDirectory(path)
+
+	errD := c.RemoveDirectory(path)
+	if errD == nil {
+		return nil
 	}
-	return err
+
+	// Both failed: figure out which error to return.
+
+	if errF == errD {
+		// If they are the same error, then just return that.
+		return errF
+	}
+
+	fi, err := c.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if fi.IsDir() {
+		return errD
+	}
+
+	return errF
 }
 
 func (c *Client) removeFile(path string) error {
@@ -785,7 +800,11 @@ func (c *Client) removeFile(path string) error {
 	}
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return &PathError{
+			Op:   "remove",
+			Path: path,
+			Err:  normaliseError(unmarshalStatus(id, data)),
+		}
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -803,7 +822,11 @@ func (c *Client) RemoveDirectory(path string) error {
 	}
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return &PathError{
+			Op:   "rmdir",
+			Path: path,
+			Err:  normaliseError(unmarshalStatus(id, data)),
+		}
 	default:
 		return unimplementedPacketErr(typ)
 	}
