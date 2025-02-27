@@ -2122,6 +2122,13 @@ func (f *File) Sync() error {
 		return os.ErrClosed
 	}
 
+	if data, ok := f.c.HasExtension(openssh.ExtensionFSync().Name); !ok || data != "1" {
+		return &StatusError{
+			Code: sshFxOPUnsupported,
+			msg:  "fsync not supported",
+		}
+	}
+
 	id := f.c.nextID()
 	typ, data, err := f.c.sendPacket(context.Background(), nil, &sshFxpFsyncPacket{
 		ID:     id,
