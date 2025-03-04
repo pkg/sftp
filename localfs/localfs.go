@@ -50,13 +50,12 @@ func (h *ServerHandler) Mkdir(_ context.Context, req *sshfx.MkdirPacket) error {
 		return err
 	}
 
-	perm, ok := req.Attrs.GetPermissions()
-	perm = perm.Perm()
-	if !ok {
-		perm = 0755
+	var perms sshfx.FileMode = 0755
+	if req.Attrs.HasPermissions() {
+		perms = req.Attrs.GetPermissions().Perm()
 	}
 
-	return os.Mkdir(lpath, fs.FileMode(perm))
+	return os.Mkdir(lpath, fs.FileMode(perms))
 }
 
 // Remove implements [sftp.ServerHandler].
@@ -150,25 +149,29 @@ func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) err
 		return err
 	}
 
-	if size, ok := req.Attrs.GetSize(); ok {
-		if err := os.Truncate(lpath, int64(size)); err != nil {
+	if req.Attrs.HasSize() {
+		sz := req.Attrs.GetSize()
+		if err := os.Truncate(lpath, int64(sz)); err != nil {
 			return err
 		}
 	}
 
-	if uid, gid, ok := req.Attrs.GetUIDGID(); ok {
+	if req.Attrs.HasUIDGID() {
+		uid, gid := req.Attrs.GetUIDGID()
 		if err := os.Chown(lpath, int(uid), int(gid)); err != nil {
 			return err
 		}
 	}
 
-	if perm, ok := req.Attrs.GetPermissions(); ok {
-		if err := os.Chmod(lpath, fs.FileMode(perm.Perm())); err != nil {
+	if req.Attrs.HasPermissions() {
+		perms := req.Attrs.GetPermissions()
+		if err := os.Chmod(lpath, fs.FileMode(perms.Perm())); err != nil {
 			return err
 		}
 	}
 
-	if atime, mtime, ok := req.Attrs.GetACModTime(); ok {
+	if req.Attrs.HasACModTime() {
+		atime, mtime := req.Attrs.GetACModTime()
 		if err := os.Chtimes(lpath, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)); err != nil {
 			return err
 		}
@@ -193,14 +196,12 @@ func (h *ServerHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket) err
 }
 
 func fileInfoToAttrs(fi fs.FileInfo) *sshfx.Attributes {
-	attrs := &sshfx.Attributes{
-		Flags: sshfx.AttrSize | sshfx.AttrACModTime | sshfx.AttrPermissions,
+	attrs := new(sshfx.Attributes)
+	attrs.SetSize(uint64(fi.Size()))
+	attrs.SetPermissions(sshfx.FromGoFileMode(fi.Mode()))
 
-		Size:  uint64(fi.Size()),
-		MTime: uint32(fi.ModTime().Unix()),
-
-		Permissions: sshfx.FromGoFileMode(fi.Mode()),
-	}
+	mtime := uint32(fi.ModTime().Unix())
+	attrs.SetACModTime(mtime, mtime)
 
 	fileStatFromInfoOs(fi, attrs)
 
@@ -305,13 +306,12 @@ func (h *ServerHandler) Open(_ context.Context, req *sshfx.OpenPacket) (sftp.Fil
 	// Like OpenSSH, we only handle permissions here, and only when the file is being created.
 	// Otherwise, the permissions are ignored.
 
-	perm, ok := req.Attrs.GetPermissions()
-	perm = perm.Perm()
-	if !ok {
-		perm = 0666
+	var perms sshfx.FileMode = 0666
+	if req.Attrs.HasPermissions() {
+		perms = req.Attrs.GetPermissions().Perm()
 	}
 
-	return h.openfile(lpath, osFlags, fs.FileMode(perm))
+	return h.openfile(lpath, osFlags, fs.FileMode(perms))
 }
 
 // OpenDir implements [sftp.ServerHandler].

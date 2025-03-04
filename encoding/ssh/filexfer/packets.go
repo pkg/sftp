@@ -127,7 +127,7 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 		return nil, err
 	}
 
-	length := unmarshalUint32(b)
+	length := unmarshalPacketLength(b)
 	if int(length) < 5 {
 		// Must have at least uint8(type) and uint32(request-id)
 

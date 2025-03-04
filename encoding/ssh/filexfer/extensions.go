@@ -9,8 +9,8 @@ type ExtensionPair struct {
 	Data string
 }
 
-// Len returns the number of bytes e would marshal into.
-func (e *ExtensionPair) Len() int {
+// MarshalSize returns the number of bytes e would marshal into.
+func (e *ExtensionPair) MarshalSize() int {
 	return 4 + len(e.Name) + 4 + len(e.Data)
 }
 
@@ -22,7 +22,7 @@ func (e *ExtensionPair) MarshalInto(buf *Buffer) {
 
 // MarshalBinary returns e as the binary encoding of e.
 func (e *ExtensionPair) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.MarshalSize()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

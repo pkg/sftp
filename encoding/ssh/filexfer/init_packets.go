@@ -16,7 +16,7 @@ func (p *InitPacket) MarshalBinary() ([]byte, error) {
 	size := 1 + 4 // byte(type) + uint32(version)
 
 	for _, ext := range p.Extensions {
-		size += ext.Len()
+		size += ext.MarshalSize()
 	}
 
 	b := NewBuffer(make([]byte, 4, 4+size))
@@ -104,7 +104,7 @@ func (p *VersionPacket) MarshalBinary() ([]byte, error) {
 	size := 1 + 4 // byte(type) + uint32(version)
 
 	for _, ext := range p.Extensions {
-		size += ext.Len()
+		size += ext.MarshalSize()
 	}
 
 	b := NewBuffer(make([]byte, 4, 4+size))

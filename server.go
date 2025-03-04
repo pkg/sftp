@@ -85,10 +85,11 @@ type TruncateFileHandler interface {
 }
 
 func trunc(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	sz, has := attr.GetSize()
-	if !has {
+	if !attr.HasSize() {
 		return noop, nil
 	}
+
+	sz := attr.GetSize()
 
 	if truncater, ok := f.(TruncateFileHandler); ok {
 		return func() error {
@@ -109,10 +110,11 @@ type ChownFileHandler interface {
 }
 
 func chown(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	uid, gid, has := attr.GetUIDGID()
-	if !has {
+	if !attr.HasUIDGID() {
 		return noop, nil
 	}
+
+	uid, gid := attr.GetUIDGID()
 
 	if chowner, ok := f.(ChownFileHandler); ok {
 		return func() error {
@@ -133,10 +135,11 @@ type ChmodFileHandler interface {
 }
 
 func chmod(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	mode, has := attr.GetPermissions()
-	if !has {
+	if !attr.HasPermissions() {
 		return noop, nil
 	}
+
+	mode := attr.GetPermissions()
 
 	if chmoder, ok := f.(ChmodFileHandler); ok {
 		return func() error {
@@ -157,10 +160,11 @@ type ChtimesFileHandler interface {
 }
 
 func chtimes(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	atime, mtime, has := attr.GetACModTime()
-	if !has {
+	if !attr.HasACModTime() {
 		return noop, nil
 	}
+
+	atime, mtime := attr.GetACModTime()
 
 	if chtimeser, ok := f.(ChtimesFileHandler); ok {
 		return func() error {
@@ -749,7 +753,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 				return nil, file.SetStat(&req.Attrs)
 			}
 
-			if len(req.Attrs.ExtendedAttributes) > 0 {
+			if len(req.Attrs.Extended) > 0 {
 				return nil, &sshfx.StatusPacket{
 					StatusCode:   sshfx.StatusOpUnsupported,
 					ErrorMessage: "unsupported fsetstat: extended attributes",

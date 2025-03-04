@@ -3,6 +3,9 @@ package sshfx
 import (
 	"encoding/binary"
 	"errors"
+	"slices"
+	"strconv"
+	"unsafe"
 
 	"github.com/pkg/sftp/v2/internal/sync"
 )
@@ -27,22 +30,22 @@ var bufPool = sync.NewPool[Buffer](64)
 // NewBuffer creates and initializes a new buffer using buf as its initial contents.
 // The new buffer takes ownership of buf, and the caller should not use buf after this call.
 //
-// In most cases, new(Buffer) (or just declaring a Buffer variable) is sufficient to initialize a Buffer.
+// In most cases, new(Buffer) (or just declaring a Buffer variable) is sufficient to initialize a buffer.
 func NewBuffer(buf []byte) *Buffer {
 	return &Buffer{
 		b: buf,
 	}
 }
 
-// NewMarshalBuffer creates a new Buffer ready to start marshaling a Packet into.
-// It preallocates enough space for uint32(length), uint8(type), uint32(request-id) and size more bytes.
+// NewMarshalBuffer creates a new buffer ready to start marshaling a Packet into.
+// It preallocates enough space for uint32(length), uint8(type), uint32(request-id), and size more bytes.
 func NewMarshalBuffer(size int) *Buffer {
 	return NewBuffer(make([]byte, 4+1+4+size))
 }
 
-// Bytes returns a slice of length b.Len() holding the unconsumed bytes in the Buffer.
-// The slice is valid for use only until the next buffer modification
-// (that is, only until the next call to an Append or Consume method).
+// Bytes returns a slice of length b.Len() holding the unconsumed bytes in the buffer.
+// The slice is valid for use only until the next buffer modification;
+// that is, only until the next call to an Append or Consume method.
 func (b *Buffer) Bytes() []byte {
 	return b.b[b.off:]
 }
@@ -56,11 +59,11 @@ func (b *Buffer) HintReturn() []byte {
 // Len returns the number of unconsumed bytes in the buffer.
 func (b *Buffer) Len() int { return len(b.b) - b.off }
 
-// Cap returns the capacity of the buffer’s underlying byte slice,
+// Cap returns the capacity of the buffer’s underlying byte slice;
 // that is, the total space allocated for the buffer’s data.
 func (b *Buffer) Cap() int { return cap(b.b) }
 
-// Reset resets the buffer to be empty, but it retains the underlying storage for use by future Appends.
+// Reset resets the buffer to be empty, but it retains the underlying storage for use by future appends.
 func (b *Buffer) Reset() {
 	*b = Buffer{
 		b: b.b[:0],
@@ -68,7 +71,7 @@ func (b *Buffer) Reset() {
 }
 
 // StartPacket resets and initializes the buffer to be ready to start marshaling a packet into.
-// It truncates the buffer, reserves space for uint32(length), then appends the given packetType and requestID.
+// It truncates the buffer, reserves space for uint32(length), then appends the given packet type and request id.
 func (b *Buffer) StartPacket(packetType PacketType, requestID uint32) {
 	*b = Buffer{
 		b: append(b.b[:0], make([]byte, 4)...),
@@ -78,32 +81,43 @@ func (b *Buffer) StartPacket(packetType PacketType, requestID uint32) {
 	b.AppendUint32(requestID)
 }
 
-// Packet finalizes the packet started from StartPacket.
-// It is expected that this will end the ownership of the underlying byte-slice,
-// and so the returned byte-slices may be reused the same as any other byte-slice,
+// Packet finalizes the packet started from [StartPacket].
+// It is expected that this will end the ownership of the underlying byte slice,
+// so the returned byte slices may be reused the same as any other byte slice,
 // the caller should not use this buffer after this call.
 //
 // It writes the packet body length into the first four bytes of the buffer in network byte order (big endian).
 // The packet body length is the length of this buffer less the 4-byte length itself, plus the length of payload.
 //
-// It is assumed that no Consume methods have been called on this buffer,
-// and so it returns the whole underlying slice.
+// It is assumed that no [Consume] methods have been called on this buffer,
+// so it returns the whole underlying slice.
 func (b *Buffer) Packet(payload []byte) (header, payloadPassThru []byte, err error) {
 	b.PutLength(len(b.b) - 4 + len(payload))
 
 	return b.b, payload, nil
 }
 
+func (b *Buffer) checkLen(length int) bool {
+	if b.Err != nil {
+		return false
+	}
+
+	// The strconv.IntSize <= 32 short-circuits to false on 64-bit,
+	// which elides the check for a negative length on architectures,
+	// where uint32 cannot overflow to a negative int value.
+	if (strconv.IntSize <= 32 && length < 0) || b.Len() < length {
+		b.off = len(b.b)
+		b.Err = ErrShortPacket
+		return false
+	}
+
+	return true
+}
+
 // ConsumeUint8 consumes a single byte from the buffer.
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeUint8() uint8 {
-	if b.Err != nil {
-		return 0
-	}
-
-	if b.Len() < 1 {
-		b.off = len(b.b)
-		b.Err = ErrShortPacket
+	if !b.checkLen(1) {
 		return 0
 	}
 
@@ -136,13 +150,7 @@ func (b *Buffer) AppendBool(v bool) {
 // ConsumeUint16 consumes a single uint16 from the buffer, in network byte order (big-endian).
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeUint16() uint16 {
-	if b.Err != nil {
-		return 0
-	}
-
-	if b.Len() < 2 {
-		b.off = len(b.b)
-		b.Err = ErrShortPacket
+	if !b.checkLen(2) {
 		return 0
 	}
 
@@ -159,23 +167,17 @@ func (b *Buffer) AppendUint16(v uint16) {
 	)
 }
 
-// unmarshalUint32 is used internally to read the packet length.
+// unmarshalPacketLength is used internally to read the packet length.
 // It is unsafe, and so not exported.
-// Even within this package, its use should be avoided.
-func unmarshalUint32(b []byte) uint32 {
+// Its use should be avoided even within this package.
+func unmarshalPacketLength(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b[:4])
 }
 
 // ConsumeUint32 consumes a single uint32 from the buffer, in network byte order (big-endian).
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeUint32() uint32 {
-	if b.Err != nil {
-		return 0
-	}
-
-	if b.Len() < 4 {
-		b.off = len(b.b)
-		b.Err = ErrShortPacket
+	if !b.checkLen(4) {
 		return 0
 	}
 
@@ -209,13 +211,7 @@ func (b *Buffer) AppendCount(v int) {
 // ConsumeUint64 consumes a single uint64 from the buffer, in network byte order (big-endian).
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeUint64() uint64 {
-	if b.Err != nil {
-		return 0
-	}
-
-	if b.Len() < 8 {
-		b.off = len(b.b)
-		b.Err = ErrShortPacket
+	if !b.checkLen(8) {
 		return 0
 	}
 
@@ -249,29 +245,24 @@ func (b *Buffer) AppendInt64(v int64) {
 	b.AppendUint64(uint64(v))
 }
 
-// ConsumeByteSlice consumes a single string of raw binary data from the buffer.
+// ConsumeBytes consumes a single string of raw binary data from the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
-// If the buffer does not have enough data, or defines a length larger than available, it will set Err to ErrShortPacket.
+// If the buffer does not have enough data, it will set Err to ErrShortPacket.
 //
-// The returned slice aliases the buffer contents, and is valid only as long as the buffer is not reused
-// (that is, only until the next call to Reset, PutLength, StartPacket, or UnmarshalBinary).
+// The returned slice aliases the buffer contents, and is valid only as long as the buffer is not reused;
+// that is, only until the next call to [Reset], [PutLength], [StartPacket], or [UnmarshalBinary].
 //
-// In no case will any Consume calls return overlapping slice aliases,
-// and Append calls are guaranteed to not disturb this slice alias.
-func (b *Buffer) ConsumeByteSlice() []byte {
+// In no case will consuming calls return overlapping slice aliases,
+// and append calls are guaranteed to not disturb this slice alias.
+func (b *Buffer) ConsumeBytes() []byte {
 	length := int(b.ConsumeUint32())
-	if b.Err != nil {
-		return nil
-	}
 
 	if length == 0 {
-		// short-circuit empty strings.
+		// Short-circuit empty strings.
 		return nil
 	}
 
-	if b.Len() < length || length < 0 {
-		b.off = len(b.b)
-		b.Err = ErrShortPacket
+	if !b.checkLen(length) {
 		return nil
 	}
 
@@ -279,21 +270,27 @@ func (b *Buffer) ConsumeByteSlice() []byte {
 	if len(v) > length || cap(v) > length {
 		v = v[:length:length]
 	}
-	b.off += int(length)
+	b.off += length
 	return v
 }
 
-// ConsumeByteSliceCopy consumes a single string of raw binary data as a copy from the buffer.
+// ConsumeBytesCopy consumes and returns a copy of a single string of raw binary data from the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
-// If the buffer does not have enough data, or defines a length larger than available, it will set Err to ErrShortPacket.
+// If the buffer does not have enough data, it will set Err to ErrShortPacket.
 //
 // The returned slice does not alias any buffer contents,
 // and will therefore be valid even if the buffer is later reused.
 //
 // If hint has sufficient capacity to hold the data, it will be reused and overwritten,
 // otherwise a new backing slice will be allocated and returned.
-func (b *Buffer) ConsumeByteSliceCopy(hint []byte) []byte {
-	data := b.ConsumeByteSlice()
+func (b *Buffer) ConsumeBytesCopy(hint []byte) []byte {
+	data := b.ConsumeBytes()
+
+	if len(data) == 0 {
+		// Short-circuit empty strings to the zero-length slice of the hint.
+		// Nota bene: if hint == nil, then this will return the nil slice.
+		return hint[:0]
+	}
 
 	hint = hint[:cap(hint)]
 
@@ -302,31 +299,32 @@ func (b *Buffer) ConsumeByteSliceCopy(hint []byte) []byte {
 	}
 
 	n := copy(hint, data)
-	hint = hint[:n]
-	return hint
+	return hint[:n]
 }
 
-// AppendByteSlice appends a single string of raw binary data into the buffer.
+// AppendBytes appends a single string of raw binary data into the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
-func (b *Buffer) AppendByteSlice(v []byte) {
+func (b *Buffer) AppendBytes(v []byte) {
 	b.AppendUint32(uint32(len(v)))
 	b.b = append(b.b, v...)
 }
 
-// ConsumeString consumes a single string of binary data from the buffer.
+// ConsumeString consumes a single string of binary data as a Go string from the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
-// If the buffer does not have enough data, or defines a length larger than available, it will set Err to ErrShortPacket.
+// If the buffer does not have enough data, it will set Err to ErrShortPacket.
 //
 // NOTE: Go implicitly assumes that strings contain UTF-8 encoded data.
 // All caveats on using arbitrary binary data in Go strings applies.
 func (b *Buffer) ConsumeString() string {
-	return string(b.ConsumeByteSlice())
+	return string(b.ConsumeBytes())
 }
 
 // AppendString appends a single string of binary data into the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
 func (b *Buffer) AppendString(v string) {
-	b.AppendByteSlice([]byte(v))
+	// This uses an unsafe bytes slice reference of v to avoid a potential copy to a mutable byte slice.
+	// Fortunately, AppendBytes treats the bytes slice as immutable, so this should not crash.
+	b.AppendBytes(unsafe.Slice(unsafe.StringData(v), len(v)))
 }
 
 // PutLength writes the given size into the first four bytes of the buffer in network byte order (big endian).
@@ -340,9 +338,7 @@ func (b *Buffer) PutLength(size int) {
 
 // MarshalBinary returns a clone of the full internal buffer.
 func (b *Buffer) MarshalBinary() ([]byte, error) {
-	clone := make([]byte, len(b.b))
-	n := copy(clone, b.b)
-	return clone[:n], nil
+	return slices.Clone(b.b), nil
 }
 
 // UnmarshalBinary sets the internal buffer of b to be a clone of data, and zeros the internal offset.

@@ -32,9 +32,12 @@ func FormatLongname(fi fs.FileInfo, idLookup NameLookup) string {
 
 	switch sys := fi.Sys().(type) {
 	case *sshfx.Attributes:
-		symPerms = sys.Permissions.String()
-		uid = fmt.Sprint(sys.UID)
-		gid = fmt.Sprint(sys.GID)
+		symPerms = sys.GetPermissions().String()
+
+		sysUID, sysGID := sys.GetUIDGID()
+		uid = fmt.Sprint(sysUID)
+		gid = fmt.Sprint(sysGID)
+
 	default:
 		symPerms = sshfx.FromGoFileMode(fi.Mode()).String()
 	}

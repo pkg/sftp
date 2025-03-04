@@ -149,14 +149,11 @@ func (f *winRoot) Handle() string {
 }
 
 func (f *winRoot) Stat() (*sshfx.Attributes, error) {
-	return &sshfx.Attributes{
-		Flags: sshfx.AttrSize | sshfx.AttrPermissions | sshfx.AttrACModTime,
-
-		MTime: f.mtime,
-		ATime: f.mtime,
-
-		Permissions: 0555,
-	}, nil
+	attrs := new(sshfx.Attributes)
+	attrs.SetSize(0)
+	attrs.SetACModTime(f.mtime, f.mtime)
+	attrs.SetPermissions(0555)
+	return attrs, nil
 }
 
 func (f *winRoot) ReadDir(maxDataLen uint32) ([]*sshfx.NameEntry, error) {
@@ -167,7 +164,7 @@ func (f *winRoot) ReadDir(maxDataLen uint32) ([]*sshfx.NameEntry, error) {
 	for len(f.entries) > 0 {
 		entry := f.entries[0]
 
-		if size+entry.Len() > int(maxDataLen) {
+		if size+entry.MarshalSize() > int(maxDataLen) {
 			return ret, nil
 		}
 

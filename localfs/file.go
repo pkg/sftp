@@ -118,7 +118,7 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 			Attrs:    *attrs,
 		}
 
-		size += entry.Len()
+		size += entry.MarshalSize()
 
 		if size > int(maxDataLen) {
 			// This would exceed the packet data length,
@@ -136,19 +136,23 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 
 // SetStat implements [sftp.SetStatFileHandler].
 func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
-	if size, ok := attrs.GetSize(); ok {
-		err = cmp.Or(err, f.Truncate(int64(size)))
+	if attrs.HasSize() {
+		sz := attrs.GetSize()
+		err = cmp.Or(err, f.Truncate(int64(sz)))
 	}
 
-	if perm, ok := attrs.GetPermissions(); ok {
+	if attrs.HasPermissions() {
+		perm := attrs.GetPermissions()
 		err = cmp.Or(err, f.Chmod(fs.FileMode(perm.Perm())))
 	}
 
-	if uid, gid, ok := attrs.GetUIDGID(); ok {
+	if attrs.HasUIDGID() {
+		uid, gid := attrs.GetUIDGID()
 		err = cmp.Or(err, f.Chown(int(uid), int(gid)))
 	}
 
-	if atime, mtime, ok := attrs.GetACModTime(); ok {
+	if attrs.HasACModTime() {
+		atime, mtime := attrs.GetACModTime()
 		err = cmp.Or(err, os.Chtimes(f.filename, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)))
 	}
 

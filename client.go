@@ -749,7 +749,7 @@ func (cl *Client) Remove(name string) error {
 
 	// Both failed: figure out which error to return.
 
-	if errF == errD {
+	if errors.Is(errF, errD) {
 		// If they are the same error, then just return that.
 		return wrapPathError("remove", name, errF)
 	}
@@ -761,8 +761,10 @@ func (cl *Client) Remove(name string) error {
 		return wrapPathError("remove", name, err)
 	}
 
-	if perm, ok := attrs.GetPermissions(); ok && perm.IsDir() {
-		return wrapPathError("remove", name, errD)
+	if attrs.HasPermissions() {
+		if perm := attrs.GetPermissions(); perm.IsDir() {
+			return wrapPathError("remove", name, errD)
+		}
 	}
 
 	return wrapPathError("remove", name, errF)
