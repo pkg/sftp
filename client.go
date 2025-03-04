@@ -772,9 +772,15 @@ func (c *Client) Remove(path string) error {
 
 	// Both failed: figure out which error to return.
 
-	if errF == errD {
-		// If they are the same error, then just return that.
-		return errF
+	if errF, ok := errF.(*os.PathError); ok {
+		// The only time it makes sense to compare errors, is when both are `*os.PathError`.
+		// We cannot test these directly with errF == errD, as that would be a pointer comparison.
+
+		if errD, ok := errD.(*os.PathError); ok && errors.Is(errF.Err, errD.Err) {
+			// If they are both pointers to PathError,
+			// and the same underlying error, then return that.
+			return errF
+		}
 	}
 
 	fi, err := c.Stat(path)
