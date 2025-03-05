@@ -136,24 +136,31 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 
 // SetStat implements [sftp.SetStatFileHandler].
 func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
+	if len(attrs.Extended) > 0 {
+		err = &sshfx.StatusPacket{
+			StatusCode:   sshfx.StatusOpUnsupported,
+			ErrorMessage: "unsupported fsetstat: extended atributes",
+		}
+	}
+
 	if attrs.HasSize() {
 		sz := attrs.GetSize()
-		err = cmp.Or(err, f.Truncate(int64(sz)))
+		err = cmp.Or(f.Truncate(int64(sz)), err)
 	}
 
 	if attrs.HasPermissions() {
 		perm := attrs.GetPermissions()
-		err = cmp.Or(err, f.Chmod(fs.FileMode(perm.Perm())))
-	}
-
-	if attrs.HasUIDGID() {
-		uid, gid := attrs.GetUIDGID()
-		err = cmp.Or(err, f.Chown(int(uid), int(gid)))
+		err = cmp.Or(f.Chmod(fs.FileMode(perm.Perm())), err)
 	}
 
 	if attrs.HasACModTime() {
 		atime, mtime := attrs.GetACModTime()
-		err = cmp.Or(err, os.Chtimes(f.filename, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)))
+		err = cmp.Or(os.Chtimes(f.filename, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)), err)
+	}
+
+	if attrs.HasUIDGID() {
+		uid, gid := attrs.GetUIDGID()
+		err = cmp.Or(f.Chown(int(uid), int(gid)), err)
 	}
 
 	return err
