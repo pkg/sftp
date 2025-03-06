@@ -22,9 +22,15 @@ func (p *StatusPacket) Error() string {
 	return "sftp: " + p.StatusCode.String() + ": " + p.ErrorMessage
 }
 
-// Is returns true if target is a StatusPacket with the same StatusCode,
-// or target is a Status code which is the same as SatusCode.
+// Is returns true if the status packet is the same error as target.
+// If target is a *StatusPacket, then we return true if all fields are equal.
+// Otherwise, we return true if [Status.Is] of the status code returns true for the same target.
 func (p *StatusPacket) Is(target error) bool {
+	var status *StatusPacket
+	if errors.As(target, &status) {
+		return *p == *status
+	}
+
 	return p.StatusCode.Is(target)
 }
 

@@ -3,6 +3,8 @@ package sshfx
 import (
 	"bufio"
 	"errors"
+	"io"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -85,18 +87,33 @@ func TestFxNames(t *testing.T) {
 }
 
 func TestStatusIs(t *testing.T) {
-	status := StatusFailure
+	if !errors.Is(StatusFailure, StatusFailure) {
+		t.Error("errors.Is(StatusFailure, StatusFailure) should be true")
+	}
+	if !errors.Is(StatusFailure, &StatusPacket{StatusCode: StatusFailure}) {
+		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) should be true")
+	}
 
-	if !errors.Is(status, StatusFailure) {
-		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
+	if errors.Is(StatusFailure, StatusOK) {
+		t.Error("errors.Is(StatusFailure, StatusOK) should not be true")
 	}
-	if !errors.Is(status, &StatusPacket{StatusCode: StatusFailure}) {
-		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
+	if errors.Is(StatusFailure, &StatusPacket{StatusCode: StatusOK}) {
+		t.Error("errors.Is(StatusFailure, StatusPacket{StatusOK}) should not be true")
 	}
-	if errors.Is(status, StatusOK) {
-		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
+
+	/*// This test makes no sense to test, as its behavior is dictated by errors.Is.
+	if !errors.Is(StatusOK, nil) {
+		t.Error("errors.Is(StatusOK, nil) should be true")
 	}
-	if errors.Is(status, &StatusPacket{StatusCode: StatusOK}) {
-		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
+	//*/
+
+	if !errors.Is(StatusEOF, io.EOF) {
+		t.Error("errors.Is(StatusEOF, io.EOF) should be true")
+	}
+	if !errors.Is(StatusNoSuchFile, fs.ErrNotExist) {
+		t.Error("errors.Is(StatusNoSuchFile, fs.ErrNotExist) should be true")
+	}
+	if !errors.Is(StatusPermissionDenied, fs.ErrPermission) {
+		t.Error("errors.Is(StatusPermissionDenied, fs.ErrPermission) should be true")
 	}
 }
