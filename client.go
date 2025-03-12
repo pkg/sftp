@@ -1174,7 +1174,7 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 				ID:     id,
 				Handle: f.handle,
 				Offset: uint64(offset),
-				Len:    uint32(chunkSize),
+				Len:    uint32(len(rb)),
 			})
 
 			select {
