@@ -9,6 +9,6 @@ import (
 
 func fileStatFromInfoOs(fi fs.FileInfo, attrs *sshfx.Attributes) {
 	if dir, ok := fi.Sys().(*syscall.Dir); ok {
-		attrs.ATime = dir.Atime
+		attrs.SetACModTime(dir.Atime, dir.Mtime)
 	}
 }

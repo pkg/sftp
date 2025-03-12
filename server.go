@@ -74,29 +74,24 @@ type SetStatFileHandler interface {
 	SetStat(attrs *sshfx.Attributes) error
 }
 
-func noop() error {
-	return nil
-}
-
 // TruncateFileHandler is an extension interface for handling the truncate subfunction of an SSH_FXP_FSETSTAT request.
 type TruncateFileHandler interface {
 	FileHandler
 	Truncate(size int64) error
 }
 
-func trunc(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	sz, has := attr.GetSize()
-	if !has {
-		return noop, nil
+func ftrunc(attr *sshfx.Attributes, f FileHandler) error {
+	if !attr.HasSize() {
+		return nil
 	}
+
+	sz := attr.GetSize()
 
 	if truncater, ok := f.(TruncateFileHandler); ok {
-		return func() error {
-			return truncater.Truncate(int64(sz))
-		}, nil
+		return truncater.Truncate(int64(sz))
 	}
 
-	return nil, &sshfx.StatusPacket{
+	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: "unsupported fsetstat: ftruncate",
 	}
@@ -108,19 +103,18 @@ type ChownFileHandler interface {
 	Chown(uid, gid int) error
 }
 
-func chown(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	uid, gid, has := attr.GetUIDGID()
-	if !has {
-		return noop, nil
+func fchown(attr *sshfx.Attributes, f FileHandler) error {
+	if !attr.HasUIDGID() {
+		return nil
 	}
+
+	uid, gid := attr.GetUIDGID()
 
 	if chowner, ok := f.(ChownFileHandler); ok {
-		return func() error {
-			return chowner.Chown(int(uid), int(gid))
-		}, nil
+		return chowner.Chown(int(uid), int(gid))
 	}
 
-	return nil, &sshfx.StatusPacket{
+	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: "unsupported fsetstat: fchown",
 	}
@@ -132,19 +126,18 @@ type ChmodFileHandler interface {
 	Chmod(mode fs.FileMode) error
 }
 
-func chmod(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	mode, has := attr.GetPermissions()
-	if !has {
-		return noop, nil
+func fchmod(attr *sshfx.Attributes, f FileHandler) error {
+	if !attr.HasPermissions() {
+		return nil
 	}
+
+	mode := attr.GetPermissions()
 
 	if chmoder, ok := f.(ChmodFileHandler); ok {
-		return func() error {
-			return chmoder.Chmod(sshfx.ToGoFileMode(mode))
-		}, nil
+		return chmoder.Chmod(sshfx.ToGoFileMode(mode))
 	}
 
-	return nil, &sshfx.StatusPacket{
+	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: "unsupported fsetstat: fchmod",
 	}
@@ -156,19 +149,18 @@ type ChtimesFileHandler interface {
 	Chtimes(atime, mtime time.Time) error
 }
 
-func chtimes(attr *sshfx.Attributes, f FileHandler) (func() error, error) {
-	atime, mtime, has := attr.GetACModTime()
-	if !has {
-		return noop, nil
+func fchtimes(attr *sshfx.Attributes, f FileHandler) error {
+	if !attr.HasACModTime() {
+		return nil
 	}
+
+	atime, mtime := attr.GetACModTime()
 
 	if chtimeser, ok := f.(ChtimesFileHandler); ok {
-		return func() error {
-			return chtimeser.Chtimes(time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0))
-		}, nil
+		return chtimeser.Chtimes(time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0))
 	}
 
-	return nil, &sshfx.StatusPacket{
+	return &sshfx.StatusPacket{
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: "unsupported fsetstat: fchtimes",
 	}
@@ -749,39 +741,22 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 				return nil, file.SetStat(&req.Attrs)
 			}
 
-			if len(req.Attrs.ExtendedAttributes) > 0 {
-				return nil, &sshfx.StatusPacket{
+			var err error
+
+			if len(req.Attrs.Extended) > 0 {
+				err = &sshfx.StatusPacket{
 					StatusCode:   sshfx.StatusOpUnsupported,
 					ErrorMessage: "unsupported fsetstat: extended attributes",
 				}
 			}
 
-			trunc, err := trunc(&req.Attrs, file)
-			if err != nil {
-				return nil, err
-			}
+			// This is the order and behavior of operations for SSH_FXP_FSETSTAT in openssh's sftp-server.
+			err = cmp.Or(ftrunc(&req.Attrs, file), err)
+			err = cmp.Or(fchmod(&req.Attrs, file), err)
+			err = cmp.Or(fchtimes(&req.Attrs, file), err)
+			err = cmp.Or(fchown(&req.Attrs, file), err)
 
-			chown, err := chown(&req.Attrs, file)
-			if err != nil {
-				return nil, err
-			}
-
-			chmod, err := chmod(&req.Attrs, file)
-			if err != nil {
-				return nil, err
-			}
-
-			chtimes, err := chtimes(&req.Attrs, file)
-			if err != nil {
-				return nil, err
-			}
-
-			return nil, cmp.Or(
-				trunc(),
-				chown(),
-				chmod(),
-				chtimes(),
-			)
+			return nil, err
 		}
 	}
 

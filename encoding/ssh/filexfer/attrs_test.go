@@ -30,7 +30,7 @@ func TestAttributes(t *testing.T) {
 		Permissions: perms,
 		ATime:       atime,
 		MTime:       mtime,
-		ExtendedAttributes: []ExtendedAttribute{
+		Extended: []ExtendedAttribute{
 			extAttr,
 		},
 	}
@@ -164,7 +164,7 @@ func TestAttributes(t *testing.T) {
 			}
 
 			if attr.Flags&AttrExtended != 0 {
-				extAttrs := attr.ExtendedAttributes
+				extAttrs := attr.Extended
 
 				if count := len(extAttrs); count != 1 {
 					t.Fatalf("UnmarshalBinary(): len(ExtendedAttributes) was %d, but wanted %d", count, 1)

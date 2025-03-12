@@ -13,6 +13,6 @@ import (
 func fileStatFromInfoOs(fi fs.FileInfo, attrs *sshfx.Attributes) {
 	if statt, ok := fi.Sys().(*syscall.Stat_t); ok {
 		attrs.SetUIDGID(statt.Uid, statt.Gid)
-		attrs.ATime = uint32(statt.Atime)
+		attrs.SetACModTime(uint32(statt.Atime), uint32(statt.Mtime))
 	}
 }

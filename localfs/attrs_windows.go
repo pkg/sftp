@@ -10,6 +10,8 @@ import (
 
 func fileStatFromInfoOs(fi fs.FileInfo, attrs *sshfx.Attributes) {
 	if fad, ok := fi.Sys().(*syscall.Win32FileAttributeData); ok {
-		attrs.ATime = uint32(time.Duration(fad.LastAccessTime.Nanoseconds()).Seconds())
+		atime := uint32(time.Duration(fad.LastAccessTime.Nanoseconds()).Seconds())
+		mtime := uint32(time.Duration(fad.LastWriteTime.Nanoseconds()).Seconds())
+		attrs.SetACModTime(atime, mtime)
 	}
 }

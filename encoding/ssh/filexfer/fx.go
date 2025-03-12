@@ -68,8 +68,15 @@ func (s Status) Error() string {
 	return s.String()
 }
 
-// Is returns true if the target is the same Status code,
-// or target is a StatusPacket with the same Status code.
+// Is returns true if the status code is the same error as target.
+// If target is a *StatusPacket, then we return true if its StatusCode is the same status code.
+// If target is a Status, then we return true if they are the same status code.
+//
+// Special cases:
+//
+//	StatusEOF is io.EOF
+//	StatusNoSuchFile is fs.ErrNotExist
+//	StatusPermissionDenied is fs.ErrPermission
 func (s Status) Is(target error) bool {
 	var status *StatusPacket
 	if errors.As(target, &status) {
@@ -82,8 +89,8 @@ func (s Status) Is(target error) bool {
 	}
 
 	switch s {
-	case StatusOK:
-		return target == nil
+	// We cannot test for s == StatusOK && target == nil here.
+	// errors.Is short-circuits such a case to to `err == target`.
 	case StatusEOF:
 		return errors.Is(target, io.EOF)
 	case StatusNoSuchFile:

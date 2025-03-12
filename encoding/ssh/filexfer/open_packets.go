@@ -27,7 +27,7 @@ func (p *OpenPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []by
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
 		// string(filename) + uint32(pflags) + ATTRS(attrs)
-		size := 4 + len(p.Filename) + 4 + p.Attrs.Len()
+		size := 4 + len(p.Filename) + 4 + p.Attrs.MarshalSize()
 		buf = NewMarshalBuffer(size)
 	}
 

@@ -135,7 +135,7 @@ func (p *WritePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	*p = WritePacket{
 		Handle: buf.ConsumeString(),
 		Offset: buf.ConsumeUint64(),
-		Data:   buf.ConsumeByteSliceCopy(hint),
+		Data:   buf.ConsumeBytesCopy(hint),
 	}
 
 	return buf.Err
@@ -200,7 +200,7 @@ func (p *FSetStatPacket) GetHandle() string {
 func (p *FSetStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Handle) + p.Attrs.Len() // string(handle) + ATTRS(attrs)
+		size := 4 + len(p.Handle) + p.Attrs.MarshalSize() // string(handle) + ATTRS(attrs)
 		buf = NewMarshalBuffer(size)
 	}
 

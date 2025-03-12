@@ -3,6 +3,8 @@ package sshfx
 import (
 	"bytes"
 	"errors"
+	"io"
+	"io/fs"
 	"testing"
 )
 
@@ -13,17 +15,79 @@ func TestStatusPacketIs(t *testing.T) {
 		LanguageTag:  "language tag",
 	}
 
-	if !errors.Is(status, StatusFailure) {
-		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
+	diffCode := new(StatusPacket)
+	*diffCode = *status
+	diffCode.StatusCode = StatusOpUnsupported
+
+	diffMsg := new(StatusPacket)
+	*diffMsg = *status
+	diffMsg.ErrorMessage = "foo"
+
+	diffLang := new(StatusPacket)
+	*diffLang = *status
+	diffLang.LanguageTag = "bar"
+
+	if errors.Is(status, diffCode) {
+		t.Error("errors.Is(status, diffCode) should be false")
 	}
-	if !errors.Is(status, &StatusPacket{StatusCode: StatusFailure}) {
-		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
+	if errors.Is(status, diffMsg) {
+		t.Error("errors.Is(status, diffMsg) should be false")
+	}
+	if errors.Is(status, diffLang) {
+		t.Error("errors.Is(status, diffLang) should be false")
+	}
+
+	if !errors.Is(status, StatusFailure) {
+		t.Error("errors.Is(status, StatusFailure) should be true")
 	}
 	if errors.Is(status, StatusOK) {
-		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
+		t.Error("errors.Is(status, StatusOK) should not be true")
 	}
-	if errors.Is(status, &StatusPacket{StatusCode: StatusOK}) {
-		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
+
+	/*// Neither of these tests make sense to test, as their behavior is dictated by errors.Is.
+	if errors.Is(status, nil) {
+		t.Error("errors.Is(status, nil) should not be true")
+	}
+
+	myOK := &StatusPacket{
+		StatusCode: StatusOK,
+		ErrorMessage: "error message",
+		LanguageTag: "language tag",
+	}
+
+	if !errors.Is(myOK, nil) {
+		t.Error("errors.Is(myOK, nil) should be true")
+	}
+	//*/
+
+	myEOF := &StatusPacket{
+		StatusCode:   StatusEOF,
+		ErrorMessage: "error message",
+		LanguageTag:  "language tag",
+	}
+
+	if !errors.Is(myEOF, io.EOF) {
+		t.Error("errors.Is(myEOF, io.EOF) should be true")
+	}
+
+	myNotExist := &StatusPacket{
+		StatusCode:   StatusNoSuchFile,
+		ErrorMessage: "error message",
+		LanguageTag:  "language tag",
+	}
+
+	if !errors.Is(myNotExist, fs.ErrNotExist) {
+		t.Error("errors.Is(myNotExist, fs.ErrNotExist) should be true")
+	}
+
+	myPerm := &StatusPacket{
+		StatusCode:   StatusPermissionDenied,
+		ErrorMessage: "error message",
+		LanguageTag:  "language tag",
+	}
+
+	if !errors.Is(myPerm, fs.ErrPermission) {
+		t.Error("errors.Is(myPerm, fs.ErrPermission) should be true")
 	}
 }
 

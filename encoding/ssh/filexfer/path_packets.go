@@ -49,7 +49,7 @@ func (p *SetStatPacket) Type() PacketType {
 func (p *SetStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) + p.Attrs.Len() // string(path) + ATTRS(attrs)
+		size := 4 + len(p.Path) + p.Attrs.MarshalSize() // string(path) + ATTRS(attrs)
 		buf = NewMarshalBuffer(size)
 	}
 
@@ -120,7 +120,7 @@ func (p *MkdirPacket) Type() PacketType {
 func (p *MkdirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) + p.Attrs.Len() // string(path) + ATTRS(attrs)
+		size := 4 + len(p.Path) + p.Attrs.MarshalSize() // string(path) + ATTRS(attrs)
 		buf = NewMarshalBuffer(size)
 	}
 

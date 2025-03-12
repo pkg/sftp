@@ -41,7 +41,7 @@ type Packet interface {
 	UnmarshalPacketBody(buf *Buffer) error
 }
 
-// ComposePacket converts returns from MarshalPacket into an equivalent call to MarshalBinary.
+// ComposePacket converts the returns from a MarshalPacket call into an equivalent call to MarshalBinary.
 func ComposePacket(header, payload []byte, err error) ([]byte, error) {
 	return append(header, payload...), err
 }

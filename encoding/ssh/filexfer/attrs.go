@@ -37,131 +37,241 @@ type Attributes struct {
 	MTime uint32
 
 	// AttrExtended
-	ExtendedAttributes []ExtendedAttribute
+	Extended ExtendedAttributes
 }
 
-// GetSize returns the Size field and a bool that is true if and only if the value is valid/defined.
-func (a *Attributes) GetSize() (size uint64, ok bool) {
-	return a.Size, a.Flags&AttrSize != 0
+// GetSize returns the size field.
+// It returns zero if the field is not set.
+func (a *Attributes) GetSize() (size uint64) {
+	if a == nil {
+		return 0
+	}
+
+	return a.Size
 }
 
-// SetSize is a convenience function that sets the Size field,
-// and marks the field as valid/defined in Flags.
+// HasSize returns true if the Attributes has a size defined.
+func (a *Attributes) HasSize() bool {
+	if a == nil {
+		return false
+	}
+
+	return a.Flags&AttrSize != 0
+}
+
+// SetSize sets the size field to a specific value.
 func (a *Attributes) SetSize(size uint64) {
-	a.Flags |= AttrSize
 	a.Size = size
+	a.Flags |= AttrSize
 }
 
-// GetUIDGID returns the UID and GID fields and a bool that is true if and only if the values are valid/defined.
-func (a *Attributes) GetUIDGID() (uid, gid uint32, ok bool) {
-	return a.UID, a.GID, a.Flags&AttrUIDGID != 0
+// ClearSize clears the size field, so that it is no longer set.
+func (a *Attributes) ClearSize() {
+	a.Size = 0
+	a.Flags &^= AttrSize
 }
 
-// SetUIDGID is a convenience function that sets the UID and GID fields,
-// and marks the fields as valid/defined in Flags.
+// GetUIDGID returns the uid and gid field.
+// It returns zeros if the field is not set.
+func (a *Attributes) GetUIDGID() (uid, gid uint32) {
+	if a == nil {
+		return 0, 0
+	}
+
+	return a.UID, a.GID
+}
+
+// HasUIDGID returns true if the uid and gid fields are set.
+func (a *Attributes) HasUIDGID() bool {
+	if a == nil {
+		return false
+	}
+
+	return a.Flags&AttrUIDGID != 0
+}
+
+// SetUIDGID sets the uid and gid fields to specific values.
 func (a *Attributes) SetUIDGID(uid, gid uint32) {
-	a.Flags |= AttrUIDGID
 	a.UID = uid
 	a.GID = gid
+	a.Flags |= AttrUIDGID
 }
 
-// GetPermissions returns the Permissions field and a bool that is true if and only if the value is valid/defined.
-func (a *Attributes) GetPermissions() (perms FileMode, ok bool) {
-	return a.Permissions, a.Flags&AttrPermissions != 0
+// ClearUIDGID clears the uid and gid fields, so that they are no longer set.
+func (a *Attributes) ClearUIDGID() {
+	a.UID = 0
+	a.GID = 0
+	a.Flags &^= AttrUIDGID
 }
 
-// SetPermissions is a convenience function that sets the Permissions field,
-// and marks the field as valid/defined in Flags.
+// GetPermissions returns the permissions field.
+// It returns zero if the field is not set.
+func (a *Attributes) GetPermissions() FileMode {
+	if a == nil {
+		return 0
+	}
+
+	return a.Permissions
+}
+
+// HasPermissions returns true if the permissions field is set.
+func (a *Attributes) HasPermissions() bool {
+	if a == nil {
+		return false
+	}
+
+	return a.Flags&AttrPermissions != 0
+}
+
+// SetPermissions sets the permissions field to a specific value.
 func (a *Attributes) SetPermissions(perms FileMode) {
-	a.Flags |= AttrPermissions
 	a.Permissions = perms
+	a.Flags |= AttrPermissions
 }
 
-// GetACModTime returns the ATime and MTime fields and a bool that is true if and only if the values are valid/defined.
-func (a *Attributes) GetACModTime() (atime, mtime uint32, ok bool) {
-	return a.ATime, a.MTime, a.Flags&AttrACModTime != 0
+// ClearPermissions clears the permissions field, so that it is no longer set.
+func (a *Attributes) ClearPermissions() {
+	a.Permissions = 0
+	a.Flags &^= AttrPermissions
 }
 
-// SetACModTime is a convenience function that sets the ATime and MTime fields,
-// and marks the fields as valid/defined in Flags.
+// GetACModTime returns the atime and mtime fields.
+// It returns zeros if the fields are not set.
+func (a *Attributes) GetACModTime() (atime, mtime uint32) {
+	return a.ATime, a.MTime
+}
+
+// HasACModTime returns true if the atime and mtime fields are set.
+func (a *Attributes) HasACModTime() bool {
+	return a.Flags&AttrACModTime != 0
+}
+
+// SetACModTime sets the atime and mtime fields to specific values.
 func (a *Attributes) SetACModTime(atime, mtime uint32) {
-	a.Flags |= AttrACModTime
 	a.ATime = atime
 	a.MTime = mtime
+	a.Flags |= AttrACModTime
 }
 
-// Len returns the number of bytes a would marshal into.
-func (a *Attributes) Len() int {
+// ClearACModTime clears the atime and mtime fields, so that they are no longer set.
+func (a *Attributes) ClearACModTime() {
+	a.ATime = 0
+	a.MTime = 0
+	a.Flags &^= AttrACModTime
+}
+
+// GetExtended returns the extended field.
+// It returns a nil slice if not set.
+func (a *Attributes) GetExtended() ExtendedAttributes {
+	if a == nil {
+		return nil
+	}
+
+	return a.Extended
+}
+
+// GetExtendedAsMap returns the extended field converted into a map[string]string.
+// Since this will deduplicate each key value to the last extended attribute specified and involves extra allocation,
+// it is recommended to use [GetExtended], which returns a rich slice that can be iterated on as if it were a map.
+func (a *Attributes) GetExtendedAsMap() map[string]string {
+	if a == nil {
+		return nil
+	}
+
+	return a.Extended.AsMap()
+}
+
+// HasExtended returns true if the extended field is set.
+func (a *Attributes) HasExtended() bool {
+	if a == nil {
+		return false
+	}
+
+	return a.Flags&AttrExtended != 0
+}
+
+// SetExtended sets the extended field to the specific slice.
+func (a *Attributes) SetExtended(exts ExtendedAttributes) {
+	a.Extended = exts
+	a.Flags |= AttrExtended
+}
+
+// SetExtendedFromMap sets the extended field to the specific map.
+// The resulting slice will be sorted by type key value.
+func (a *Attributes) SetExtendedFromMap(exts map[string]string) {
+	var tmp ExtendedAttributes
+	tmp.SetFromMap(exts)
+	a.SetExtended(tmp)
+}
+
+// ClearExtended clears the extended field, so that it is no longer set.
+func (a *Attributes) ClearExtended() {
+	a.Extended = nil
+	a.Flags &^= AttrExtended
+}
+
+// MarshalSize returns the number of bytes the attributes would marshal into.
+func (a *Attributes) MarshalSize() int {
 	length := 4
 
-	if a.Flags&AttrSize != 0 {
+	if a.HasSize() {
 		length += 8
 	}
 
-	if a.Flags&AttrUIDGID != 0 {
+	if a.HasUIDGID() {
 		length += 4 + 4
 	}
 
-	if a.Flags&AttrPermissions != 0 {
+	if a.HasPermissions() {
 		length += 4
 	}
 
-	if a.Flags&AttrACModTime != 0 {
+	if a.HasACModTime() {
 		length += 4 + 4
 	}
 
-	if a.Flags&AttrExtended != 0 {
-		length += 4
-
-		for _, ext := range a.ExtendedAttributes {
-			length += ext.Len()
-		}
+	if a.HasExtended() {
+		length += a.Extended.MarshalSize()
 	}
 
 	return length
 }
 
-// MarshalInto marshals e onto the end of the given Buffer.
+// MarshalInto marshals the attributes onto the end of the buffer.
 func (a *Attributes) MarshalInto(buf *Buffer) {
 	buf.AppendUint32(a.Flags)
 
-	if a.Flags&AttrSize != 0 {
+	if a.HasSize() {
 		buf.AppendUint64(a.Size)
 	}
 
-	if a.Flags&AttrUIDGID != 0 {
+	if a.HasUIDGID() {
 		buf.AppendUint32(a.UID)
 		buf.AppendUint32(a.GID)
 	}
 
-	if a.Flags&AttrPermissions != 0 {
+	if a.HasPermissions() {
 		buf.AppendUint32(uint32(a.Permissions))
 	}
 
-	if a.Flags&AttrACModTime != 0 {
+	if a.HasACModTime() {
 		buf.AppendUint32(a.ATime)
 		buf.AppendUint32(a.MTime)
 	}
 
-	if a.Flags&AttrExtended != 0 {
-		buf.AppendUint32(uint32(len(a.ExtendedAttributes)))
-
-		for _, ext := range a.ExtendedAttributes {
-			ext.MarshalInto(buf)
-		}
+	if a.HasExtended() {
+		a.Extended.MarshalInto(buf)
 	}
 }
 
-// MarshalBinary returns a as the binary encoding of a.
+// MarshalBinary returns the binary encoding of attributes.
 func (a *Attributes) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, a.Len()))
+	buf := NewBuffer(make([]byte, 0, a.MarshalSize()))
 	a.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
 
-// UnmarshalFrom unmarshals an Attributes from the given Buffer into e.
-//
-// NOTE: The values of fields not covered in the a.Flags are explicitly undefined.
+// UnmarshalFrom unmarshals the attributes from the buffer.
 func (a *Attributes) UnmarshalFrom(buf *Buffer) (err error) {
 	a.Flags = buf.ConsumeUint32()
 
@@ -170,42 +280,153 @@ func (a *Attributes) UnmarshalFrom(buf *Buffer) (err error) {
 		return buf.Err
 	}
 
-	if a.Flags&AttrSize != 0 {
+	if a.HasSize() {
 		a.Size = buf.ConsumeUint64()
 	}
 
-	if a.Flags&AttrUIDGID != 0 {
+	if a.HasUIDGID() {
 		a.UID = buf.ConsumeUint32()
 		a.GID = buf.ConsumeUint32()
 	}
 
-	if a.Flags&AttrPermissions != 0 {
+	if a.HasPermissions() {
 		a.Permissions = FileMode(buf.ConsumeUint32())
 	}
 
-	if a.Flags&AttrACModTime != 0 {
+	if a.HasACModTime() {
 		a.ATime = buf.ConsumeUint32()
 		a.MTime = buf.ConsumeUint32()
 	}
 
-	if a.Flags&AttrExtended != 0 {
-		count, err := buf.ConsumeCount()
-		if err != nil {
-			return err
-		}
-
-		a.ExtendedAttributes = make([]ExtendedAttribute, count)
-		for i := range a.ExtendedAttributes {
-			a.ExtendedAttributes[i].UnmarshalFrom(buf)
-		}
+	if a.HasExtended() {
+		a.Extended.UnmarshalFrom(buf)
 	}
 
 	return buf.Err
 }
 
-// UnmarshalBinary decodes the binary encoding of Attributes into e.
+// UnmarshalBinary decodes the binary encoding of the attributes.
 func (a *Attributes) UnmarshalBinary(data []byte) error {
 	return a.UnmarshalFrom(NewBuffer(data))
+}
+
+// ExtendedAttributes is a rich slice, which provides iterators and accesssors that operate as if it were a map:
+//
+//	for typ, data := range attrs.GetExtended().Seq2() {
+//		// Do something with the typ and data here.
+//	}
+type ExtendedAttributes []ExtendedAttribute
+
+// MarshalSize returns the number of bytes the extended attributes would marshal into.
+func (a ExtendedAttributes) MarshalSize() int {
+	length := 4
+
+	for _, ext := range a {
+		length += ext.MarshalSize()
+	}
+
+	return length
+}
+
+// MarshalInto marshals the extended attributes onto the end of the buffer.
+func (a ExtendedAttributes) MarshalInto(buf *Buffer) {
+	buf.AppendUint32(uint32(len(a)))
+
+	for _, ext := range a {
+		ext.MarshalInto(buf)
+	}
+}
+
+// MarshalBinary returns the binary encoding of the extended attributes.
+func (a ExtendedAttributes) MarshalBinary() ([]byte, error) {
+	buf := NewBuffer(make([]byte, 0, a.MarshalSize()))
+	a.MarshalInto(buf)
+	return buf.Bytes(), nil
+}
+
+// UnmarshalFrom unmarshals the extended attributes from the buffer.
+func (a *ExtendedAttributes) UnmarshalFrom(buf *Buffer) (err error) {
+	count, err := buf.ConsumeCount()
+	if err != nil {
+		return err
+	}
+
+	*a = make([]ExtendedAttribute, count)
+	for i := range count {
+		(*a)[i].UnmarshalFrom(buf)
+	}
+
+	return buf.Err
+}
+
+// UnmarshalBinary decodes the binary encoding of the extended attributes.
+func (a ExtendedAttributes) UnmarshalBinary(data []byte) error {
+	return a.UnmarshalFrom(NewBuffer(data))
+}
+
+// Len returns the length of the extended attributes slice.
+func (a ExtendedAttributes) Len() int {
+	return len(a)
+}
+
+// AsMap converts the extended attributes into a map[string]string,
+// where the type field is the key, and the data field is the value.
+func (a ExtendedAttributes) AsMap() map[string]string {
+	if len(a) == 0 {
+		return nil
+	}
+
+	m := make(map[string]string, len(a))
+	for _, ext := range a {
+		m[ext.Type] = ext.Data
+	}
+	return m
+}
+
+// SetFromMap sets the extended attributes to an equivalent of the given map,
+// where the key becomes the type field, and the value becomes the data field.
+// For efficency the order is unspecified.
+func (a *ExtendedAttributes) SetFromMap(m map[string]string) {
+	*a = make(ExtendedAttributes, 0, len(m))
+	for k, v := range m {
+		*a = append(*a, ExtendedAttribute{
+			Type: k,
+			Data: v,
+		})
+	}
+}
+
+// Get returns the data field of the extended attribute where the key matches the type field.
+//
+// Since this method operates in linear time,
+// if you are regularly accessing specific extended attributes,
+// you may want to use [AsMap] instead.
+func (a ExtendedAttributes) Get(key string) (data string, ok bool) {
+	for _, ext := range a {
+		if key == ext.Type {
+			return ext.Data, true
+		}
+	}
+
+	return "", false
+}
+
+// Seq is an iterator that yields the type field from each extended attribute.
+func (a ExtendedAttributes) Seq(yield func(string) bool) {
+	for _, ext := range a {
+		if !yield(ext.Type) {
+			return
+		}
+	}
+}
+
+// Seq2 is an iterator that yields the type and data fields from each extended attribute.
+func (a ExtendedAttributes) Seq2(yield func(string, string) bool) {
+	for _, ext := range a {
+		if !yield(ext.Type, ext.Data) {
+			return
+		}
+	}
 }
 
 // ExtendedAttribute defines the extended file attribute type defined in draft-ietf-secsh-filexfer-02
@@ -216,25 +437,25 @@ type ExtendedAttribute struct {
 	Data string
 }
 
-// Len returns the number of bytes e would marshal into.
-func (e *ExtendedAttribute) Len() int {
+// MarshalSize returns the number of bytes the extended attribute would marshal into.
+func (e *ExtendedAttribute) MarshalSize() int {
 	return 4 + len(e.Type) + 4 + len(e.Data)
 }
 
-// MarshalInto marshals e onto the end of the given Buffer.
+// MarshalInto marshals the extended attribute onto the end of the buffer.
 func (e *ExtendedAttribute) MarshalInto(buf *Buffer) {
 	buf.AppendString(e.Type)
 	buf.AppendString(e.Data)
 }
 
-// MarshalBinary returns e as the binary encoding of e.
+// MarshalBinary returns the binary encoding of the extended attribute.
 func (e *ExtendedAttribute) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.MarshalSize()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
 
-// UnmarshalFrom unmarshals an ExtendedAattribute from the given Buffer into e.
+// UnmarshalFrom unmarshals the extended attribute from the buffer.
 func (e *ExtendedAttribute) UnmarshalFrom(buf *Buffer) (err error) {
 	*e = ExtendedAttribute{
 		Type: buf.ConsumeString(),
@@ -244,7 +465,7 @@ func (e *ExtendedAttribute) UnmarshalFrom(buf *Buffer) (err error) {
 	return buf.Err
 }
 
-// UnmarshalBinary decodes the binary encoding of ExtendedAttribute into e.
+// UnmarshalBinary decodes the binary encoding of the extended attribute.
 func (e *ExtendedAttribute) UnmarshalBinary(data []byte) error {
 	return e.UnmarshalFrom(NewBuffer(data))
 }
@@ -301,12 +522,12 @@ func (e *NameEntry) Info() (fs.FileInfo, error) {
 	return e, nil
 }
 
-// Len returns the number of bytes e would marshal into.
-func (e *NameEntry) Len() int {
-	return 4 + len(e.Filename) + 4 + len(e.Longname) + e.Attrs.Len()
+// MarshalSize returns the number of bytes the name entry would marshal into.
+func (e *NameEntry) MarshalSize() int {
+	return 4 + len(e.Filename) + 4 + len(e.Longname) + e.Attrs.MarshalSize()
 }
 
-// MarshalInto marshals e onto the end of the given Buffer.
+// MarshalInto marshals the name entry onto the end of the buffer.
 func (e *NameEntry) MarshalInto(buf *Buffer) {
 	buf.AppendString(e.Filename)
 	buf.AppendString(e.Longname)
@@ -314,16 +535,14 @@ func (e *NameEntry) MarshalInto(buf *Buffer) {
 	e.Attrs.MarshalInto(buf)
 }
 
-// MarshalBinary returns e as the binary encoding of e.
+// MarshalBinary returns the binary encoding of the name entry.
 func (e *NameEntry) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, e.Len()))
+	buf := NewBuffer(make([]byte, 0, e.MarshalSize()))
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
 
-// UnmarshalFrom unmarshals an NameEntry from the given Buffer into e.
-//
-// NOTE: The values of fields not covered in the a.Flags are explicitly undefined.
+// UnmarshalFrom unmarshals the name entry from the buffer.
 func (e *NameEntry) UnmarshalFrom(buf *Buffer) (err error) {
 	*e = NameEntry{
 		Filename: buf.ConsumeString(),
@@ -333,7 +552,7 @@ func (e *NameEntry) UnmarshalFrom(buf *Buffer) (err error) {
 	return e.Attrs.UnmarshalFrom(buf)
 }
 
-// UnmarshalBinary decodes the binary encoding of NameEntry into e.
+// UnmarshalBinary decodes the binary encoding of the name entry.
 func (e *NameEntry) UnmarshalBinary(data []byte) error {
 	return e.UnmarshalFrom(NewBuffer(data))
 }
