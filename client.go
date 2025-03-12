@@ -17,6 +17,8 @@ import (
 
 	"github.com/kr/fs"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/pkg/sftp/internal/encoding/ssh/filexfer/openssh"
 )
 
 var (
@@ -758,20 +760,39 @@ func (c *Client) Join(elem ...string) string { return path.Join(elem...) }
 // file or directory with the specified path exists, or if the specified directory
 // is not empty.
 func (c *Client) Remove(path string) error {
-	err := c.removeFile(path)
-	// some servers, *cough* osx *cough*, return EPERM, not ENODIR.
-	// serv-u returns ssh_FX_FILE_IS_A_DIRECTORY
-	// EPERM is converted to os.ErrPermission so it is not a StatusError
-	if err, ok := err.(*StatusError); ok {
-		switch err.Code {
-		case sshFxFailure, sshFxFileIsADirectory:
-			return c.RemoveDirectory(path)
+	errF := c.removeFile(path)
+	if errF == nil {
+		return nil
+	}
+
+	errD := c.RemoveDirectory(path)
+	if errD == nil {
+		return nil
+	}
+
+	// Both failed: figure out which error to return.
+
+	if errF, ok := errF.(*os.PathError); ok {
+		// The only time it makes sense to compare errors, is when both are `*os.PathError`.
+		// We cannot test these directly with errF == errD, as that would be a pointer comparison.
+
+		if errD, ok := errD.(*os.PathError); ok && errors.Is(errF.Err, errD.Err) {
+			// If they are both pointers to PathError,
+			// and the same underlying error, then return that.
+			return errF
 		}
 	}
-	if os.IsPermission(err) {
-		return c.RemoveDirectory(path)
+
+	fi, err := c.Stat(path)
+	if err != nil {
+		return err
 	}
-	return err
+
+	if fi.IsDir() {
+		return errD
+	}
+
+	return errF
 }
 
 func (c *Client) removeFile(path string) error {
@@ -785,7 +806,15 @@ func (c *Client) removeFile(path string) error {
 	}
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		err = normaliseError(unmarshalStatus(id, data))
+		if err == nil {
+			return nil
+		}
+		return &os.PathError{
+			Op:   "remove",
+			Path: path,
+			Err:  err,
+		}
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -803,7 +832,15 @@ func (c *Client) RemoveDirectory(path string) error {
 	}
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		err = normaliseError(unmarshalStatus(id, data))
+		if err == nil {
+			return nil
+		}
+		return &os.PathError{
+			Op:   "remove",
+			Path: path,
+			Err:  err,
+		}
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -2120,6 +2157,13 @@ func (f *File) Sync() error {
 
 	if f.handle == "" {
 		return os.ErrClosed
+	}
+
+	if data, ok := f.c.HasExtension(openssh.ExtensionFSync().Name); !ok || data != "1" {
+		return &StatusError{
+			Code: sshFxOPUnsupported,
+			msg:  "fsync not supported",
+		}
 	}
 
 	id := f.c.nextID()
