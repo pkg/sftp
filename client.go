@@ -1842,7 +1842,8 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 		off := f.offset
 
 		for {
-			n, err := r.Read(b)
+			// Fill the entire buffer.
+			n, err := io.ReadFull(r, b)
 
 			if n > 0 {
 				read += int64(n)
@@ -1868,7 +1869,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 			}
 
 			if err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 					errCh <- rwErr{off, err}
 				}
 				return
@@ -2022,7 +2023,8 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 
 	var read int64
 	for {
-		n, err := r.Read(b)
+		// Fill the entire buffer.
+		n, err := io.ReadFull(r, b)
 		if n < 0 {
 			panic("sftp.File: reader returned negative count from Read")
 		}
@@ -2039,7 +2041,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 		}
 
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				return read, nil // return nil explicitly.
 			}
 
