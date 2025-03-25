@@ -1676,7 +1676,7 @@ func (f *File) readFromSequential(ctx context.Context, r io.Reader) (read int64,
 	}
 
 	for {
-		n, err := r.Read(b)
+		n, err := io.ReadFull(r, b)
 		if n < 0 {
 			panic("sftp: readfrom: read returned negative count")
 		}
@@ -1697,7 +1697,7 @@ func (f *File) readFromSequential(ctx context.Context, r io.Reader) (read int64,
 		}
 
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				return read, nil // return nil instead of EOF
 			}
 
@@ -1766,7 +1766,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 		}
 
 		for {
-			n, err := r.Read(b)
+			n, err := io.ReadFull(r, b)
 			if n < 0 {
 				errCh <- rwErr{req.Offset, panicInstead("sftp: readfrom: read returned negative count")}
 				return
@@ -1797,7 +1797,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 			}
 
 			if err != nil {
-				if !errors.Is(err, io.EOF) {
+				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 					errCh <- rwErr{req.Offset, err}
 				}
 				return
