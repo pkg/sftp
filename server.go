@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"math"
+	"slices"
 	"time"
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
@@ -699,6 +700,8 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 				return nil, fmt.Errorf("read length request too large: %d", req.Length)
 			}
 
+			hint = slices.Grow(hint[:0], int(req.Length))[:req.Length]
+			 
 			n, err := file.ReadAt(hint, int64(req.Offset))
 			if err != nil {
 				// We cannot return results AND a status like SSH_FX_EOF,
