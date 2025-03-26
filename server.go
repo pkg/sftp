@@ -699,7 +699,9 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 				return nil, fmt.Errorf("read length request too large: %d", req.Length)
 			}
 
-			n, err := file.ReadAt(hint[:req.Length], int64(req.Offset))
+			hint = slices.Grow(hint[:0], req.Length)[:req.Length]
+			 
+			n, err := file.ReadAt(hint, int64(req.Offset))
 			if err != nil {
 				// We cannot return results AND a status like SSH_FX_EOF,
 				// so we return io.EOF only if we didn't read anything at all.
