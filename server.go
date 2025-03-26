@@ -700,7 +700,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 				return nil, fmt.Errorf("read length request too large: %d", req.Length)
 			}
 
-			hint = slices.Grow(hint[:0], req.Length)[:req.Length]
+			hint = slices.Grow(hint[:0], int(req.Length))[:req.Length]
 			 
 			n, err := file.ReadAt(hint, int64(req.Offset))
 			if err != nil {
