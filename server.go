@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"math"
+	"slices"
 	"time"
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
