@@ -21,19 +21,6 @@ import (
 	"github.com/pkg/sftp/internal/encoding/ssh/filexfer/openssh"
 )
 
-var (
-	// ErrInternalInconsistency indicates the packets sent and the data queued to be
-	// written to the file don't match up. It is an unusual error and usually is
-	// caused by bad behavior server side or connection issues. The error is
-	// limited in scope to the call where it happened, the client object is still
-	// OK to use as long as the connection is still open.
-	ErrInternalInconsistency = errors.New("internal inconsistency")
-	// InternalInconsistency alias for ErrInternalInconsistency.
-	//
-	// Deprecated: please use ErrInternalInconsistency
-	InternalInconsistency = ErrInternalInconsistency
-)
-
 // A ClientOption is a function which applies configuration to a Client.
 type ClientOption func(*Client) error
 
