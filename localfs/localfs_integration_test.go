@@ -769,10 +769,12 @@ func TestStatVFS(t *testing.T) {
 		t.Fatalf("unexpected error, got %v, should be fs.ErrNotFound", err)
 	}
 
-	_, err = cl.StatVFS(toRemotePath(dir))
+	resp, err := cl.StatVFS(toRemotePath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	t.Logf("%+v", resp)
 }
 
 var benchBuf []byte
