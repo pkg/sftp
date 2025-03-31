@@ -622,7 +622,13 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 			case *openssh.FStatVFSExtendedPacket:
 				if statvfser, ok := file.(StatVFSFileHandler); ok {
-					return statvfser.StatVFS()
+					resp, err := statvfser.StatVFS()
+					if err != nil {
+						// We have to convert typed-nil to untyped-nil.
+						return nil, err
+					}
+
+					return resp, nil
 				}
 
 				if statvfser, ok := srv.Handler.(StatVFSServerHandler); ok {
@@ -747,7 +753,8 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 				return nil, io.ErrShortWrite
 			}
 
-			return nil, nil
+			// explicitly return statusOK here, rather than both nil.
+			return statusOK, nil
 
 		case *sshfx.FStatPacket:
 			attrs, err := file.Stat()
