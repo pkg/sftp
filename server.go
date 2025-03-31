@@ -344,7 +344,12 @@ func Hijack[REQ sshfx.Packet](srv *Server, fn func(context.Context, REQ) error) 
 // This is really only useful for supporting newer versions of the SFTP standard.
 func HijackWithResponse[REQ, RESP sshfx.Packet](srv *Server, fn func(context.Context, REQ) (RESP, error)) error {
 	wrap := wrapHandler(func(ctx context.Context, req sshfx.Packet) (sshfx.Packet, error) {
-		return fn(ctx, req.(REQ))
+		resp, err := fn(ctx, req.(REQ))
+		if err != nil {
+			// We have to convert maybe typed-zero to untyped-nil.
+			return nil, err
+		}
+		return resp, nil
 	})
 
 	var pkt REQ
@@ -515,6 +520,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 	if len(srv.hijacks) > 0 {
 		if fn := srv.hijacks[req.Type()]; fn != nil {
+			// Hijack takes care of wrapping the getter into an untyped-nil on error.
 			return get(srv, req, fn)
 		}
 	}
@@ -595,7 +601,13 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 		case *openssh.StatVFSExtendedPacket:
 			if statvfser, ok := srv.Handler.(StatVFSServerHandler); ok {
-				return get(srv, req, statvfser.StatVFS)
+				resp, err := get(srv, req, statvfser.StatVFS)
+				if err != nil {
+					// We have to convert typed-nil to untyped-nil.
+					return nil, err
+				}
+
+				return resp, nil
 			}
 
 		case interface{ GetHandle() string }:
@@ -618,7 +630,13 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 						Path: file.Name(),
 					}
 
-					return get(srv, req, statvfser.StatVFS)
+					resp, err := get(srv, req, statvfser.StatVFS)
+					if err != nil {
+						// We have to convert typed-nil to untyped-nil.
+						return nil, err
+					}
+
+					return resp, nil
 				}
 			}
 		}
@@ -701,7 +719,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 			}
 
 			hint = slices.Grow(hint[:0], int(req.Length))[:req.Length]
-			 
+
 			n, err := file.ReadAt(hint, int64(req.Offset))
 			if err != nil {
 				// We cannot return results AND a status like SSH_FX_EOF,

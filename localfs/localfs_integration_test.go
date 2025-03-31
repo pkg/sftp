@@ -751,6 +751,30 @@ func TestReadFrom(t *testing.T) {
 	}
 }
 
+func TestStatVFS(t *testing.T) {
+	if !*testServerImpl {
+		t.Skip("not testing against localfs server implementation")
+	}
+
+	if _, ok := any(handler).(sftp.StatVFSServerHandler); !ok {
+		t.Skip("handler does not implement statvfs")
+	}
+
+	dir := t.TempDir()
+
+	targetNotExist := filepath.Join(dir, "statvfs-does-not-exist")
+
+	_, err := cl.StatVFS(toRemotePath(targetNotExist))
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("unexpected error, got %v, should be fs.ErrNotFound", err)
+	}
+
+	_, err = cl.StatVFS(toRemotePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 var benchBuf []byte
 
 func benchHelperWriteTo(b *testing.B, length int) {
