@@ -892,6 +892,19 @@ func (cl *Client) hasExtension(ext *sshfx.ExtensionPair) bool {
 	return cl.exts[ext.Name] == ext.Data
 }
 
+// StatVFS retrieves VFS statistics from a remote host.
+//
+// It implements the statvfs@openssh.com SSH_FXP_EXTENDED feature from
+// https://github.com/openssh/openssh-portable/blob/master/PROTOCOL
+func (cl *Client) StatVFS(path string) (*openssh.StatVFSExtendedReplyPacket, error) {
+	resp, err := getPacket[*openssh.StatVFSExtendedReplyPacket](context.Background(), nil, cl,
+		&openssh.StatVFSExtendedPacket{
+			Path: path,
+		},
+	)
+	return valOrPathError("statvfs", path, resp, err)
+}
+
 // Link creates newname as a hard link to oldname file.
 //
 // If the server did not announce support for the "hardlink@openssh.com" extension,
