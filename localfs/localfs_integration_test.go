@@ -213,6 +213,7 @@ func TestMain(m *testing.M) {
 
 func withOpenSSHImpl(m *testing.M) error {
 	sftpServerLocations := []string{
+		"/usr/libexec/ssh/sftp-server",
 		"/usr/libexec/sftp-server",
 		"/usr/lib/openssh/sftp-server",
 		"/usr/lib/ssh/sftp-server",
