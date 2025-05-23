@@ -43,6 +43,8 @@ type clientConn struct {
 	conn
 	wg sync.WaitGroup
 
+	wait func() error // if non-nil, call this during Wait() to get a possible remote status error.
+
 	sync.Mutex                          // protects inflight
 	inflight   map[uint32]chan<- result // outstanding requests
 
@@ -55,6 +57,23 @@ type clientConn struct {
 // goroutines.
 func (c *clientConn) Wait() error {
 	<-c.closed
+	if c.wait != nil {
+		if err := c.wait(); err != nil {
+
+			// TODO: when https://github.com/golang/go/issues/35025 is fixed,
+			// we can remove this if block entirely.
+			// Right now, it’s always going to return this, so it is not useful.
+			// But we have this code here so that as soon as the ssh library is updated,
+			// we can return a possibly more useful error.
+			if err.Error() == "ssh: session not started" {
+				return c.err
+			}
+
+			// We intentionally override the c.err error here,
+			// it will probably be io.UnexpectedEOF in this case anyways.
+			return err
+		}
+	}
 	return c.err
 }
 
