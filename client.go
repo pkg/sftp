@@ -158,13 +158,10 @@ func UseFstat(value bool) ClientOption {
 	}
 }
 
-// UseStderr is used to indicate that you intend to read from the standard error of the remote sftp-server command.
-// This does not actually get or set the standard error,
-// instead this simply prevents the standard error from being discarded.
-// You will still need to call [Client.StderrPipe] to get the reader.
-func UseStderr() ClientOption {
+// CopyStderrTo specifies a writer to which the standard error of the remote sftp-server command should be written.
+func CopyStderrTo(wr io.WriteCloser) ClientOption {
 	return func(c *Client) error {
-		c.useStderr = true
+		c.stderrTo = wr
 		return nil
 	}
 }
@@ -177,8 +174,7 @@ func UseStderr() ClientOption {
 type Client struct {
 	clientConn
 
-	stderr    io.Reader
-	useStderr bool
+	stderrTo io.WriteCloser
 
 	ext map[string]string // Extensions (name -> data).
 
@@ -254,18 +250,24 @@ func newClientPipe(rd io.Reader, wr io.WriteCloser, stderr io.Reader, wait func(
 	}
 
 	if stderr != nil {
-		if !c.useStderr {
-			go func() {
-				_, err := io.Copy(io.Discard, stderr)
-				if err != nil {
-					debug("error discarding stderr: %v", err)
+		wr := io.Discard
+		if c.stderrTo != nil {
+			wr = c.stderrTo
+		}
+
+		go func() {
+			defer func() {
+				if closer, ok := wr.(io.Closer); ok {
+					if err := closer.Close(); err != nil {
+						debug("error closing stderrTo: %v", err)
+					}
 				}
 			}()
 
-		} else {
-			// Only set c.stderr when we're not discarding it.
-			c.stderr = stderr
-		}
+			if _, err := io.Copy(wr, stderr); err != nil {
+				debug("error copying stderr: %v", err)
+			}
+		}()
 	}
 
 	if err := c.sendInit(); err != nil {
@@ -288,18 +290,6 @@ func newClientPipe(rd io.Reader, wr io.WriteCloser, stderr io.Reader, wait func(
 	}()
 
 	return c, nil
-}
-
-// StderrPipe returns a reader for the standard error of the remote sftp-server command.
-// You must have passed in the `UseStderr` client option or the standard error will already be set up to be discarded.
-// An error returned here does not mean that the client is no longer useable,
-// it only means that you won't be able to read the standard error output from the remote command.
-func (c *Client) StderrPipe() (io.Reader, error) {
-	if c.stderr == nil {
-		return nil, fmt.Errorf("stderr not available")
-	}
-
-	return c.stderr, nil
 }
 
 // Create creates the named file mode 0666 (before umask), truncating it if it
