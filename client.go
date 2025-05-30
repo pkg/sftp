@@ -388,7 +388,10 @@ func WithMaxPacketLength(length int) ClientOption {
 }
 
 // CopyStderrTo specifies a writer to which the standard error of the remote sftp-server command should be written.
-func CopyStderrTo(wr io.WriteCloser) ClientOption {
+//
+// The writer passed in will not be automatically closed.
+// It is the responsibility of the caller to coordinate closure of any writers.
+func CopyStderrTo(wr io.Writer) ClientOption {
 	return func(cl *Client) error {
 		cl.stderrTo = wr
 		return nil
@@ -400,7 +403,7 @@ func CopyStderrTo(wr io.WriteCloser) ClientOption {
 // and a client may be called concurrently from multiple goroutines.
 type Client struct {
 	conn     clientConn
-	stderrTo io.WriteCloser
+	stderrTo io.Writer
 
 	maxPacket   uint32
 	maxDataLen  int
@@ -647,13 +650,10 @@ func newClientPipe(ctx context.Context, rd, stderr io.Reader, wr io.WriteCloser,
 		}
 
 		go func() {
-			defer func() {
-				if closer, ok := wr.(io.Closer); ok {
-					if err := closer.Close(); err != nil {
-						cl.conn.disconnect(fmt.Errorf("error closing stderrTo: %w", err))
-					}
-				}
-			}()
+			// DO NOT close the writer!
+			// Programs may pass in `os.Stderr` to write the remote stderr to,
+			// and the program may continue after disconnect by reconnecting.
+			// But if we've closed their stderr, then we just messed everything up.
 
 			if _, err := io.Copy(wr, stderr); err != nil {
 				cl.conn.disconnect(fmt.Errorf("error copying stderr: %w", err))
