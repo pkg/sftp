@@ -304,7 +304,7 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 	return nil
 }
 
-func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, error) {
+func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (fxp, []byte, error) {
 	var b []byte
 	if alloc != nil {
 		b = alloc.GetPage(orderID)
