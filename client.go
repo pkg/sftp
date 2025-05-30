@@ -159,7 +159,10 @@ func UseFstat(value bool) ClientOption {
 }
 
 // CopyStderrTo specifies a writer to which the standard error of the remote sftp-server command should be written.
-func CopyStderrTo(wr io.WriteCloser) ClientOption {
+//
+// The writer passed in will not be automatically closed.
+// It is the responsibility of the caller to coordinate closure of any writers.
+func CopyStderrTo(wr io.Writer) ClientOption {
 	return func(c *Client) error {
 		c.stderrTo = wr
 		return nil
@@ -174,7 +177,7 @@ func CopyStderrTo(wr io.WriteCloser) ClientOption {
 type Client struct {
 	clientConn
 
-	stderrTo io.WriteCloser
+	stderrTo io.Writer
 
 	ext map[string]string // Extensions (name -> data).
 
@@ -214,17 +217,17 @@ func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
 		return nil, err
 	}
 
-	return newClientPipe(pr, pw, perr, s.Wait, opts...)
+	return newClientPipe(pr, perr, pw, s.Wait, opts...)
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
 // This can be used for connecting to an SFTP server over TCP/TLS or by using
 // the system's ssh client program (e.g. via exec.Command).
 func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Client, error) {
-	return newClientPipe(rd, wr, nil, nil, opts...)
+	return newClientPipe(rd, nil, wr, nil, opts...)
 }
 
-func newClientPipe(rd io.Reader, wr io.WriteCloser, stderr io.Reader, wait func() error, opts ...ClientOption) (*Client, error) {
+func newClientPipe(rd, stderr io.Reader, wr io.WriteCloser, wait func() error, opts ...ClientOption) (*Client, error) {
 	c := &Client{
 		clientConn: clientConn{
 			conn: conn{
@@ -256,13 +259,10 @@ func newClientPipe(rd io.Reader, wr io.WriteCloser, stderr io.Reader, wait func(
 		}
 
 		go func() {
-			defer func() {
-				if closer, ok := wr.(io.Closer); ok {
-					if err := closer.Close(); err != nil {
-						debug("error closing stderrTo: %v", err)
-					}
-				}
-			}()
+			// DO NOT close the writer!
+			// Programs may pass in `os.Stderr` to write the remote stderr to,
+			// and the program may continue after disconnect by reconnecting.
+			// But if we've closed their stderr, then we just messed everything up.
 
 			if _, err := io.Copy(wr, stderr); err != nil {
 				debug("error copying stderr: %v", err)
