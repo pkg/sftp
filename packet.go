@@ -311,9 +311,16 @@ func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, e
 	} else {
 		b = make([]byte, 4)
 	}
-	if _, err := io.ReadFull(r, b[:4]); err != nil {
+
+	if n, err := io.ReadFull(r, b[:4]); err != nil {
+		debug("recv length %d of %d bytes: err %v", n, 4, err)
+		if n > 0 {
+			debug("recv length error: bytes %x", b[:n])
+		}
+
 		return 0, nil, err
 	}
+
 	length, _ := unmarshalUint32(b)
 	if length > maxMsgLength {
 		debug("recv packet %d bytes too long", length)
@@ -323,24 +330,38 @@ func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (uint8, []byte, e
 		debug("recv packet of 0 bytes too short")
 		return 0, nil, errShortPacket
 	}
+
 	if alloc == nil {
 		b = make([]byte, length)
 	}
-	if _, err := io.ReadFull(r, b[:length]); err != nil {
+
+	if n, err := io.ReadFull(r, b[:length]); err != nil {
+		// Log this error message _before_ we potentially override it.
+		debug("recv packet %d of %d bytes: err %v", n, length, err)
+
 		// ReadFull only returns EOF if it has read no bytes.
 		// In this case, that means a partial packet, and thus unexpected.
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		debug("recv packet %d bytes: err %v", length, err)
+
+		if n > 0 {
+			n := min(32, n) // limit bytes dump to 32-bytes.
+			debug("recv packet error: bytes %x", b[:n])
+		}
+
 		return 0, nil, err
 	}
+
+	typ, payload := fxp(b[0]), b[1:length]
+
 	if debugDumpRxPacketBytes {
-		debug("recv packet: %s %d bytes %x", fxp(b[0]), length, b[1:length])
+		debug("recv packet: %s %d bytes %x", typ, length, payload)
 	} else if debugDumpRxPacket {
-		debug("recv packet: %s %d bytes", fxp(b[0]), length)
+		debug("recv packet: %s %d bytes", typ, length)
 	}
-	return b[0], b[1:length], nil
+
+	return typ, payload, nil
 }
 
 type extensionPair struct {
