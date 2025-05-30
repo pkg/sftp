@@ -2,6 +2,7 @@ package sshfx
 
 import (
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -123,8 +124,12 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 		b = make([]byte, smallBufferSize)
 	}
 
-	if _, err := io.ReadFull(r, b[:4]); err != nil {
-		return nil, err
+	if n, err := io.ReadFull(r, b[:4]); err != nil {
+		if err == io.EOF {
+			// Do not ever wrap io.EOF.
+			return nil, err
+		}
+		return nil, fmt.Errorf("error reading packet length: %d of 4: %w", n, err)
 	}
 
 	length := unmarshalPacketLength(b)
@@ -150,13 +155,24 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 	}
 
 	n, err := io.ReadFull(r, b[:length])
-	if err == io.EOF {
-		// ReadFull only returns EOF if it has read no bytes.
-		// In this case, that means a partial packet (length but no body),
-		// and thus unexpected.
-		err = io.ErrUnexpectedEOF
+	b = b[:n]
+
+	if err != nil {
+		if err == io.EOF {
+			// ReadFull only returns EOF if it has read no bytes.
+			// In this case, that means a partial packet (length but no body),
+			// and thus unexpected.
+			err = io.ErrUnexpectedEOF
+		}
+
+		if n > 0 {
+			return b, fmt.Errorf("error reading packet body: %d of %d: (%s) %w", n, length, PacketType(b[0]), err)
+		}
+
+		return b, fmt.Errorf("error reading packet body: %d of %d: %w", n, length, err)
 	}
-	return b[:n], err
+
+	return b, nil
 }
 
 // ReadFrom provides a simple functional packet reader,
