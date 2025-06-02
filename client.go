@@ -490,10 +490,6 @@ func statusToError(status *sshfx.StatusPacket, okExpected bool) error {
 
 	case sshfx.StatusEOF:
 		return io.EOF
-	case sshfx.StatusNoSuchFile:
-		return fs.ErrNotExist
-	case sshfx.StatusPermissionDenied:
-		return fs.ErrPermission
 	}
 
 	return status
