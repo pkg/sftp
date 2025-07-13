@@ -468,7 +468,7 @@ func TestRecvPacket(t *testing.T) {
 	var recvPacketTests = []struct {
 		b []byte
 
-		want    uint8
+		want    fxp
 		body    []byte
 		wantErr error
 	}{
