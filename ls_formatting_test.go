@@ -21,8 +21,8 @@ func TestRunLsWithExamplesDirectory(t *testing.T) {
 	runLsTestHelper(t, result, typeDirectory, path)
 }
 
-func TestRunLsWithLicensesFile(t *testing.T) {
-	path := "LICENSE"
+func TestRunLsWithSourceFile(t *testing.T) {
+	path := "ls_formatting_test.go"
 	item, _ := os.Stat(path)
 	result := runLs(nil, item)
 	runLsTestHelper(t, result, typeFile, path)
@@ -35,8 +35,8 @@ func TestRunLsWithExamplesDirectoryWithOSLookup(t *testing.T) {
 	runLsTestHelper(t, result, typeDirectory, path)
 }
 
-func TestRunLsWithLicensesFileWithOSLookup(t *testing.T) {
-	path := "LICENSE"
+func TestRunLsWithSourceFileWithOSLookup(t *testing.T) {
+	path := "ls_formatting_test.go"
 	item, _ := os.Stat(path)
 	result := runLs(osIDLookup{}, item)
 	runLsTestHelper(t, result, typeFile, path)
