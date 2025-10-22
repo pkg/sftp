@@ -135,7 +135,7 @@ func runLsTestHelper(t *testing.T, result, expectedType, path string) {
 
 	// username / uid (len 8, number or string)
 	const (
-		name = "(?:[a-z_][a-z0-9_]*)"
+		name = "(?:[A-Za-z_][-A-Z.a-z0-9_]*)"
 	)
 	if ok, err := regexp.MatchString("^(?:"+number+"|"+name+")+$", user); !ok {
 		if err != nil {
