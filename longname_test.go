@@ -46,7 +46,7 @@ func TestRunLsWithExamplesDirectory(t *testing.T) {
 }
 
 func TestRunLsWithLicensesFile(t *testing.T) {
-	path := "LICENSE"
+	path := "longname_test.go"
 	item, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestRunLsWithExamplesDirectoryWithOSLookup(t *testing.T) {
 }
 
 func TestRunLsWithLicensesFileWithOSLookup(t *testing.T) {
-	path := "LICENSE"
+	path := "longname_test.go"
 	item, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
