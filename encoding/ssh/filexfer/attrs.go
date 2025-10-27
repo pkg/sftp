@@ -71,9 +71,9 @@ func (a *Attributes) ClearSize() {
 	a.Flags &^= AttrSize
 }
 
-// GetUIDGID returns the uid and gid field.
+// GetUserGroup returns the uid and gid field.
 // It returns zeros if the field is not set.
-func (a *Attributes) GetUIDGID() (uid, gid uint32) {
+func (a *Attributes) GetUserGroup() (uid, gid uint32) {
 	if a == nil {
 		return 0, 0
 	}
@@ -81,8 +81,8 @@ func (a *Attributes) GetUIDGID() (uid, gid uint32) {
 	return a.UID, a.GID
 }
 
-// HasUIDGID returns true if the uid and gid fields are set.
-func (a *Attributes) HasUIDGID() bool {
+// HasUserGroup returns true if the uid and gid fields are set.
+func (a *Attributes) HasUserGroup() bool {
 	if a == nil {
 		return false
 	}
@@ -90,15 +90,15 @@ func (a *Attributes) HasUIDGID() bool {
 	return a.Flags&AttrUIDGID != 0
 }
 
-// SetUIDGID sets the uid and gid fields to specific values.
-func (a *Attributes) SetUIDGID(uid, gid uint32) {
+// SetUserGroup sets the uid and gid fields to specific values.
+func (a *Attributes) SetUserGroup(uid, gid uint32) {
 	a.UID = uid
 	a.GID = gid
 	a.Flags |= AttrUIDGID
 }
 
-// ClearUIDGID clears the uid and gid fields, so that they are no longer set.
-func (a *Attributes) ClearUIDGID() {
+// ClearUserGroup clears the uid and gid fields, so that they are no longer set.
+func (a *Attributes) ClearUserGroup() {
 	a.UID = 0
 	a.GID = 0
 	a.Flags &^= AttrUIDGID
@@ -218,7 +218,7 @@ func (a *Attributes) MarshalSize() int {
 		length += 8
 	}
 
-	if a.HasUIDGID() {
+	if a.HasUserGroup() {
 		length += 4 + 4
 	}
 
@@ -245,7 +245,7 @@ func (a *Attributes) MarshalInto(buf *Buffer) {
 		buf.AppendUint64(a.Size)
 	}
 
-	if a.HasUIDGID() {
+	if a.HasUserGroup() {
 		buf.AppendUint32(a.UID)
 		buf.AppendUint32(a.GID)
 	}
@@ -284,7 +284,7 @@ func (a *Attributes) UnmarshalFrom(buf *Buffer) (err error) {
 		a.Size = buf.ConsumeUint64()
 	}
 
-	if a.HasUIDGID() {
+	if a.HasUserGroup() {
 		a.UID = buf.ConsumeUint32()
 		a.GID = buf.ConsumeUint32()
 	}

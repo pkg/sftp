@@ -28,13 +28,13 @@ func FormatLongname(fi fs.FileInfo, idLookup NameLookup) string {
 
 	//            rwxrwxrwx
 	symPerms := "?---------"
-	numLinks, uid, gid := lsLinksUIDGID(fi)
+	numLinks, uid, gid := lsLinksUserGroup(fi)
 
 	switch sys := fi.Sys().(type) {
 	case *sshfx.Attributes:
 		symPerms = sys.GetPermissions().String()
 
-		sysUID, sysGID := sys.GetUIDGID()
+		sysUID, sysGID := sys.GetUserGroup()
 		uid = fmt.Sprint(sysUID)
 		gid = fmt.Sprint(sysGID)
 

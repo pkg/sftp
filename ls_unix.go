@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func lsLinksUIDGID(fi os.FileInfo) (numLinks, uid, gid string) {
+func lsLinksUserGroup(fi os.FileInfo) (numLinks, uid, gid string) {
 	numLinks, uid, gid = "1", "0", "0"
 
 	switch sys := fi.Sys().(type) {

@@ -158,8 +158,8 @@ func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
 		err = cmp.Or(os.Chtimes(f.filename, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)), err)
 	}
 
-	if attrs.HasUIDGID() {
-		uid, gid := attrs.GetUIDGID()
+	if attrs.HasUserGroup() {
+		uid, gid := attrs.GetUserGroup()
 		err = cmp.Or(f.Chown(int(uid), int(gid)), err)
 	}
 

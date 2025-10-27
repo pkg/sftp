@@ -7,6 +7,6 @@ import (
 	"os"
 )
 
-func lsLinksUIDGID(fi os.FileInfo) (numLinks, uid, gid string) {
+func lsLinksUserGroup(fi os.FileInfo) (numLinks, uid, gid string) {
 	return "?", "0", "0"
 }

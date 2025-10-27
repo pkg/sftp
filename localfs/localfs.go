@@ -156,8 +156,8 @@ func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) err
 		}
 	}
 
-	if req.Attrs.HasUIDGID() {
-		uid, gid := req.Attrs.GetUIDGID()
+	if req.Attrs.HasUserGroup() {
+		uid, gid := req.Attrs.GetUserGroup()
 		if err := os.Chown(lpath, int(uid), int(gid)); err != nil {
 			return err
 		}

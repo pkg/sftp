@@ -106,11 +106,11 @@ type ChownFileHandler interface {
 }
 
 func fchown(attr *sshfx.Attributes, f FileHandler) error {
-	if !attr.HasUIDGID() {
+	if !attr.HasUserGroup() {
 		return nil
 	}
 
-	uid, gid := attr.GetUIDGID()
+	uid, gid := attr.GetUserGroup()
 
 	if chowner, ok := f.(ChownFileHandler); ok {
 		return chowner.Chown(int(uid), int(gid))
