@@ -20,6 +20,7 @@ import (
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
 	"github.com/pkg/sftp/v2/encoding/ssh/filexfer/openssh"
+	"github.com/pkg/sftp/v2/internal/pragma"
 	"github.com/pkg/sftp/v2/internal/sync"
 
 	"golang.org/x/crypto/ssh"
@@ -402,6 +403,8 @@ func CopyStderrTo(wr io.Writer) ClientOption {
 // Multiple clients can be active on a single SSH connection,
 // and a client may be called concurrently from multiple goroutines.
 type Client struct {
+	_ pragma.DoNotCopy // be explicit about no copy.
+
 	conn     clientConn
 	stderrTo io.Writer
 
@@ -1122,6 +1125,8 @@ func (h *handle) close(cl *Client) error {
 //
 // The methods of Dir are safe for concurrent use.
 type Dir struct {
+	_ pragma.DoNotCopy // be explicit about no copy.
+
 	cl   *Client
 	name string
 
@@ -1337,6 +1342,8 @@ func (d *Dir) ReadDirContext(ctx context.Context, n int) ([]fs.DirEntry, error) 
 //
 // The methods of File are safe for concurrent use.
 type File struct {
+	_ pragma.DoNotCopy // be explicit about no copy.
+
 	cl   *Client
 	name string
 

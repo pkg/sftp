@@ -13,6 +13,7 @@ import (
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
 	"github.com/pkg/sftp/v2/encoding/ssh/filexfer/openssh"
+	"github.com/pkg/sftp/v2/internal/pragma"
 	"github.com/pkg/sftp/v2/internal/sync"
 )
 
@@ -196,6 +197,8 @@ type commonHandle interface {
 // A Server defines parameters for running an SFTP server.
 // The zero value for Server is a valid configuration.
 type Server struct {
+	_ pragma.DoNotCopy // be explicit about no copy.
+
 	Handler ServerHandler
 
 	MaxPacketLength int
