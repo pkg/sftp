@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"io"
 	"io/fs"
 	"testing"
 )
@@ -16,6 +17,13 @@ func TestClient(t *testing.T) {
 	}
 
 	var _ allFile = new(File)
+
+	type allDir interface {
+		io.Closer
+		ReadDir(n int) ([]fs.DirEntry, error)
+	}
+
+	var _ allDir = new(Dir)
 
 	type allFS interface {
 		fs.FS
