@@ -43,7 +43,6 @@ func (UnimplementedServerHandler) Rmdir(_ context.Context, req *sshfx.RmdirPacke
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
-	return sshfx.StatusOpUnsupported
 }
 
 // SetStat returns an sshfx.StatusOpUnsupported error.
@@ -52,7 +51,6 @@ func (UnimplementedServerHandler) SetStat(_ context.Context, req *sshfx.SetStatP
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
-	return sshfx.StatusOpUnsupported
 }
 
 // Symlink returns an sshfx.StatusOpUnsupported error.
@@ -61,7 +59,6 @@ func (UnimplementedServerHandler) Symlink(_ context.Context, req *sshfx.SymlinkP
 		StatusCode:   sshfx.StatusOpUnsupported,
 		ErrorMessage: fmt.Sprint(req.Type()),
 	}
-	return sshfx.StatusOpUnsupported
 }
 
 // LStat returns an sshfx.StatusOpUnsupported error.
