@@ -63,6 +63,13 @@ func (b *Buffer) Len() int { return len(b.b) - b.off }
 // that is, the total space allocated for the buffer’s data.
 func (b *Buffer) Cap() int { return cap(b.b) }
 
+// Grow grows the buffer's capacity, if necessary, to guarantee space for another n bytes.
+// After Grow(n), at least n bytes can be written to the buffer without another allocation.
+// If n is negative, Grow will panic.
+func (b *Buffer) Grow(n int) {
+	b.b = slices.Grow(b.b, n)
+}
+
 // Reset resets the buffer to be empty, but it retains the underlying storage for use by future appends.
 func (b *Buffer) Reset() {
 	*b = Buffer{
@@ -73,10 +80,12 @@ func (b *Buffer) Reset() {
 // StartPacket resets and initializes the buffer to be ready to start marshaling a packet into.
 // It truncates the buffer, reserves space for uint32(length), then appends the given packet type and request id.
 func (b *Buffer) StartPacket(packetType PacketType, requestID uint32) {
-	*b = Buffer{
-		b: append(b.b[:0], make([]byte, 4)...),
-	}
+	b.Reset()
 
+	// uint32(length) + uint8(type) + uint32(request-id)
+	b.Grow(4 + 1 + 4)
+
+	b.b = b.b[:4]
 	b.AppendUint8(uint8(packetType))
 	b.AppendUint32(requestID)
 }
@@ -92,7 +101,8 @@ func (b *Buffer) StartPacket(packetType PacketType, requestID uint32) {
 // It is assumed that no [Consume] methods have been called on this buffer,
 // so it returns the whole underlying slice.
 func (b *Buffer) Packet(payload []byte) (header, payloadPassThru []byte, err error) {
-	b.PutLength(len(b.b) - 4 + len(payload))
+	// -uint32(length) + struct(header) + raw(payload)
+	b.PutLength(-4 + len(b.b) + len(payload))
 
 	return b.b, payload, nil
 }
@@ -268,7 +278,7 @@ func (b *Buffer) ConsumeBytes() []byte {
 
 	v := b.b[b.off:]
 	if len(v) > length || cap(v) > length {
-		v = v[:length:length]
+		v = slices.Clip(v[:length])
 	}
 	b.off += length
 	return v
@@ -292,19 +302,15 @@ func (b *Buffer) ConsumeBytesCopy(hint []byte) []byte {
 		return hint[:0]
 	}
 
-	hint = hint[:cap(hint)]
-
-	if grow := len(data) - len(hint); grow > 0 {
-		hint = append(hint, make([]byte, grow)...)
-	}
-
-	n := copy(hint, data)
-	return hint[:n]
+	return append(hint[:0], data...)
 }
 
 // AppendBytes appends a single string of raw binary data into the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
 func (b *Buffer) AppendBytes(v []byte) {
+	// uint32(length) + raw(data)
+	b.Grow(4 + len(v)) // ensure at most one allocation
+
 	b.AppendUint32(uint32(len(v)))
 	b.b = append(b.b, v...)
 }
@@ -329,8 +335,8 @@ func (b *Buffer) AppendString(v string) {
 
 // PutLength writes the given size into the first four bytes of the buffer in network byte order (big endian).
 func (b *Buffer) PutLength(size int) {
-	if len(b.b) < 4 {
-		b.b = append(b.b, make([]byte, 4-len(b.b))...)
+	if grow := 4 - len(b.b); grow > 0 {
+		b.b = append(b.b, make([]byte, grow)...)
 	}
 
 	binary.BigEndian.PutUint32(b.b, uint32(size))
@@ -343,12 +349,7 @@ func (b *Buffer) MarshalBinary() ([]byte, error) {
 
 // UnmarshalBinary sets the internal buffer of b to be a clone of data, and zeros the internal offset.
 func (b *Buffer) UnmarshalBinary(data []byte) error {
-	if grow := len(data) - len(b.b); grow > 0 {
-		b.b = append(b.b, make([]byte, grow)...)
-	}
-
-	n := copy(b.b, data)
-	b.b = b.b[:n]
+	b.b = append(b.b[:0], data...)
 	b.off = 0
 	return nil
 }
