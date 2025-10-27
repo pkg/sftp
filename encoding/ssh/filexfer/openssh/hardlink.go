@@ -25,6 +25,13 @@ func (ep *HardlinkExtendedPacket) Type() sshfx.PacketType {
 	return sshfx.PacketTypeExtended
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (ep *HardlinkExtendedPacket) MarshalSize() int {
+	// string(oldpath) + string(newpath)
+	return 4 + len(ep.OldPath) + 4 + len(ep.NewPath)
+}
+
 // ExtendedRequest returns the SSH_FXP_EXTENDED extended-request field associated with this packet type.
 func (ep *HardlinkExtendedPacket) ExtendedRequest() string {
 	return extensionHardlink
@@ -50,10 +57,7 @@ func (ep *HardlinkExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended packet.
 func (ep *HardlinkExtendedPacket) MarshalBinary() ([]byte, error) {
-	// string(oldpath) + string(newpath)
-	size := 4 + len(ep.OldPath) + 4 + len(ep.NewPath)
-
-	buf := sshfx.NewBuffer(make([]byte, 0, size))
+	buf := sshfx.NewBuffer(make([]byte, 0, ep.MarshalSize()))
 	ep.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

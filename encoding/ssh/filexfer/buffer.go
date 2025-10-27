@@ -38,9 +38,9 @@ func NewBuffer(buf []byte) *Buffer {
 }
 
 // NewMarshalBuffer creates a new buffer ready to start marshaling a Packet into.
-// It preallocates enough space for uint32(length), uint8(type), uint32(request-id), and size more bytes.
+// It preallocates enough space for uint32(length), and size more bytes.
 func NewMarshalBuffer(size int) *Buffer {
-	return NewBuffer(make([]byte, 4+1+4+size))
+	return NewBuffer(make([]byte, 4+size))
 }
 
 // Bytes returns a slice of length b.Len() holding the unconsumed bytes in the buffer.
@@ -340,6 +340,13 @@ func (b *Buffer) PutLength(size int) {
 	}
 
 	binary.BigEndian.PutUint32(b.b, uint32(size))
+}
+
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (b *Buffer) MarshalSize() int {
+	// raw(data)
+	return len(b.b)
 }
 
 // MarshalBinary returns a clone of the full internal buffer.

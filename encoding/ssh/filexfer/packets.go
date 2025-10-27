@@ -31,6 +31,13 @@ func (p *RawPacket) Type() PacketType {
 	return p.PacketType
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *RawPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + raw(buffer)
+	return 1 + 4 + p.Data.MarshalSize()
+}
+
 // Reset clears the pointers and reference-semantic variables of RawPacket,
 // releasing underlying resources, and making them and the RawPacket suitable to be reused,
 // so long as no other references have been kept.
@@ -44,7 +51,7 @@ func (p *RawPacket) Reset() {
 func (p *RawPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		buf = NewMarshalBuffer(0)
+		buf = NewMarshalBuffer(p.MarshalSize() - len(p.Data.b))
 	}
 
 	buf.StartPacket(p.PacketType, reqid)
@@ -221,6 +228,17 @@ type RequestPacket struct {
 // Type returns the SSH_FXP_xy value associated with the underlying packet.
 func (p *RequestPacket) Type() PacketType {
 	return p.Request.Type()
+}
+
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *RequestPacket) MarshalSize() int {
+	if p.Request == nil {
+		// uint8(type) + uint32(request-id)
+		return 1 + 4
+	}
+
+	return 5 // p.Request.MarshalSize() TODO
 }
 
 // Reset clears the pointers and reference-semantic variables in RequestPacket,

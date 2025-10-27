@@ -39,6 +39,7 @@ func TestAttributes(t *testing.T) {
 		name    string
 		flags   uint32
 		encoded []byte
+		allocs  float64
 	}
 
 	tests := []test{
@@ -115,6 +116,10 @@ func TestAttributes(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			attr.Flags = tt.flags
+
+			expectOnlyOneAlloc(t, func() {
+				_, _ = attr.MarshalBinary()
+			})
 
 			buf, err := attr.MarshalBinary()
 			if err != nil {
@@ -193,6 +198,10 @@ func TestNameEntry(t *testing.T) {
 			Permissions: perms,
 		},
 	}
+
+	expectOnlyOneAlloc(t, func() {
+		_, _ = e.MarshalBinary()
+	})
 
 	buf, err := e.MarshalBinary()
 	if err != nil {

@@ -10,6 +10,13 @@ func (p *ClosePacket) Type() PacketType {
 	return PacketTypeClose
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *ClosePacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(handle)
+	return 1 + 4 + 4 + len(p.Handle)
+}
+
 // GetHandle returns the handle field of the packet.
 func (p *ClosePacket) GetHandle() string {
 	return p.Handle
@@ -19,8 +26,7 @@ func (p *ClosePacket) GetHandle() string {
 func (p *ClosePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Handle) // string(handle)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeClose, reqid)
@@ -51,6 +57,13 @@ func (p *ReadPacket) Type() PacketType {
 	return PacketTypeRead
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *ReadPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(handle) + uint64(offset) + uint32(len)
+	return 1 + 4 + 4 + len(p.Handle) + 8 + 4
+}
+
 // GetHandle returns the handle field of the packet.
 func (p *ReadPacket) GetHandle() string {
 	return p.Handle
@@ -60,9 +73,7 @@ func (p *ReadPacket) GetHandle() string {
 func (p *ReadPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		// string(handle) + uint64(offset) + uint32(len)
-		size := 4 + len(p.Handle) + 8 + 4
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeRead, reqid)
@@ -97,6 +108,13 @@ func (p *WritePacket) Type() PacketType {
 	return PacketTypeWrite
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *WritePacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(handle) + uint64(offset) + bytes(data)
+	return 1 + 4 + 4 + len(p.Handle) + 8 + 4 + len(p.Data)
+}
+
 // GetHandle returns the handle field of the packet.
 func (p *WritePacket) GetHandle() string {
 	return p.Handle
@@ -106,9 +124,8 @@ func (p *WritePacket) GetHandle() string {
 func (p *WritePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		// string(handle) + uint64(offset) + uint32(len(data)); data content in payload
-		size := 4 + len(p.Handle) + 8 + 4
-		buf = NewMarshalBuffer(size)
+		// exclude the data length, that will be carried in the separate payload.
+		buf = NewMarshalBuffer(p.MarshalSize() - len(p.Data))
 	}
 
 	buf.StartPacket(PacketTypeWrite, reqid)
@@ -151,6 +168,13 @@ func (p *FStatPacket) Type() PacketType {
 	return PacketTypeFStat
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *FStatPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(handle)
+	return 1 + 4 + 4 + len(p.Handle)
+}
+
 // GetHandle returns the handle field of the packet.
 func (p *FStatPacket) GetHandle() string {
 	return p.Handle
@@ -160,8 +184,7 @@ func (p *FStatPacket) GetHandle() string {
 func (p *FStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Handle) // string(handle)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeFStat, reqid)
@@ -191,6 +214,13 @@ func (p *FSetStatPacket) Type() PacketType {
 	return PacketTypeFSetStat
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *FSetStatPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(handle) ATTRS(attrs)
+	return 1 + 4 + 4 + len(p.Handle) + p.Attrs.MarshalSize()
+}
+
 // GetHandle returns the handle field of the packet.
 func (p *FSetStatPacket) GetHandle() string {
 	return p.Handle
@@ -200,8 +230,7 @@ func (p *FSetStatPacket) GetHandle() string {
 func (p *FSetStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Handle) + p.Attrs.MarshalSize() // string(handle) + ATTRS(attrs)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeFSetStat, reqid)
@@ -232,6 +261,13 @@ func (p *ReadDirPacket) Type() PacketType {
 	return PacketTypeReadDir
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *ReadDirPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(handle)
+	return 1 + 4 + 4 + len(p.Handle)
+}
+
 // GetHandle returns the handle field of the packet.
 func (p *ReadDirPacket) GetHandle() string {
 	return p.Handle
@@ -241,8 +277,7 @@ func (p *ReadDirPacket) GetHandle() string {
 func (p *ReadDirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Handle) // string(handle)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeReadDir, reqid)

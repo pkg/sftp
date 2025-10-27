@@ -439,6 +439,7 @@ type ExtendedAttribute struct {
 
 // MarshalSize returns the number of bytes the extended attribute would marshal into.
 func (e *ExtendedAttribute) MarshalSize() int {
+	// string(type) + string(data)
 	return 4 + len(e.Type) + 4 + len(e.Data)
 }
 
@@ -524,6 +525,7 @@ func (e *NameEntry) Info() (fs.FileInfo, error) {
 
 // MarshalSize returns the number of bytes the name entry would marshal into.
 func (e *NameEntry) MarshalSize() int {
+	// string(filename) + string(longname) + ATTRS(attrs)
 	return 4 + len(e.Filename) + 4 + len(e.Longname) + e.Attrs.MarshalSize()
 }
 

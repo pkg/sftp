@@ -18,6 +18,10 @@ func TestInitPacket(t *testing.T) {
 		},
 	}
 
+	expectOnlyOneAlloc(t, func() {
+		_, _ = p.MarshalBinary()
+	})
+
 	buf, err := p.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)
@@ -71,6 +75,10 @@ func TestVersionPacket(t *testing.T) {
 			},
 		},
 	}
+
+	expectOnlyOneAlloc(t, func() {
+		_, _ = p.MarshalBinary()
+	})
 
 	buf, err := p.MarshalBinary()
 	if err != nil {

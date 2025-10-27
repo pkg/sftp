@@ -9,8 +9,12 @@ type testExtendedData struct {
 	value uint8
 }
 
+func (d *testExtendedData) MarshalSize() int {
+	return 1
+}
+
 func (d *testExtendedData) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, 4))
+	buf := NewBuffer(make([]byte, 0, d.MarshalSize()))
 
 	buf.AppendUint8(d.value ^ 0x2a)
 
@@ -41,6 +45,10 @@ func TestExtendedPacketNoData(t *testing.T) {
 	p := &ExtendedPacket{
 		ExtendedRequest: extendedRequest,
 	}
+
+	expectAllocs(t, 1, func() { // no data == no alloc
+		_, _ = ComposePacket(p.MarshalPacket(id, nil))
+	})
 
 	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
@@ -85,6 +93,12 @@ func TestExtendedPacketTestData(t *testing.T) {
 			value: textValue,
 		},
 	}
+
+	expectAllocs(t, 2, func() {
+		// header should be allocated with enough space to cover the test data,
+		// but test data will still be separately allocated.
+		_, _ = ComposePacket(p.MarshalPacket(id, nil))
+	})
 
 	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
@@ -153,6 +167,10 @@ func TestExtendedReplyNoData(t *testing.T) {
 
 	p := &ExtendedReplyPacket{}
 
+	expectAllocs(t, 1, func() { // no data == no alloc
+		_, _ = ComposePacket(p.MarshalPacket(id, nil))
+	})
+
 	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {
 		t.Fatal("unexpected error:", err)
@@ -189,6 +207,12 @@ func TestExtendedReplyPacketTestData(t *testing.T) {
 			value: textValue,
 		},
 	}
+
+	expectAllocs(t, 2, func() {
+		// header should be allocated with enough space to cover the test data,
+		// but test data will still be separately allocated.
+		_, _ = ComposePacket(p.MarshalPacket(id, nil))
+	})
 
 	buf, err := ComposePacket(p.MarshalPacket(id, nil))
 	if err != nil {

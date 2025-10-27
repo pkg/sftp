@@ -10,6 +10,9 @@ import (
 type ExtendedData = interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
+
+	// MarshalSize returns the number of bytes that the extended data would marshal into.
+	MarshalSize() int
 }
 
 // ExtendedRequestPacket defines the interface an extended request packet should implement.
@@ -92,14 +95,24 @@ func (p *ExtendedPacket) Type() PacketType {
 	return PacketTypeExtended
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *ExtendedPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(extended-request)
+	size := 1 + 4 + 4 + len(p.ExtendedRequest)
+	if p.Data != nil {
+		size += p.Data.MarshalSize()
+	}
+	return size
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
 func (p *ExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.ExtendedRequest) // string(extended-request)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeExtended, reqid)
@@ -144,13 +157,24 @@ func (p *ExtendedReplyPacket) Type() PacketType {
 	return PacketTypeExtendedReply
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *ExtendedReplyPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id)
+	size := 1 + 4
+	if p.Data != nil {
+		size += p.Data.MarshalSize()
+	}
+	return size
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 //
 // The Data is marshaled into binary, and returned as the payload.
 func (p *ExtendedReplyPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		buf = NewMarshalBuffer(0)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeExtendedReply, reqid)

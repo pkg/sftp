@@ -24,6 +24,13 @@ func (ep *FSyncExtendedPacket) Type() sshfx.PacketType {
 	return sshfx.PacketTypeExtended
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (ep *FSyncExtendedPacket) MarshalSize() int {
+	// string(handle)
+	return 4 + len(ep.Handle)
+}
+
 // ExtendedRequest returns the SSH_FXP_EXTENDED extended-request field associated with this packet type.
 func (ep *FSyncExtendedPacket) ExtendedRequest() string {
 	return extensionFSync
@@ -53,10 +60,8 @@ func (ep *FSyncExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended packet.
 func (ep *FSyncExtendedPacket) MarshalBinary() ([]byte, error) {
-	// string(handle)
-	size := 4 + len(ep.Handle)
 
-	buf := sshfx.NewBuffer(make([]byte, 0, size))
+	buf := sshfx.NewBuffer(make([]byte, 0, ep.MarshalSize()))
 	ep.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

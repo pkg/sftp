@@ -17,7 +17,7 @@ func TestLStatPacket(t *testing.T) {
 		Path: path,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -62,7 +62,7 @@ func TestSetStatPacket(t *testing.T) {
 		},
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -112,7 +112,7 @@ func TestRemovePacket(t *testing.T) {
 		Path: path,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -157,7 +157,7 @@ func TestMkdirPacket(t *testing.T) {
 		},
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -207,7 +207,7 @@ func TestRmdirPacket(t *testing.T) {
 		Path: path,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -247,7 +247,7 @@ func TestRealPathPacket(t *testing.T) {
 		Path: path,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -287,7 +287,7 @@ func TestStatPacket(t *testing.T) {
 		Path: path,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -329,7 +329,7 @@ func TestRenamePacket(t *testing.T) {
 		NewPath: newpath,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -374,7 +374,7 @@ func TestReadLinkPacket(t *testing.T) {
 		Path: path,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -416,7 +416,7 @@ func TestSymlinkPacket(t *testing.T) {
 		TargetPath: targetpath,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}

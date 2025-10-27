@@ -10,12 +10,18 @@ func (p *LStatPacket) Type() PacketType {
 	return PacketTypeLStat
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *LStatPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path)
+	return 1 + 4 + 4 + len(p.Path)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *LStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) // string(path)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeLStat, reqid)
@@ -45,12 +51,18 @@ func (p *SetStatPacket) Type() PacketType {
 	return PacketTypeSetStat
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *SetStatPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path) + ATTRS(attrs)
+	return 1 + 4 + 4 + len(p.Path) + p.Attrs.MarshalSize()
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *SetStatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) + p.Attrs.MarshalSize() // string(path) + ATTRS(attrs)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeSetStat, reqid)
@@ -81,12 +93,18 @@ func (p *RemovePacket) Type() PacketType {
 	return PacketTypeRemove
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *RemovePacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path)
+	return 1 + 4 + 4 + len(p.Path)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RemovePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) // string(path)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeRemove, reqid)
@@ -116,12 +134,18 @@ func (p *MkdirPacket) Type() PacketType {
 	return PacketTypeMkdir
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *MkdirPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path) + ATTRS(attrs)
+	return 1 + 4 + 4 + len(p.Path) + p.Attrs.MarshalSize()
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *MkdirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) + p.Attrs.MarshalSize() // string(path) + ATTRS(attrs)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeMkdir, reqid)
@@ -152,12 +176,18 @@ func (p *RmdirPacket) Type() PacketType {
 	return PacketTypeRmdir
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *RmdirPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path)
+	return 1 + 4 + 4 + len(p.Path)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RmdirPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) // string(path)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeRmdir, reqid)
@@ -186,12 +216,18 @@ func (p *RealPathPacket) Type() PacketType {
 	return PacketTypeRealPath
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *RealPathPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path)
+	return 1 + 4 + 4 + len(p.Path)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RealPathPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) // string(path)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeRealPath, reqid)
@@ -220,12 +256,18 @@ func (p *StatPacket) Type() PacketType {
 	return PacketTypeStat
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *StatPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path)
+	return 1 + 4 + 4 + len(p.Path)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *StatPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) // string(path)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeStat, reqid)
@@ -255,13 +297,18 @@ func (p *RenamePacket) Type() PacketType {
 	return PacketTypeRename
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *RenamePacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(oldpath) + string(newpath)
+	return 1 + 4 + 4 + len(p.OldPath) + 4 + len(p.NewPath)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *RenamePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		// string(oldpath) + string(newpath)
-		size := 4 + len(p.OldPath) + 4 + len(p.NewPath)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeRename, reqid)
@@ -292,12 +339,18 @@ func (p *ReadLinkPacket) Type() PacketType {
 	return PacketTypeReadLink
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *ReadLinkPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(path)
+	return 1 + 4 + 4 + len(p.Path)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *ReadLinkPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		size := 4 + len(p.Path) // string(path)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeReadLink, reqid)
@@ -331,13 +384,18 @@ func (p *SymlinkPacket) Type() PacketType {
 	return PacketTypeSymlink
 }
 
+// MarshalSize returns the number of bytes that the packet would marshal into.
+// This excludes the uint32(length).
+func (p *SymlinkPacket) MarshalSize() int {
+	// uint8(type) + uint32(request-id) + string(linkpath) + string(targetpath)
+	return 1 + 4 + 4 + len(p.LinkPath) + 4 + len(p.TargetPath)
+}
+
 // MarshalPacket returns p as a two-part binary encoding of p.
 func (p *SymlinkPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	buf := NewBuffer(b)
 	if buf.Cap() < 9 {
-		// string(targetpath) + string(linkpath)
-		size := 4 + len(p.TargetPath) + 4 + len(p.LinkPath)
-		buf = NewMarshalBuffer(size)
+		buf = NewMarshalBuffer(p.MarshalSize())
 	}
 
 	buf.StartPacket(PacketTypeSymlink, reqid)

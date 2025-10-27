@@ -24,6 +24,10 @@ func TestRawPacket(t *testing.T) {
 		},
 	}
 
+	expectOnlyOneAlloc(t, func() {
+		_, _, _ = p.MarshalPacket(id, nil)
+	})
+
 	buf, err := p.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)
@@ -94,6 +98,10 @@ func TestRequestPacket(t *testing.T) {
 			Path: path,
 		},
 	}
+
+	expectOnlyOneAlloc(t, func() {
+		_, _, _ = p.MarshalPacket(id, nil)
+	})
 
 	buf, err := p.MarshalBinary()
 	if err != nil {

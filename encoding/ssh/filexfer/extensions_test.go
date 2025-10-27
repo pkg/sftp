@@ -16,6 +16,10 @@ func TestExtensionPair(t *testing.T) {
 		Data: data,
 	}
 
+	expectOnlyOneAlloc(t, func() {
+		_, _ = pair.MarshalBinary()
+	})
+
 	buf, err := pair.MarshalBinary()
 	if err != nil {
 		t.Fatal("unexpected error:", err)

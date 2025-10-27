@@ -18,6 +18,10 @@ type PacketMarshaller interface {
 	//
 	// It shall encode in the first 4-bytes of the header the proper length of the rest of the header+payload.
 	MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error)
+
+	// MarshalSize returns the number of bytes that the packet would marshal into.
+	// This should exclude the uint32(length).
+	MarshalSize() int
 }
 
 // Packet defines the behavior of a full generic SFTP packet.

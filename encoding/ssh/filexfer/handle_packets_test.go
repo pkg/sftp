@@ -17,7 +17,7 @@ func TestClosePacket(t *testing.T) {
 		Handle: "somehandle",
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -61,7 +61,7 @@ func TestReadPacket(t *testing.T) {
 		Length: length,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -116,7 +116,7 @@ func TestWritePacket(t *testing.T) {
 		Data:   payload,
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -166,7 +166,7 @@ func TestFStatPacket(t *testing.T) {
 		Handle: "somehandle",
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -211,7 +211,7 @@ func TestFSetStatPacket(t *testing.T) {
 		},
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -253,7 +253,7 @@ func TestReadDirPacket(t *testing.T) {
 		Handle: "somehandle",
 	}
 
-	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	buf, err := testComposePacket(t, p.MarshalPacket, id, nil)
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
