@@ -542,9 +542,9 @@ func TestReadDirRoot(t *testing.T) {
 	for _, fi := range fis {
 		switch fi := fi.(type) {
 		case *sshfx.NameEntry:
-			t.Logf(fi.Longname)
+			t.Log(fi.Longname)
 		case fs.FileInfo:
-			t.Logf(sftp.FormatLongname(fi, handler))
+			t.Log(sftp.FormatLongname(fi, handler))
 		}
 	}
 }
@@ -560,9 +560,9 @@ func TestCWD(t *testing.T) {
 	for _, fi := range fis {
 		switch fi := fi.(type) {
 		case *sshfx.NameEntry:
-			t.Logf(fi.Longname)
+			t.Log(fi.Longname)
 		case fs.FileInfo:
-			t.Logf(sftp.FormatLongname(fi, handler))
+			t.Log(sftp.FormatLongname(fi, handler))
 		}
 	}
 }
