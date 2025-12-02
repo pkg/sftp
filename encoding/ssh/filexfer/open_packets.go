@@ -23,10 +23,9 @@ func (p *OpenPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *OpenPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(filename) + uint32(pflags) + ATTRS(attrs)
-	return 1 + 4 + 4 + len(p.Filename) + 4 + p.Attrs.MarshalSize()
+	// uint32(length) + uint8(type) + uint32(request-id) + string(filename) + uint32(pflags) + ATTRS(attrs)
+	return 4 + 1 + 4 + 4 + len(p.Filename) + 4 + p.Attrs.MarshalSize()
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -67,10 +66,9 @@ func (p *OpenDirPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *OpenDirPacket) MarshalSize() int {
-	// uint8(type) + uint32(path) string(filename)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(path) string(filename)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.

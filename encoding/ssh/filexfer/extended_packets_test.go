@@ -9,8 +9,16 @@ type testExtendedData struct {
 	value uint8
 }
 
+func (d *testExtendedData) Type() PacketType {
+	return PacketTypeExtended
+}
+
 func (d *testExtendedData) MarshalSize() int {
 	return 1
+}
+
+func (d *testExtendedData) ExtendedRequest() string {
+	return "bar@example"
 }
 
 func (d *testExtendedData) MarshalBinary() ([]byte, error) {
@@ -33,6 +41,8 @@ func (d *testExtendedData) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
+
+var _ ExtendedData = &testExtendedData{}
 
 var _ Packet = &ExtendedPacket{}
 
@@ -81,7 +91,7 @@ func TestExtendedPacketNoData(t *testing.T) {
 func TestExtendedPacketTestData(t *testing.T) {
 	const (
 		id              = 42
-		extendedRequest = "foo@example"
+		extendedRequest = "bar@example"
 		textValue       = 13
 	)
 
@@ -109,7 +119,7 @@ func TestExtendedPacketTestData(t *testing.T) {
 		0x00, 0x00, 0x00, 21,
 		200,
 		0x00, 0x00, 0x00, 42,
-		0x00, 0x00, 0x00, 11, 'f', 'o', 'o', '@', 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+		0x00, 0x00, 0x00, 11, 'b', 'a', 'r', '@', 'e', 'x', 'a', 'm', 'p', 'l', 'e',
 		0x27,
 	}
 
@@ -117,6 +127,7 @@ func TestExtendedPacketTestData(t *testing.T) {
 		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
 	}
 
+	// Even when unregistered, if we give a hint type, it should work.
 	*p = ExtendedPacket{
 		Data: new(testExtendedData),
 	}
@@ -137,6 +148,9 @@ func TestExtendedPacketTestData(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", buf.value, value)
 	}
 
+	// Test that when rregistered without a hint type, it should work.
+	RegisterExtendedPacketType[testExtendedData]()
+
 	*p = ExtendedPacket{}
 
 	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
@@ -148,7 +162,88 @@ func TestExtendedPacketTestData(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
 	}
 
-	wantBuffer := []byte{0x27}
+	if buf, ok := p.Data.(*testExtendedData); !ok {
+		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
+
+	} else if buf.value != value {
+		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", buf.value, value)
+	}
+
+	// Test that even registered, a specified data hint will override it.
+	*p = ExtendedPacket{
+		Data: new(Buffer),
+	}
+
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+
+	if p.ExtendedRequest != extendedRequest {
+		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
+	}
+
+	wantBuffer := []byte{ textValue^0x2a }
+
+	if buf, ok := p.Data.(*Buffer); !ok {
+		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
+
+	} else if !bytes.Equal(buf.b, wantBuffer) {
+		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", buf.b, wantBuffer)
+	}
+}
+
+func TestExtendedPacketTestBuffer(t *testing.T) {
+	const (
+		id              = 42
+		extendedRequest = "undef@example"
+		textValue       = 13
+	)
+
+	const value = 13
+
+	p := &ExtendedPacket{
+		ExtendedRequest: extendedRequest,
+		Data: &Buffer{
+			b: []byte("\x00\x00\x00\x03bar"),
+		},
+	}
+
+	expectAllocs(t, 2, func() {
+		// header should be allocated with enough space to cover the test data,
+		// but test data will still be separately allocated.
+		_, _ = ComposePacket(p.MarshalPacket(id, nil))
+	})
+
+	buf, err := ComposePacket(p.MarshalPacket(id, nil))
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+
+	want := []byte{
+		0x00, 0x00, 0x00, 29,
+		200,
+		0x00, 0x00, 0x00, 42,
+		0x00, 0x00, 0x00, 13, 'u', 'n', 'd', 'e', 'f', '@', 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+		0x00, 0x00, 0x00, 0x03, 'b', 'a', 'r',
+	}
+
+	if !bytes.Equal(buf, want) {
+		t.Fatalf("MarshalPacket() = %X, but wanted %X", buf, want)
+	}
+
+	*p = ExtendedPacket{}
+
+	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
+	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+
+	if p.ExtendedRequest != extendedRequest {
+		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
+	}
+
+	wantBuffer := []byte{ 0x00, 0x00, 0x00, 0x03, 'b', 'a', 'r' }
 
 	if buf, ok := p.Data.(*Buffer); !ok {
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)

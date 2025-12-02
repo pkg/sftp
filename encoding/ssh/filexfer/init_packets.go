@@ -11,15 +11,25 @@ type InitPacket struct {
 	Extensions []*ExtensionPair
 }
 
-// MarshalBinary returns p as the binary encoding of p.
-func (p *InitPacket) MarshalBinary() ([]byte, error) {
-	size := 1 + 4 // byte(type) + uint32(version)
+// MarshalSize returns the number of bytes that the packet would marshal into.
+func (p *InitPacket) MarshalSize() int {
+	// uint32(length) + byte(type) + uint32(version)
+	size := 4 + 1 + 4
 
 	for _, ext := range p.Extensions {
 		size += ext.MarshalSize()
 	}
 
-	b := NewBuffer(make([]byte, 4, 4+size))
+	return size
+}
+
+// MarshalBinary returns p as the binary encoding of p.
+func (p *InitPacket) MarshalBinary() ([]byte, error) {
+	b := NewMarshalBuffer(p.MarshalSize())
+
+	b.Reset()
+
+	b.AppendUint32(uint32(0)) // will be overwritten with size.
 	b.AppendUint8(uint8(PacketTypeInit))
 	b.AppendUint32(p.Version)
 
@@ -27,9 +37,8 @@ func (p *InitPacket) MarshalBinary() ([]byte, error) {
 		ext.MarshalInto(b)
 	}
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil
+	data, _, _ := b.Packet(nil)
+	return data, nil
 }
 
 // UnmarshalBinary unmarshals a full raw packet out of the given data.
@@ -99,15 +108,25 @@ type VersionPacket struct {
 	Extensions []*ExtensionPair
 }
 
-// MarshalBinary returns p as the binary encoding of p.
-func (p *VersionPacket) MarshalBinary() ([]byte, error) {
-	size := 1 + 4 // byte(type) + uint32(version)
+// MarshalSize returns the number of bytes that the packet would marshal into.
+func (p *VersionPacket) MarshalSize() int {
+	// uint32(length) + byte(type) + uint32(version)
+	size := 4 + 1 + 4
 
 	for _, ext := range p.Extensions {
 		size += ext.MarshalSize()
 	}
 
-	b := NewBuffer(make([]byte, 4, 4+size))
+	return size
+}
+
+// MarshalBinary returns p as the binary encoding of p.
+func (p *VersionPacket) MarshalBinary() ([]byte, error) {
+	b := NewMarshalBuffer(p.MarshalSize())
+
+	b.Reset()
+
+	b.AppendUint32(uint32(0)) // will be overwritten with size.
 	b.AppendUint8(uint8(PacketTypeVersion))
 	b.AppendUint32(p.Version)
 
@@ -115,9 +134,8 @@ func (p *VersionPacket) MarshalBinary() ([]byte, error) {
 		ext.MarshalInto(b)
 	}
 
-	b.PutLength(size)
-
-	return b.Bytes(), nil
+	data, _, _ := b.Packet(nil)
+	return data, nil
 }
 
 // UnmarshalBinary unmarshals a full raw packet out of the given data.

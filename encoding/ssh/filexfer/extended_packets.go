@@ -96,10 +96,9 @@ func (p *ExtendedPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *ExtendedPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(extended-request)
-	size := 1 + 4 + 4 + len(p.ExtendedRequest)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(extended-request)
+	size := 4 + 1 + 4 + 4 + len(p.ExtendedRequest)
 	if p.Data != nil {
 		size += p.Data.MarshalSize()
 	}
@@ -158,10 +157,9 @@ func (p *ExtendedReplyPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *ExtendedReplyPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id)
-	size := 1 + 4
+	// uint32(length) + uint8(type) + uint32(request-id)
+	size := 4 + 1 + 4
 	if p.Data != nil {
 		size += p.Data.MarshalSize()
 	}

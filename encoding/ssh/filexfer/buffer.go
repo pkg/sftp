@@ -38,9 +38,9 @@ func NewBuffer(buf []byte) *Buffer {
 }
 
 // NewMarshalBuffer creates a new buffer ready to start marshaling a Packet into.
-// It preallocates enough space for uint32(length), and size more bytes.
+// It preallocates enough capacity for size bytes.
 func NewMarshalBuffer(size int) *Buffer {
-	return NewBuffer(make([]byte, 4+size))
+	return NewBuffer(make([]byte, 0, size))
 }
 
 // Bytes returns a slice of length b.Len() holding the unconsumed bytes in the buffer.
@@ -131,8 +131,8 @@ func (b *Buffer) ConsumeUint8() uint8 {
 		return 0
 	}
 
-	var v uint8
-	v, b.off = b.b[b.off], b.off+1
+	v := b.b[b.off]
+	b.off++
 	return v
 }
 
@@ -171,10 +171,7 @@ func (b *Buffer) ConsumeUint16() uint16 {
 
 // AppendUint16 appends single uint16 into the buffer, in network byte order (big-endian).
 func (b *Buffer) AppendUint16(v uint16) {
-	b.b = append(b.b,
-		byte(v>>8),
-		byte(v>>0),
-	)
+	b.b = binary.BigEndian.AppendUint16(b.b, v)
 }
 
 // unmarshalPacketLength is used internally to read the packet length.
@@ -198,14 +195,9 @@ func (b *Buffer) ConsumeUint32() uint32 {
 
 // AppendUint32 appends a single uint32 into the buffer, in network byte order (big-endian).
 func (b *Buffer) AppendUint32(v uint32) {
-	b.b = append(b.b,
-		byte(v>>24),
-		byte(v>>16),
-		byte(v>>8),
-		byte(v>>0),
-	)
+	b.b = binary.BigEndian.AppendUint32(b.b, v)
 }
-
+//*/
 // ConsumeCount consumes a single uint32 count from the buffer, in network byte order (big-endian) as an int.
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeCount() (int, error) {
@@ -232,16 +224,7 @@ func (b *Buffer) ConsumeUint64() uint64 {
 
 // AppendUint64 appends a single uint64 into the buffer, in network byte order (big-endian).
 func (b *Buffer) AppendUint64(v uint64) {
-	b.b = append(b.b,
-		byte(v>>56),
-		byte(v>>48),
-		byte(v>>40),
-		byte(v>>32),
-		byte(v>>24),
-		byte(v>>16),
-		byte(v>>8),
-		byte(v>>0),
-	)
+	b.b = binary.BigEndian.AppendUint64(b.b, v)
 }
 
 // ConsumeInt64 consumes a single int64 from the buffer, in network byte order (big-endian) with two’s complement.
@@ -257,7 +240,8 @@ func (b *Buffer) AppendInt64(v int64) {
 
 // ConsumeBytes consumes a single string of raw binary data from the buffer.
 // A string is a uint32 length, followed by that number of raw bytes.
-// If the buffer does not have enough data, it will set Err to ErrShortPacket.
+// If the buffer does not have enough data, it will set Err to ErrShortPacket,
+// and return as much data as is available.
 //
 // The returned slice aliases the buffer contents, and is valid only as long as the buffer is not reused;
 // that is, only until the next call to [Reset], [PutLength], [StartPacket], or [UnmarshalBinary].
@@ -265,18 +249,20 @@ func (b *Buffer) AppendInt64(v int64) {
 // In no case will consuming calls return overlapping slice aliases,
 // and append calls are guaranteed to not disturb this slice alias.
 func (b *Buffer) ConsumeBytes() []byte {
-	length := int(b.ConsumeUint32())
+	length, _ := b.ConsumeCount()
 
 	if length == 0 {
-		// Short-circuit empty strings.
-		return nil
-	}
-
-	if !b.checkLen(length) {
+		// Short-circuit empty strings, or errors from ConsumeCount.
 		return nil
 	}
 
 	v := b.b[b.off:]
+
+	if !b.checkLen(length) {
+		// Return whatever was left, this might possibly help with debugging.
+		return slices.Clip(v)
+	}
+
 	if len(v) > length || cap(v) > length {
 		v = slices.Clip(v[:length])
 	}
@@ -311,7 +297,7 @@ func (b *Buffer) AppendBytes(v []byte) {
 	// uint32(length) + raw(data)
 	b.Grow(4 + len(v)) // ensure at most one allocation
 
-	b.AppendUint32(uint32(len(v)))
+	b.AppendCount(len(v))
 	b.b = append(b.b, v...)
 }
 
@@ -342,8 +328,8 @@ func (b *Buffer) PutLength(size int) {
 	binary.BigEndian.PutUint32(b.b, uint32(size))
 }
 
-// MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
+// MarshalSize returns the number of bytes that the buffer would marshal into.
+// This is the whole size of the buffer, including any uint32(length) that might exist.
 func (b *Buffer) MarshalSize() int {
 	// raw(data)
 	return len(b.b)
@@ -356,7 +342,8 @@ func (b *Buffer) MarshalBinary() ([]byte, error) {
 
 // UnmarshalBinary sets the internal buffer of b to be a clone of data, and zeros the internal offset.
 func (b *Buffer) UnmarshalBinary(data []byte) error {
-	b.b = append(b.b[:0], data...)
-	b.off = 0
+	*b = Buffer{
+		b: append(b.b[:0], data...),
+	}
 	return nil
 }

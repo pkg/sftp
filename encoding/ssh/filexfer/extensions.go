@@ -11,6 +11,7 @@ type ExtensionPair struct {
 
 // MarshalSize returns the number of bytes e would marshal into.
 func (e *ExtensionPair) MarshalSize() int {
+	// string(name) + string(data)
 	return 4 + len(e.Name) + 4 + len(e.Data)
 }
 

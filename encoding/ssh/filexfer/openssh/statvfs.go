@@ -24,8 +24,7 @@ func (ep *StatVFSExtendedPacket) Type() sshfx.PacketType {
 	return sshfx.PacketTypeExtended
 }
 
-// MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
+// MarshalSize returns the number of bytes that the extended request data would marshal into.
 func (ep *StatVFSExtendedPacket) MarshalSize() int {
 	// string(path)
 	return 4 + len(ep.Path)
@@ -55,10 +54,8 @@ func (ep *StatVFSExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended packet.
 func (ep *StatVFSExtendedPacket) MarshalBinary() ([]byte, error) {
-	buf := sshfx.NewBuffer(make([]byte, 0, ep.MarshalSize()))
-
+	buf := sshfx.NewMarshalBuffer(ep.MarshalSize())
 	ep.MarshalInto(buf)
-
 	return buf.Bytes(), nil
 }
 
@@ -96,8 +93,7 @@ func (ep *FStatVFSExtendedPacket) Type() sshfx.PacketType {
 	return sshfx.PacketTypeExtended
 }
 
-// MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
+// MarshalSize returns the number of bytes that the extended request data would marshal into.
 func (ep *FStatVFSExtendedPacket) MarshalSize() int {
 	// string(handle)
 	return 4 + len(ep.Handle)
@@ -132,10 +128,8 @@ func (ep *FStatVFSExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended packet.
 func (ep *FStatVFSExtendedPacket) MarshalBinary() ([]byte, error) {
-	buf := sshfx.NewBuffer(make([]byte, 0, ep.MarshalSize()))
-
+	buf := sshfx.NewMarshalBuffer(ep.MarshalSize())
 	ep.MarshalInto(buf)
-
 	return buf.Bytes(), nil
 }
 
@@ -180,8 +174,7 @@ func (ep *StatVFSExtendedReplyPacket) Type() sshfx.PacketType {
 	return sshfx.PacketTypeExtendedReply
 }
 
-// MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
+// MarshalSize returns the number of bytes that the extended request data would marshal into.
 func (ep *StatVFSExtendedReplyPacket) MarshalSize() int {
 	// 11 times uint64(fields)
 	return 11 * 8
@@ -222,9 +215,9 @@ func (ep *StatVFSExtendedReplyPacket) MarshalInto(buf *sshfx.Buffer) {
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended reply packet.
 func (ep *StatVFSExtendedReplyPacket) MarshalBinary() ([]byte, error) {
-	b := sshfx.NewBuffer(make([]byte, 0, ep.MarshalSize()))
-	ep.MarshalInto(b)
-	return b.Bytes(), nil
+	buf := sshfx.NewMarshalBuffer(ep.MarshalSize())
+	ep.MarshalInto(buf)
+	return buf.Bytes(), nil
 }
 
 // UnmarshalFrom decodes the fstatvfs@openssh.com extended reply packet-specific data into ep.

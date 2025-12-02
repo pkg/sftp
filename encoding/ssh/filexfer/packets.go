@@ -32,10 +32,9 @@ func (p *RawPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *RawPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + raw(buffer)
-	return 1 + 4 + p.Data.MarshalSize()
+	// uint32(length) + uint8(type) + uint32(request-id) + raw(buffer)
+	return 4 + 1 + 4 + p.Data.MarshalSize()
 }
 
 // Reset clears the pointers and reference-semantic variables of RawPacket,
@@ -231,14 +230,13 @@ func (p *RequestPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *RequestPacket) MarshalSize() int {
 	if p.Request == nil {
-		// uint8(type) + uint32(request-id)
-		return 1 + 4
+		// uint32(length) + uint8(type) + uint32(request-id)
+		return 4 + 1 + 4
 	}
 
-	return 5 // p.Request.MarshalSize() TODO
+	return p.Request.MarshalSize()
 }
 
 // Reset clears the pointers and reference-semantic variables in RequestPacket,

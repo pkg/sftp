@@ -11,10 +11,9 @@ func (p *ClosePacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *ClosePacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(handle)
-	return 1 + 4 + 4 + len(p.Handle)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(handle)
+	return 4 + 1 + 4 + 4 + len(p.Handle)
 }
 
 // GetHandle returns the handle field of the packet.
@@ -58,10 +57,9 @@ func (p *ReadPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *ReadPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(handle) + uint64(offset) + uint32(len)
-	return 1 + 4 + 4 + len(p.Handle) + 8 + 4
+	// uint32(length) + uint8(type) + uint32(request-id) + string(handle) + uint64(offset) + uint32(len)
+	return 4 + 1 + 4 + 4 + len(p.Handle) + 8 + 4
 }
 
 // GetHandle returns the handle field of the packet.
@@ -109,10 +107,9 @@ func (p *WritePacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *WritePacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(handle) + uint64(offset) + bytes(data)
-	return 1 + 4 + 4 + len(p.Handle) + 8 + 4 + len(p.Data)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(handle) + uint64(offset) + bytes(data)
+	return 4 + 1 + 4 + 4 + len(p.Handle) + 8 + 4 + len(p.Data)
 }
 
 // GetHandle returns the handle field of the packet.
@@ -169,10 +166,9 @@ func (p *FStatPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *FStatPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(handle)
-	return 1 + 4 + 4 + len(p.Handle)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(handle)
+	return 4 + 1 + 4 + 4 + len(p.Handle)
 }
 
 // GetHandle returns the handle field of the packet.
@@ -215,10 +211,9 @@ func (p *FSetStatPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *FSetStatPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(handle) ATTRS(attrs)
-	return 1 + 4 + 4 + len(p.Handle) + p.Attrs.MarshalSize()
+	// uint32(length) + uint8(type) + uint32(request-id) + string(handle) ATTRS(attrs)
+	return 4 + 1 + 4 + 4 + len(p.Handle) + p.Attrs.MarshalSize()
 }
 
 // GetHandle returns the handle field of the packet.
@@ -262,10 +257,9 @@ func (p *ReadDirPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *ReadDirPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(handle)
-	return 1 + 4 + 4 + len(p.Handle)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(handle)
+	return 4 + 1 + 4 + 4 + len(p.Handle)
 }
 
 // GetHandle returns the handle field of the packet.

@@ -2,6 +2,7 @@ package sshfx
 
 import (
 	"io/fs"
+	"iter"
 	"path"
 	"time"
 )
@@ -212,29 +213,30 @@ func (a *Attributes) ClearExtended() {
 
 // MarshalSize returns the number of bytes the attributes would marshal into.
 func (a *Attributes) MarshalSize() int {
-	length := 4
+	// uint32(flags)
+	size := 4
 
 	if a.HasSize() {
-		length += 8
+		size += 8 // uint64(size)
 	}
 
 	if a.HasUserGroup() {
-		length += 4 + 4
+		size += 4 + 4 // uint32(uid) + uint32(gid)
 	}
 
 	if a.HasPermissions() {
-		length += 4
+		size += 4 // uint32(permissions)
 	}
 
 	if a.HasACModTime() {
-		length += 4 + 4
+		size += 4 + 4 // uint32(atime) + uint32(mtime)
 	}
 
 	if a.HasExtended() {
-		length += a.Extended.MarshalSize()
+		size += a.Extended.MarshalSize()
 	}
 
-	return length
+	return size
 }
 
 // MarshalInto marshals the attributes onto the end of the buffer.
@@ -266,7 +268,7 @@ func (a *Attributes) MarshalInto(buf *Buffer) {
 
 // MarshalBinary returns the binary encoding of attributes.
 func (a *Attributes) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, a.MarshalSize()))
+	buf := NewMarshalBuffer(a.MarshalSize())
 	a.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -319,18 +321,19 @@ type ExtendedAttributes []ExtendedAttribute
 
 // MarshalSize returns the number of bytes the extended attributes would marshal into.
 func (a ExtendedAttributes) MarshalSize() int {
-	length := 4
+	// uint32(extended_count)
+	size := 4
 
 	for _, ext := range a {
-		length += ext.MarshalSize()
+		size += ext.MarshalSize()
 	}
 
-	return length
+	return size
 }
 
 // MarshalInto marshals the extended attributes onto the end of the buffer.
 func (a ExtendedAttributes) MarshalInto(buf *Buffer) {
-	buf.AppendUint32(uint32(len(a)))
+	buf.AppendCount(len(a))
 
 	for _, ext := range a {
 		ext.MarshalInto(buf)
@@ -339,7 +342,7 @@ func (a ExtendedAttributes) MarshalInto(buf *Buffer) {
 
 // MarshalBinary returns the binary encoding of the extended attributes.
 func (a ExtendedAttributes) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, a.MarshalSize()))
+	buf := NewMarshalBuffer(a.MarshalSize())
 	a.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -411,20 +414,24 @@ func (a ExtendedAttributes) Get(key string) (data string, ok bool) {
 	return "", false
 }
 
-// Seq is an iterator that yields the type field from each extended attribute.
-func (a ExtendedAttributes) Seq(yield func(string) bool) {
-	for _, ext := range a {
-		if !yield(ext.Type) {
-			return
+// Types returns an iterator that yields the type field from each extended attribute.
+func (a ExtendedAttributes) Types() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, ext := range a {
+			if !yield(ext.Type) {
+				return
+			}
 		}
 	}
 }
 
-// Seq2 is an iterator that yields the type and data fields from each extended attribute.
-func (a ExtendedAttributes) Seq2(yield func(string, string) bool) {
-	for _, ext := range a {
-		if !yield(ext.Type, ext.Data) {
-			return
+// All returns an iterator that yields the type and data fields from each extended attribute.
+func (a ExtendedAttributes) All() iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for _, ext := range a {
+			if !yield(ext.Type, ext.Data) {
+				return
+			}
 		}
 	}
 }
@@ -451,7 +458,7 @@ func (e *ExtendedAttribute) MarshalInto(buf *Buffer) {
 
 // MarshalBinary returns the binary encoding of the extended attribute.
 func (e *ExtendedAttribute) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, e.MarshalSize()))
+	buf := NewMarshalBuffer(e.MarshalSize())
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }
@@ -539,7 +546,7 @@ func (e *NameEntry) MarshalInto(buf *Buffer) {
 
 // MarshalBinary returns the binary encoding of the name entry.
 func (e *NameEntry) MarshalBinary() ([]byte, error) {
-	buf := NewBuffer(make([]byte, 0, e.MarshalSize()))
+	buf := NewMarshalBuffer(e.MarshalSize())
 	e.MarshalInto(buf)
 	return buf.Bytes(), nil
 }

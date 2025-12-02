@@ -11,10 +11,9 @@ func (p *LStatPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *LStatPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -52,10 +51,9 @@ func (p *SetStatPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *SetStatPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path) + ATTRS(attrs)
-	return 1 + 4 + 4 + len(p.Path) + p.Attrs.MarshalSize()
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path) + ATTRS(attrs)
+	return 4 + 1 + 4 + 4 + len(p.Path) + p.Attrs.MarshalSize()
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -94,10 +92,9 @@ func (p *RemovePacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *RemovePacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -135,10 +132,9 @@ func (p *MkdirPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *MkdirPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path) + ATTRS(attrs)
-	return 1 + 4 + 4 + len(p.Path) + p.Attrs.MarshalSize()
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path) + ATTRS(attrs)
+	return 4 + 1 + 4 + 4 + len(p.Path) + p.Attrs.MarshalSize()
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -177,10 +173,9 @@ func (p *RmdirPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *RmdirPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -217,10 +212,9 @@ func (p *RealPathPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *RealPathPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -257,10 +251,9 @@ func (p *StatPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *StatPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -298,10 +291,9 @@ func (p *RenamePacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *RenamePacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(oldpath) + string(newpath)
-	return 1 + 4 + 4 + len(p.OldPath) + 4 + len(p.NewPath)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(oldpath) + string(newpath)
+	return 4 + 1 + 4 + 4 + len(p.OldPath) + 4 + len(p.NewPath)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -340,10 +332,9 @@ func (p *ReadLinkPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *ReadLinkPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(path)
-	return 1 + 4 + 4 + len(p.Path)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(path)
+	return 4 + 1 + 4 + 4 + len(p.Path)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
@@ -385,10 +376,9 @@ func (p *SymlinkPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
-// This excludes the uint32(length).
 func (p *SymlinkPacket) MarshalSize() int {
-	// uint8(type) + uint32(request-id) + string(linkpath) + string(targetpath)
-	return 1 + 4 + 4 + len(p.LinkPath) + 4 + len(p.TargetPath)
+	// uint32(length) + uint8(type) + uint32(request-id) + string(linkpath) + string(targetpath)
+	return 4 + 1 + 4 + 4 + len(p.LinkPath) + 4 + len(p.TargetPath)
 }
 
 // MarshalPacket returns p as a two-part binary encoding of p.
