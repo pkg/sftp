@@ -347,8 +347,12 @@ func cleanPath(p string) string {
 }
 
 func cleanPathWithBase(base, p string) string {
+	// Check if original path is absolute before converting to forward slashes.
+	// This correctly handles Windows paths like "C:\foo" which filepath.IsAbs
+	// recognizes but path.IsAbs (after ToSlash conversion to "C:/foo") does not.
+	isAbs := filepath.IsAbs(p)
 	p = filepath.ToSlash(filepath.Clean(p))
-	if !path.IsAbs(p) {
+	if !isAbs {
 		return path.Join(base, p)
 	}
 	return p
