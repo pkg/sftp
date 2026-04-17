@@ -9,6 +9,4 @@ require (
 
 require golang.org/x/sys v0.31.0 // indirect
 
-replace github.com/pkg/sftp/v2/examples => .
-
 replace github.com/pkg/sftp/v2 => ..
