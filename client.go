@@ -22,8 +22,6 @@ import (
 	"github.com/pkg/sftp/v2/encoding/ssh/filexfer/openssh"
 	"github.com/pkg/sftp/v2/internal/pragma"
 	"github.com/pkg/sftp/v2/internal/sync"
-
-	"golang.org/x/crypto/ssh"
 )
 
 type result struct {
@@ -579,9 +577,24 @@ func (cl *Client) getDataBuf(size int) []byte {
 	return hint[:size] // trim our buffer to length, it might be longer than chunkSize.
 }
 
+type SSHSession interface {
+	StdinPipe() (io.WriteCloser, error)
+	StdoutPipe() (io.Reader, error)
+	StderrPipe() (io.Reader, error)
+
+	RequestSubsystem(subsystem string) error
+
+	Close() error
+	Wait() error
+}
+
+type SSHClient[Session SSHSession] interface {
+	NewSession() (Session, error)
+}
+
 // NewClient creates a new SFTP client on conn.
 // The context is only used during initialization, and handshake.
-func NewClient(ctx context.Context, conn *ssh.Client, opts ...ClientOption) (*Client, error) {
+func NewClient[CL SSHClient[SESS], SESS SSHSession](ctx context.Context, conn CL, opts ...ClientOption) (*Client, error) {
 	s, err := conn.NewSession()
 	if err != nil {
 		return nil, err
