@@ -44,7 +44,7 @@ func (p *StatusPacket) MarshalSize() int {
 	// uint32(length) + uint8(type) + uint32(request-id)
 	const size = 4 + 1 + 4
 
- 	// uint32(error/status code) + string(error message) + string(language tag)
+	// uint32(error/status code) + string(error message) + string(language tag)
 	return size + 4 + 4 + len(p.ErrorMessage) + 4 + len(p.LanguageTag)
 }
 

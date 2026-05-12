@@ -43,7 +43,7 @@ func TestClient(t *testing.T) {
 
 type sink struct{}
 
-func (sink) Close() error { return nil }
+func (sink) Close() error                { return nil }
 func (sink) Write(p []byte) (int, error) { return len(p), nil }
 
 // Issue #418: panic in clientConn.recv when the sid is incomplete.
@@ -59,7 +59,7 @@ func TestClientNoSid(t *testing.T) {
 
 	stream := new(bytes.Buffer)
 	stream.Write(initData)
-	stream.Write([]byte{ 0, 0, 0, 10, 0, 0 })
+	stream.Write([]byte{0, 0, 0, 10, 0, 0})
 
 	cl, err := NewClientPipe(t.Context(), stream, sink{})
 	if err != nil {

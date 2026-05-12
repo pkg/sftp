@@ -580,6 +580,8 @@ func (cl *Client) getDataBuf(size int) []byte {
 	return hint[:size] // trim our buffer to length, it might be longer than chunkSize.
 }
 
+// SSHSession is an interface for x/crypto/ssh.Session,
+// in order to break the dependency on x/crypto.
 type SSHSession interface {
 	StdinPipe() (io.WriteCloser, error)
 	StdoutPipe() (io.Reader, error)
@@ -591,6 +593,8 @@ type SSHSession interface {
 	Wait() error
 }
 
+// SSHClient is an interface for x/crypto/ssh.Client,
+// in order to break the dependency on x/crypto.
 type SSHClient[Session SSHSession] interface {
 	NewSession() (Session, error)
 }
@@ -1008,12 +1012,18 @@ func (cl *Client) Symlink(oldname, newname string) error {
 	)
 }
 
+// GetExtension returns the data associated with the extension name.
+// If there is no data associated with the extension name, it returns the empty string.
 func (cl *Client) GetExtension(name string) string {
 	return cl.exts[name]
 }
 
-func (cl *Client) HasExtension(ext *sshfx.ExtensionPair) bool {
-	return cl.exts[ext.Name] == ext.Data
+// HasExtension returns true if the data associated with the extension name is the same as extension data.
+//
+// This is a much more strict test for extensions than simple existence of data associated with the extension name.
+// To test for anything wider than extension data, use [Client.GetExtension].
+func (cl *Client) HasExtension(extension *sshfx.ExtensionPair) bool {
+	return cl.exts[extension.Name] == extension.Data
 }
 
 // StatVFS retrieves VFS statistics from a remote host.

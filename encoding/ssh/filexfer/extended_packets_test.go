@@ -183,7 +183,7 @@ func TestExtendedPacketTestData(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
 	}
 
-	wantBuffer := []byte{ textValue^0x2a }
+	wantBuffer := []byte{textValue ^ 0x2a}
 
 	if buf, ok := p.Data.(*Buffer); !ok {
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
@@ -243,7 +243,7 @@ func TestExtendedPacketTestBuffer(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
 	}
 
-	wantBuffer := []byte{ 0x00, 0x00, 0x00, 0x03, 'b', 'a', 'r' }
+	wantBuffer := []byte{0x00, 0x00, 0x00, 0x03, 'b', 'a', 'r'}
 
 	if buf, ok := p.Data.(*Buffer); !ok {
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
