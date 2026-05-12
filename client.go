@@ -281,6 +281,10 @@ func (c *clientConn) recv(ctx context.Context, reqid uint32, ch chan result) (*s
 		c.discard(ch)
 		return nil, ctx.Err()
 
+	case <-c.closed:
+		c.discard(ch)
+		return nil, sshfx.StatusConnectionLost
+
 	case res := <-ch:
 		c.resPool.Put(ch)
 
@@ -488,7 +492,6 @@ func statusToError(status *sshfx.StatusPacket, okExpected bool) error {
 			return fmt.Errorf("unexpected SSH_FX_OK")
 		}
 		return nil
-
 	case sshfx.StatusEOF:
 		return io.EOF
 	}
@@ -705,11 +708,17 @@ func (cl *Client) ReportPoolMetrics(wr io.Writer) {
 	}
 }
 
+// Wait blocks until the connection has shut down,
+// and returns the error causing the shutdown.
+// It can be called concurrently from multiple goroutines.
+func (cl *Client) Wait() error {
+	return cl.conn.Wait()
+}
+
 // Close closes the SFTP session.
 func (cl *Client) Close() error {
 	cl.conn.disconnect(nil)
-	cl.conn.wr.Close()
-	return nil
+	return cl.conn.wr.Close()
 }
 
 func wrapPathError(op, path string, err error) error {
@@ -753,11 +762,8 @@ func wrapLinkError(op, oldpath, newpath string, err error) error {
 func (cl *Client) Mkdir(name string, perm fs.FileMode) error {
 	return wrapPathError("mkdir", name,
 		cl.sendPacket(context.Background(), nil, &sshfx.MkdirPacket{
-			Path: name,
-			Attrs: sshfx.Attributes{
-				Flags:       sshfx.AttrPermissions,
-				Permissions: sshfx.FileMode(perm.Perm()),
-			},
+			Path:  name,
+			Attrs: attrsFromPerm(perm),
 		}),
 	)
 }
@@ -843,6 +849,45 @@ func (cl *Client) Remove(name string) error {
 	}
 
 	return wrapPathError("remove", name, errF)
+}
+
+// RemoveAll removes path and any children it contains.
+// It removes everything it can but returns the first error it encounters.
+// f the path does not exist, RemoveAll returns nil (no error).
+// If there is an error, it will be of type *PathError.
+func (cl *Client) RemoveAll(pathname string) error {
+	fi, err := cl.Stat(pathname)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	if !fi.IsDir() {
+		return cl.Remove(pathname)
+	}
+
+	files, err := cl.ReadDir(pathname)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		filename := path.Join(pathname, file.Name())
+		switch {
+		case file.IsDir():
+			if err := cl.RemoveAll(filename); err != nil {
+				return err
+			}
+		default:
+			if err := cl.Remove(filename); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (cl *Client) setstat(ctx context.Context, name string, attrs *sshfx.Attributes) error {
@@ -935,7 +980,7 @@ func (cl *Client) ReadLink(name string) (string, error) {
 // Server-specific restrictions may apply when old path and new path are in different directories.
 // Even within the same directory, on non-Unix servers Rename is not guaranteed to be an atomic operation.
 func (cl *Client) Rename(oldpath, newpath string) error {
-	if cl.hasExtension(openssh.ExtensionPOSIXRename()) {
+	if cl.HasExtension(openssh.ExtensionPOSIXRename()) {
 		return wrapLinkError("rename", oldpath, newpath,
 			cl.sendPacket(context.Background(), nil, &openssh.POSIXRenameExtendedPacket{
 				OldPath: oldpath,
@@ -963,7 +1008,11 @@ func (cl *Client) Symlink(oldname, newname string) error {
 	)
 }
 
-func (cl *Client) hasExtension(ext *sshfx.ExtensionPair) bool {
+func (cl *Client) GetExtension(name string) string {
+	return cl.exts[name]
+}
+
+func (cl *Client) HasExtension(ext *sshfx.ExtensionPair) bool {
 	return cl.exts[ext.Name] == ext.Data
 }
 
@@ -986,7 +1035,7 @@ func (cl *Client) StatVFS(path string) (*openssh.StatVFSExtendedReplyPacket, err
 // then no request will be sent,
 // and Link returns an *fs.LinkError wrapping sshfx.StatusOpUnsupported.
 func (cl *Client) Link(oldname, newname string) error {
-	if !cl.hasExtension(openssh.ExtensionHardlink()) {
+	if !cl.HasExtension(openssh.ExtensionHardlink()) {
 		return wrapLinkError("hardlink", oldname, newname, sshfx.StatusOpUnsupported)
 	}
 
@@ -1422,6 +1471,14 @@ func (cl *Client) Create(name string) (*File, error) {
 	return cl.OpenFile(name, OpenFlagReadWrite|OpenFlagCreate|OpenFlagTruncate, 0666)
 }
 
+func attrsFromPerm(perm fs.FileMode) sshfx.Attributes {
+	var attrs sshfx.Attributes
+	if perm != 0 {
+		attrs.SetPermissions(sshfx.FileMode(perm.Perm()))
+	}
+	return attrs
+}
+
 // OpenFile is the generalized open call;
 // most users can use the simplified Open or Create methods instead.
 // It opens the named file with the specified flag (OpenFlagReadOnly, etc.).
@@ -1434,10 +1491,7 @@ func (cl *Client) OpenFile(name string, flag int, perm fs.FileMode) (*File, erro
 	handle, err := cl.getHandle(context.Background(), nil, &sshfx.OpenPacket{
 		Filename: name,
 		PFlags:   toPortableFlags(flag),
-		Attrs: sshfx.Attributes{
-			Flags:       sshfx.AttrPermissions,
-			Permissions: sshfx.FileMode(perm.Perm()),
-		},
+		Attrs:    attrsFromPerm(perm),
 	})
 	if err != nil {
 		return nil, wrapPathError("openfile", name, err)
@@ -2468,7 +2522,7 @@ func (f *File) Sync() error {
 		return f.wrapErr("fsync", err)
 	}
 
-	if !f.cl.hasExtension(openssh.ExtensionFSync()) {
+	if !f.cl.HasExtension(openssh.ExtensionFSync()) {
 		return f.wrapErr("fsync", sshfx.StatusOpUnsupported)
 	}
 
