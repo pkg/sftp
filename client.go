@@ -1268,6 +1268,10 @@ func (d *Dir) rangedir(ctx context.Context, grow func(int)) iter.Seq2[*sshfx.Nam
 			// Pull from saved entries first.
 			for i, ent := range d.entries {
 				switch ent.Name() {
+				case ".", "..": // skip useless names.
+					continue
+				}
+
 				if !yield(ent, nil) {
 					// This is a break condition.
 					// We need to remove all entries that have been consumed,
