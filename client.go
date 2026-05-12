@@ -1051,13 +1051,20 @@ func (cl *Client) Link(oldname, newname string) error {
 // If an error occurs reading the directory,
 // Readdir returns the entries it was able to read before the error, along with the error.
 func (cl *Client) Readdir(name string) ([]fs.FileInfo, error) {
+	return cl.ReaddirContext(context.Background(), name)
+}
+
+// ReaddirContext reads the named directory, returning all its directory entries as [fs.FileInfo] sorted by filename.
+// If an error occurs reading the directory, including the context being canceled,
+// Readdir returns the entries it was able to read before the error, along with the error.
+func (cl *Client) ReaddirContext(ctx context.Context, name string) ([]fs.FileInfo, error) {
 	d, err := cl.OpenDir(name)
 	if err != nil {
 		return nil, err
 	}
 	defer d.Close()
 
-	fis, err := d.Readdir(0)
+	fis, err := d.ReaddirContext(ctx, 0)
 
 	slices.SortFunc(fis, func(a, b fs.FileInfo) int {
 		return cmp.Compare(a.Name(), b.Name())
