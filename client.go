@@ -11,7 +11,7 @@ import (
 	"iter"
 	"math"
 	"os"
-	"path"
+	stdpath "path"
 	"slices"
 	"sync/atomic"
 	"syscall"
@@ -783,7 +783,7 @@ func (cl *Client) MkdirAll(name string, perm fs.FileMode) error {
 
 	// Slow path: make sure parent exists and then call Mkdir for name.
 
-	if parent := path.Dir(name); parent != "" {
+	if parent := stdpath.Dir(name); parent != "" {
 		err = cl.MkdirAll(parent, perm)
 		if err != nil {
 			return err
@@ -874,7 +874,7 @@ func (cl *Client) RemoveAll(pathname string) error {
 	}
 
 	for _, file := range files {
-		filename := path.Join(pathname, file.Name())
+		filename := stdpath.Join(pathname, file.Name())
 		switch {
 		case file.IsDir():
 			if err := cl.RemoveAll(filename); err != nil {
@@ -1267,6 +1267,7 @@ func (d *Dir) rangedir(ctx context.Context, grow func(int)) iter.Seq2[*sshfx.Nam
 
 			// Pull from saved entries first.
 			for i, ent := range d.entries {
+				switch ent.Name() {
 				if !yield(ent, nil) {
 					// This is a break condition.
 					// We need to remove all entries that have been consumed,
