@@ -180,8 +180,7 @@ type WorkPool[T any] struct {
 func NewWorkPool[T any](depth int) *WorkPool[T] {
 	p := &WorkPool[T]{
 		closed: make(chan struct{}),
-
-		ch: make(chan chan T, depth),
+		ch:     make(chan chan T, depth),
 	}
 
 	for len(p.ch) < cap(p.ch) {
@@ -207,9 +206,10 @@ func (p *WorkPool[T]) Close() error {
 	}
 
 	close(p.closed)
-	close(p.ch)
 
 	p.wg.Wait()
+
+	close(p.ch)
 
 	for range p.ch {
 		// drain the pool and drop them on all on the ground for GC.
@@ -254,7 +254,7 @@ func (p *WorkPool[T]) Put(v chan T) {
 		return
 	}
 
-	p.wg.Done()
+	defer p.wg.Done()
 
 	select {
 	case <-p.closed:
@@ -263,6 +263,7 @@ func (p *WorkPool[T]) Put(v chan T) {
 	}
 
 	select {
+	case <-p.closed:
 	case p.ch <- v:
 	default:
 		panic("worker pool overfill")

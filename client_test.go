@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"sync/atomic"
 	"testing"
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
+	"github.com/pkg/sftp/v2/internal/sync"
 )
 
 func TestClient(t *testing.T) {
@@ -72,10 +74,46 @@ func TestClientShortPacket(t *testing.T) {
 	}
 }
 
-func streamPackets(t testing.TB, verPkt *sshfx.VersionPacket, packets ...sshfx.PacketMarshaller) io.ReadCloser {
+type tickWriter struct {
+	count atomic.Uint32
+	steps atomic.Uint32
+
+	once sync.Once
+	step chan struct{}
+}
+
+func (t *tickWriter) wait() {
+	_ = t.steps.Add(1)
+
+	<-t.step
+}
+
+func (t *tickWriter) Write(b []byte) (written int, err error) {
+	_ = t.count.Add(1)
+
+	t.step <- struct{}{}
+
+	return len(b), nil
+}
+
+func (t *tickWriter) Close() error {
+	t.once.Do(func() { close(t.step) })
+	return nil
+}
+
+func streamPackets(t testing.TB, verPkt *sshfx.VersionPacket, packets ...sshfx.PacketMarshaller) (io.ReadCloser, io.WriteCloser) {
 	pr, pw := io.Pipe()
 
+	ticker := &tickWriter{
+		step: make(chan struct{}),
+	}
+
 	go func() {
+		defer func() {
+			for range ticker.step {
+			}
+		}()
+
 		defer pw.Close()
 
 		bindata, err := verPkt.MarshalBinary()
@@ -83,7 +121,12 @@ func streamPackets(t testing.TB, verPkt *sshfx.VersionPacket, packets ...sshfx.P
 			t.Errorf("could not binary marshal %#v: %v", verPkt, err)
 			return
 		}
-		pw.Write(bindata)
+
+		ticker.wait()
+		if _, err := pw.Write(bindata); err != nil {
+			t.Error(err)
+			return
+		}
 
 		var reqid uint32
 		for _, packet := range packets {
@@ -94,6 +137,8 @@ func streamPackets(t testing.TB, verPkt *sshfx.VersionPacket, packets ...sshfx.P
 				t.Errorf("could not packet marshal %#v: %v", packet, err)
 				return
 			}
+
+			ticker.wait()
 
 			if _, err := pw.Write(header); err != nil {
 				t.Error("could not write packet header:", err)
@@ -107,7 +152,7 @@ func streamPackets(t testing.TB, verPkt *sshfx.VersionPacket, packets ...sshfx.P
 		}
 	}()
 
-	return pr
+	return pr, ticker
 }
 
 type noSidBrokenPacket struct{}
@@ -122,14 +167,14 @@ func (noSidBrokenPacket) MarshalSize() int {
 
 // Issue #418: panic in clientConn.recv when the sid is incomplete.
 func TestClientNoSid(t *testing.T) {
-	stream := streamPackets(t,
+	rd, wr := streamPackets(t,
 		&sshfx.VersionPacket{
 			Version: sftpProtocolVersion,
 		},
 		noSidBrokenPacket{},
 	)
 
-	cl, err := NewClientPipe(t.Context(), stream, sink{})
+	cl, err := NewClientPipe(t.Context(), rd, wr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +189,7 @@ func TestClientNoSid(t *testing.T) {
 // sftp/issue/390 - server disconnect should not cause io.EOF or
 // io.ErrUnexpectedEOF in sftp.File.Read, because those confuse io.ReadFull.
 func TestClientRoughDisconnectEOF(t *testing.T) {
-	stream := streamPackets(t,
+	rd, wr := streamPackets(t,
 		&sshfx.VersionPacket{
 			Version: sftpProtocolVersion,
 		},
@@ -156,7 +201,7 @@ func TestClientRoughDisconnectEOF(t *testing.T) {
 		},
 	)
 
-	cl, err := NewClientPipe(t.Context(), stream, sink{})
+	cl, err := NewClientPipe(t.Context(), rd, wr)
 	if err != nil {
 		t.Fatal(err)
 	}
