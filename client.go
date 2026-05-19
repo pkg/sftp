@@ -226,12 +226,6 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	default:
 	}
 
-	if c.inflight == nil {
-		c.inflight = make(map[uint32]chan<- result)
-	}
-
-	c.inflight[reqid] = ch
-
 	if _, err := c.wr.Write(header); err != nil {
 		c.resPool.Put(ch)
 		return reqid, nil, fmt.Errorf("sftp: write packet header: %w", err)
@@ -244,6 +238,11 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 		}
 	}
 
+	if c.inflight == nil {
+		c.inflight = make(map[uint32]chan<- result)
+	}
+	c.inflight[reqid] = ch
+
 	return reqid, ch, nil
 }
 
@@ -253,10 +252,18 @@ func (c *clientConn) returnRaw(raw *sshfx.RawPacket) {
 }
 
 func (c *clientConn) discardBlocking(ch chan result) {
-	res := <-ch
+	select {
+	case <-c.closed:
+		// We've been disconnected.
+		// We have to return something to the work pool, or resPool.Close will deadlock.
+		// It also has to be able to receive a result,
+		// otherwise a broadcasted error will lock up on a send.
+		c.resPool.Put(make(chan result, 1))
 
-	c.returnRaw(res.pkt)
-	c.resPool.Put(ch)
+	case res := <-ch:
+		c.returnRaw(res.pkt)
+		c.resPool.Put(ch)
+	}
 }
 
 func (c *clientConn) discard(ch chan result) {
@@ -492,6 +499,7 @@ func statusToError(status *sshfx.StatusPacket, okExpected bool) error {
 			return fmt.Errorf("unexpected SSH_FX_OK")
 		}
 		return nil
+
 	case sshfx.StatusEOF:
 		return io.EOF
 	}
@@ -1778,14 +1786,12 @@ func (f *File) writeat(ctx context.Context, b []byte, off int64) (written int, e
 		//
 		// Either way, this should be the last successfully written offset.
 		written := int64(firstErr.off) - f.offset
-		f.offset = int64(firstErr.off)
 
 		return int(written), f.wrapErr("writeat", firstErr.err)
 	}
 
 	// We didn't hit any errors, so we must have written all the bytes in the buffer.
 	written = len(b)
-	f.offset += int64(written)
 
 	return written, nil
 }
@@ -1911,6 +1917,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 	workCh := make(chan work, f.cl.maxInflight)
 
 	type rwErr struct {
+		op  string
 		off uint64
 		err error
 	}
@@ -1936,7 +1943,11 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 		for {
 			n, err := io.ReadFull(r, b)
 			if n < 0 {
-				errCh <- rwErr{req.Offset, panicInstead("sftp: readfrom: read returned negative count")}
+				errCh <- rwErr{
+					op:  "read",
+					off: req.Offset,
+					err: panicInstead("sftp: readfrom: read returned negative count"),
+				}
 				return
 			}
 
@@ -1966,7 +1977,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 
 			if err != nil {
 				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-					errCh <- rwErr{req.Offset, err}
+					errCh <- rwErr{"read", req.Offset, err}
 				}
 				return
 			}
@@ -1984,7 +1995,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 		for work := range workCh {
 			err := f.cl.recvStatus(ctx, work.reqid, work.res, statusHint)
 			if err != nil {
-				errCh <- rwErr{work.off, err}
+				errCh <- rwErr{"write", work.off, err}
 
 				// DO NOT return.
 				// We want to ensure that workCh is drained before errCh is closed.
@@ -2020,7 +2031,7 @@ func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
 		}
 
 		// ReadFrom is defined to return the read bytes, regardless of any write errors.
-		return read, f.wrapErr("readfrom", firstErr.err)
+		return read, f.wrapErr(firstErr.op, firstErr.err)
 	}
 
 	// We didn't hit any errors, so we must have written all the bytes that we read until EOF.
@@ -2341,7 +2352,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		}
 	}()
 
-	var writeErr error
+	var readErr error
 
 	// Dispatch: Dispatch into any number of Reads of length <= f.cl.maxDataLen.
 	go func() {
@@ -2358,7 +2369,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		for {
 			reqid, res, err := f.cl.conn.dispatch(closed, req)
 			if err != nil {
-				writeErr = err
+				readErr = err
 				return
 			}
 
@@ -2418,11 +2429,11 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				return written, nil // return nil instead of EOF
 			}
 
-			return written, f.wrapErr("writeto", err)
+			return written, f.wrapErr("recv", err)
 		}
 	}
 
-	return written, f.wrapErr("writeto", writeErr)
+	return written, f.wrapErr("read", readErr)
 }
 
 // WriteFile writes data to the named file, creating it if neccessary.
