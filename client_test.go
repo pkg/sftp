@@ -78,8 +78,10 @@ type tickWriter struct {
 	count atomic.Uint32
 	steps atomic.Uint32
 
-	once sync.Once
-	step chan struct{}
+	mu     sync.Mutex
+	once   sync.Once
+	closed bool
+	step   chan struct{}
 }
 
 func (t *tickWriter) wait() {
@@ -89,6 +91,13 @@ func (t *tickWriter) wait() {
 }
 
 func (t *tickWriter) Write(b []byte) (written int, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return 0, io.ErrClosedPipe
+	}
+
 	_ = t.count.Add(1)
 
 	t.step <- struct{}{}
@@ -97,7 +106,13 @@ func (t *tickWriter) Write(b []byte) (written int, err error) {
 }
 
 func (t *tickWriter) Close() error {
-	t.once.Do(func() { close(t.step) })
+	t.once.Do(func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		t.closed = true
+		close(t.step)
+	})
 	return nil
 }
 
