@@ -46,28 +46,129 @@ type sink struct{}
 func (sink) Close() error                { return nil }
 func (sink) Write(p []byte) (int, error) { return len(p), nil }
 
+func TestClientZeroLengthPacket(t *testing.T) {
+	// Packet length zero (never valid). This used to crash the client.
+	r := bytes.NewReader([]byte{0, 0, 0, 0})
+
+	cl, err := NewClientPipe(t.Context(), r, sink{})
+	if err == nil {
+		t.Error("expected an error, got nil")
+	}
+	if cl != nil {
+		cl.Close()
+	}
+}
+
+func TestClientShortPacket(t *testing.T) {
+	// init packet too short.
+	r := bytes.NewReader([]byte{0, 0, 0, 1, 2})
+
+	cl, err := NewClientPipe(t.Context(), r, sink{})
+	if !errors.Is(err, sshfx.ErrShortPacket) {
+		t.Fatalf("got error %#v, but expected sshfx.ErrShortPacket", err)
+	}
+	if cl != nil {
+		cl.Close()
+	}
+}
+
+func streamPackets(t testing.TB, verPkt *sshfx.VersionPacket, packets ...sshfx.PacketMarshaller) io.ReadCloser {
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+
+		bindata, err := verPkt.MarshalBinary()
+		if err != nil {
+			t.Errorf("could not binary marshal %#v: %v", verPkt, err)
+			return
+		}
+		pw.Write(bindata)
+
+		var reqid uint32
+		for _, packet := range packets {
+			reqid++
+
+			header, payload, err := packet.MarshalPacket(reqid, nil)
+			if err != nil {
+				t.Errorf("could not packet marshal %#v: %v", packet, err)
+				return
+			}
+
+			if _, err := pw.Write(header); err != nil {
+				t.Error("could not write packet header:", err)
+				return
+			}
+
+			if _, err := pw.Write(payload); err != nil {
+				t.Error("could not write packet payload:", err)
+				return
+			}
+		}
+	}()
+
+	return pr
+}
+
+type noSidBrokenPacket struct{}
+
+func (noSidBrokenPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
+	return []byte{0, 0, 0, 10, 0, 0}, nil, nil
+}
+
+func (noSidBrokenPacket) MarshalSize() int {
+	return 10
+}
+
 // Issue #418: panic in clientConn.recv when the sid is incomplete.
 func TestClientNoSid(t *testing.T) {
-	initPkt := &sshfx.VersionPacket{
-		Version: sftpProtocolVersion,
-	}
-
-	initData, err := initPkt.MarshalBinary()
-	if err != nil {
-		t.Fatal("unexpected error:", err)
-	}
-
-	stream := new(bytes.Buffer)
-	stream.Write(initData)
-	stream.Write([]byte{0, 0, 0, 10, 0, 0})
+	stream := streamPackets(t,
+		&sshfx.VersionPacket{
+			Version: sftpProtocolVersion,
+		},
+		noSidBrokenPacket{},
+	)
 
 	cl, err := NewClientPipe(t.Context(), stream, sink{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer cl.Close()
 
 	_, err = cl.Stat("anything")
 	if !errors.Is(err, sshfx.StatusConnectionLost) {
-		t.Errorf("cl.Stat = %v, expected sshfx.StatusConnectionLost", err)
+		t.Errorf("cl.Stat = %q, expected sshfx.StatusConnectionLost", err)
+	}
+}
+
+// sftp/issue/390 - server disconnect should not cause io.EOF or
+// io.ErrUnexpectedEOF in sftp.File.Read, because those confuse io.ReadFull.
+func TestClientRoughDisconnectEOF(t *testing.T) {
+	stream := streamPackets(t,
+		&sshfx.VersionPacket{
+			Version: sftpProtocolVersion,
+		},
+		&sshfx.HandlePacket{
+			Handle: "foo",
+		},
+		&sshfx.DataPacket{
+			Data: []byte("foo"),
+		},
+	)
+
+	cl, err := NewClientPipe(t.Context(), stream, sink{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+
+	f, err := cl.Open("anything")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = io.ReadFull(f, make([]byte, 10))
+	if !errors.Is(err, sshfx.StatusConnectionLost) {
+		t.Errorf("io.ReadFull error = %q, but wanted sshfx.StatusConnectionLost", err)
 	}
 }
