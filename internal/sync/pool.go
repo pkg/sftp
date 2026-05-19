@@ -229,6 +229,13 @@ func (p *WorkPool[T]) Get() (chan T, bool) {
 		return make(chan T, 1), true
 	}
 
+	select {
+	case <-p.closed:
+		var ch chan T
+		return ch, false
+	default:
+	}
+
 	v, ok := <-p.ch
 	if ok {
 		p.wg.Add(1)
@@ -247,6 +254,8 @@ func (p *WorkPool[T]) Put(v chan T) {
 		return
 	}
 
+	p.wg.Done()
+
 	select {
 	case <-p.closed:
 		return
@@ -255,7 +264,6 @@ func (p *WorkPool[T]) Put(v chan T) {
 
 	select {
 	case p.ch <- v:
-		p.wg.Done()
 	default:
 		panic("worker pool overfill")
 		// This is an overfill, which shouldn't happen, but just in case...
