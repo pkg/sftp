@@ -210,7 +210,6 @@ func (p *WorkPool[T]) Close() error {
 	p.wg.Wait()
 
 	close(p.ch)
-
 	for range p.ch {
 		// drain the pool and drop them on all on the ground for GC.
 	}
@@ -231,16 +230,22 @@ func (p *WorkPool[T]) Get() (chan T, bool) {
 
 	select {
 	case <-p.closed:
-		var ch chan T
-		return ch, false
-	default:
-	}
+		return nil, false
 
-	v, ok := <-p.ch
-	if ok {
-		p.wg.Add(1)
+	case v, ok := <-p.ch:
+		if !ok {
+			return nil, false
+		}
+
+		select {
+		case <-p.closed:
+			return nil, false
+
+		default:
+			p.wg.Add(1)
+			return v, true
+		}
 	}
-	return v, ok
 }
 
 // Put returns the given work channel to the pool.
@@ -255,12 +260,6 @@ func (p *WorkPool[T]) Put(v chan T) {
 	}
 
 	defer p.wg.Done()
-
-	select {
-	case <-p.closed:
-		return
-	default:
-	}
 
 	select {
 	case <-p.closed:
