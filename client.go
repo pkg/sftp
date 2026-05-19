@@ -1716,7 +1716,7 @@ func (f *File) writeat(ctx context.Context, b []byte, off int64) (written int, e
 
 		req := &sshfx.WritePacket{
 			Handle: handle,
-			Offset: uint64(f.offset),
+			Offset: uint64(off),
 		}
 
 		for len(b) > 0 {
@@ -1785,7 +1785,7 @@ func (f *File) writeat(ctx context.Context, b []byte, off int64) (written int, e
 		// * the offset of the start of the first error received dispatching a write packet offset.
 		//
 		// Either way, this should be the last successfully written offset.
-		written := int64(firstErr.off) - f.offset
+		written := int64(firstErr.off) - off
 
 		return int(written), f.wrapErr("writeat", firstErr.err)
 	}
