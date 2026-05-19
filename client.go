@@ -208,6 +208,9 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	}
 	defer c.bufPool.Put(header)
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// payload by design of the API is all but guaranteed to alias a caller-held byte slice,
 	// so, _do not_ put it into the bufPool.
 
@@ -215,9 +218,6 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	if !ok {
 		return reqid, nil, sshfx.StatusConnectionLost
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	select {
 	case <-cancel:
