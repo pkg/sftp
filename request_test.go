@@ -114,11 +114,11 @@ func (h *Handlers) returnError(err error) {
 	handler.err = err
 }
 
-func getStatusMsg(p interface{}) string {
+func getStatusMsg(p any) string {
 	pkt := p.(*sshFxpStatusPacket)
 	return pkt.StatusError.msg
 }
-func checkOkStatus(t *testing.T, p interface{}) {
+func checkOkStatus(t *testing.T, p any) {
 	pkt := p.(*sshFxpStatusPacket)
 	assert.Equal(t, pkt.StatusError.Code, uint32(sshFxOk),
 		"sshFxpStatusPacket not OK\n", pkt.StatusError.msg)

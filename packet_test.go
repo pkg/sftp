@@ -84,7 +84,7 @@ func TestMarshal(t *testing.T) {
 	}
 
 	var tests = []struct {
-		v    interface{}
+		v    any
 		want []byte
 	}{
 		{uint8(42), []byte{42}},

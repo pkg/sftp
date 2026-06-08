@@ -265,7 +265,7 @@ func rejectRequest(req *ssh.Request) error {
 	return err
 }
 
-func rejectRequestUnmarshalError(req *ssh.Request, s interface{}, err error) error {
+func rejectRequestUnmarshalError(req *ssh.Request, s any, err error) error {
 	fmt.Fprintf(sshServerDebugStream, "ssh request unmarshaling error, type '%T': %v\n", s, err)
 	rejectRequest(req)
 	return err
