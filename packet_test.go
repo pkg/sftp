@@ -31,6 +31,32 @@ func TestMarshalUint32(t *testing.T) {
 	}
 }
 
+func TestUnmarshalFileStatExtendedOverflow(t *testing.T) {
+	// flags = EXTENDED only, extended_count = 0xFFFFFFFF, no entries.
+	b := marshalUint32(nil, 0xFFFFFFFF)
+	if _, _, err := unmarshalFileStat(sshFileXferAttrExtended, b); err != errShortPacket {
+		t.Fatalf("expected errShortPacket, got %v", err)
+	}
+
+	// Well-formed control: a single extended entry must still parse.
+	b = marshalUint32(nil, 1)
+	b = marshalString(b, "type")
+	b = marshalString(b, "data")
+	fs, _, err := unmarshalFileStat(sshFileXferAttrExtended, b)
+	if err != nil {
+		t.Fatalf("unexpected error parsing valid extended attrs: %v", err)
+	}
+	if len(fs.Extended) != 1 {
+		t.Fatalf("got %d extended attrs, want 1", len(fs.Extended))
+	}
+	if fs.Extended[0].ExtType != "type" {
+		t.Errorf("got ext type %q, want %q", fs.Extended[0].ExtType, "type")
+	}
+	if fs.Extended[0].ExtData != "data" {
+		t.Errorf("got ext data %q, want %q", fs.Extended[0].ExtData, "data")
+	}
+}
+
 func TestMarshalUint64(t *testing.T) {
 	var tests = []struct {
 		v    uint64

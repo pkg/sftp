@@ -225,6 +225,12 @@ func unmarshalFileStat(flags uint32, b []byte) (*FileStat, []byte, error) {
 			return nil, b, err
 		}
 
+		// Each extended attribute occupies at least 8 bytes (two
+		// length-prefixed strings), so a count larger than len(b)/8 cannot
+		// fit and is malformed.
+		if count > uint32(len(b)/8) {
+			return nil, b, errShortPacket
+		}
 		ext := make([]StatExtended, count)
 		for i := uint32(0); i < count; i++ {
 			var typ string
