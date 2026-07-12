@@ -181,6 +181,272 @@ func TestClientShortPacket(t *testing.T) {
 	}
 }
 
+// frameReply returns a server reply (length prefix + type + body, where body
+// begins with the echoed request id) as recvPacket expects it on the wire.
+func frameReply(typ fxp, body []byte) []byte {
+	b := append([]byte{byte(typ)}, body...)
+	return append(marshalUint32(nil, uint32(len(b))), b...)
+}
+
+// readRequest reads one length-prefixed request packet from r and returns its
+// type and request id. The SSH_FXP_INIT handshake packet carries a version in
+// place of an id; callers special-case it on the type.
+func readRequest(r io.Reader) (typ fxp, id uint32, ok bool) {
+	hdr := make([]byte, 4)
+	if _, err := io.ReadFull(r, hdr); err != nil {
+		return 0, 0, false
+	}
+	n, _ := unmarshalUint32(hdr)
+	body := make([]byte, n)
+	if _, err := io.ReadFull(r, body); err != nil {
+		return 0, 0, false
+	}
+	typ = fxp(body[0])
+	if len(body) >= 5 {
+		id, _ = unmarshalUint32(body[1:])
+	}
+	return typ, id, true
+}
+
+// startScriptedClient wires a *Client to a scripted server over synchronized
+// io.Pipes. After answering the SSH_FXP_INIT/VERSION handshake, the server
+// replies to each request by calling reply(typ, id); reply returns the response
+// packet type and body (which must begin with the echoed id). Returning
+// ok==false stops the server.
+func startScriptedClient(t *testing.T, reply func(typ fxp, id uint32) (fxp, []byte, bool), opts ...ClientOption) *Client {
+	t.Helper()
+
+	cr, sw := io.Pipe() // client reads what the server writes
+	sr, cw := io.Pipe() // server reads what the client writes
+
+	go func() {
+		defer sw.Close()
+		for {
+			typ, id, ok := readRequest(sr)
+			if !ok {
+				return
+			}
+			if typ == sshFxpInit {
+				sendPacket(sw, &sshFxVersionPacket{Version: sftpProtocolVersion})
+				continue
+			}
+			rtyp, body, ok := reply(typ, id)
+			if !ok {
+				return
+			}
+			if _, err := sw.Write(frameReply(rtyp, body)); err != nil {
+				return
+			}
+		}
+	}()
+
+	c, err := NewClientPipe(cr, cw, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestClientReadDataReply(t *testing.T) {
+	const payload = "ABCDEFGH"
+
+	cases := []struct {
+		name    string
+		data    func(b []byte) []byte
+		wantErr error // nil means the read must succeed and return payload
+	}{
+		{"valid", func(b []byte) []byte { return marshalString(b, payload) }, nil},
+		{"length exceeds bytes present", func(b []byte) []byte { return marshalUint32(b, 0x7fffffff) }, errShortPacket},
+		{"length prefix truncated", func(b []byte) []byte { return append(b, 0x00, 0x00) }, errShortPacket},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := startScriptedClient(t, func(_ fxp, id uint32) (fxp, []byte, bool) {
+				return sshFxpData, tc.data(marshalUint32(nil, id)), true
+			})
+			defer c.Close()
+
+			f := &File{c: c, path: "somefile", handle: "somehandle"}
+			b := make([]byte, len(payload))
+			n, err := f.Read(b)
+
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("error = %v, want %v", err, tc.wantErr)
+				}
+				if n != 0 {
+					t.Errorf("n = %d, want 0", n)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if string(b[:n]) != payload {
+				t.Errorf("read %q, want %q", b[:n], payload)
+			}
+		})
+	}
+}
+
+func TestClientReadAtConcurrentDataReply(t *testing.T) {
+	c := startScriptedClient(t, func(_ fxp, id uint32) (fxp, []byte, bool) {
+		// Oversize declared length, no data.
+		body := marshalUint32(nil, id)
+		body = marshalUint32(body, 0x7fffffff)
+		return sshFxpData, body, true
+	}, MaxPacket(1024))
+	defer c.Close()
+
+	f := &File{c: c, path: "somefile", handle: "somehandle"}
+	// A buffer larger than maxPacket forces readAt to split the read into
+	// concurrent maxPacket-sized requests.
+	n, err := f.ReadAt(make([]byte, 4096), 0)
+	if !errors.Is(err, errShortPacket) {
+		t.Fatalf("error = %v, want %v", err, errShortPacket)
+	}
+	if n != 0 {
+		t.Errorf("n = %d, want 0", n)
+	}
+}
+
+// dirEntry appends one well-formed SSH_FXP_NAME entry (filename, longname, and
+// empty attributes) to b.
+func dirEntry(b []byte, name string) []byte {
+	b = marshalString(b, name) // filename
+	b = marshalString(b, name) // longname
+	return marshalUint32(b, 0) // attrs: flags == 0, no fields follow
+}
+
+// statusBody appends an SSH_FXP_STATUS body (code plus empty message/language)
+// after an already-written request id.
+func statusBody(b []byte, code uint32) []byte {
+	b = marshalUint32(b, code)
+	b = marshalString(b, "")    // message
+	return marshalString(b, "") // language
+}
+
+func TestClientReadDirMalformedName(t *testing.T) {
+	// body builds the SSH_FXP_NAME reply body that follows the echoed id. (The
+	// 32-bit overflow of the count field is covered by TestUnmarshalCount.)
+	cases := []struct {
+		name    string
+		body    func(b []byte) []byte
+		wantErr error
+	}{
+		{
+			name:    "count prefix truncated",
+			body:    func(b []byte) []byte { return append(b, 0x00, 0x00) },
+			wantErr: errShortPacket,
+		},
+		{
+			// A huge count with no entries must fail when the loop runs out of
+			// bytes, not pre-allocate or panic.
+			name:    "count far exceeds entries present",
+			body:    func(b []byte) []byte { return marshalUint32(b, 0x7fffffff) },
+			wantErr: errShortPacket,
+		},
+		{
+			name: "filename length exceeds bytes present",
+			body: func(b []byte) []byte {
+				b = marshalUint32(b, 1)             // count: one entry
+				return marshalUint32(b, 0x7fffffff) // filename length, no bytes follow
+			},
+			wantErr: errShortPacket,
+		},
+		{
+			name: "longname length exceeds bytes present",
+			body: func(b []byte) []byte {
+				b = marshalUint32(b, 1)             // count: one entry
+				b = marshalString(b, "file")        // valid filename
+				return marshalUint32(b, 0x7fffffff) // longname length, no bytes follow
+			},
+			wantErr: errShortPacket,
+		},
+		{
+			name: "attrs truncated",
+			body: func(b []byte) []byte {
+				b = marshalUint32(b, 1)      // count: one entry
+				b = marshalString(b, "file") // filename
+				b = marshalString(b, "file") // longname
+				// Attr flags claim a size field, but the 8 bytes never follow.
+				return marshalUint32(b, sshFileXferAttrSize)
+			},
+			wantErr: errShortPacket,
+		},
+		{
+			name: "second entry truncated mid-loop",
+			body: func(b []byte) []byte {
+				b = marshalUint32(b, 2)             // declare two entries
+				b = dirEntry(b, "file1")            // first entry is well-formed
+				return marshalUint32(b, 0x7fffffff) // second filename length, no bytes
+			},
+			wantErr: errShortPacket,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := startScriptedClient(t, func(typ fxp, id uint32) (fxp, []byte, bool) {
+				switch typ {
+				case sshFxpOpendir:
+					return sshFxpHandle, marshalString(marshalUint32(nil, id), "somehandle"), true
+				case sshFxpReaddir:
+					return sshFxpName, tc.body(marshalUint32(nil, id)), true
+				default: // the deferred close, etc.
+					return 0, nil, false
+				}
+			})
+			defer c.Close()
+
+			if _, err := c.ReadDir("/"); !errors.Is(err, tc.wantErr) {
+				t.Fatalf("ReadDir error = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestClientReadDirSuccess is the positive counterpart: a well-formed listing
+// (two entries, then an EOF status) must be parsed into the expected entries
+// with no error, proving the hardened loop still accepts valid replies.
+func TestClientReadDirSuccess(t *testing.T) {
+	var readdirs int
+	c := startScriptedClient(t, func(typ fxp, id uint32) (fxp, []byte, bool) {
+		switch typ {
+		case sshFxpOpendir:
+			return sshFxpHandle, marshalString(marshalUint32(nil, id), "somehandle"), true
+		case sshFxpReaddir:
+			readdirs++
+			if readdirs > 1 {
+				// End of listing on the second readdir.
+				return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxEOF), true
+			}
+			body := marshalUint32(nil, id)
+			body = marshalUint32(body, 2) // two entries
+			body = dirEntry(body, "file1")
+			body = dirEntry(body, "file2")
+			return sshFxpName, body, true
+		case sshFxpClose:
+			return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxOk), true
+		default:
+			return 0, nil, false
+		}
+	})
+	defer c.Close()
+
+	entries, err := c.ReadDir("/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(entries))
+	}
+	if entries[0].Name() != "file1" || entries[1].Name() != "file2" {
+		t.Errorf("entries = [%q %q], want [file1 file2]", entries[0].Name(), entries[1].Name())
+	}
+}
+
 // Issue #418: panic in clientConn.recv when the sid is incomplete.
 func TestClientNoSid(t *testing.T) {
 	stream := new(bytes.Buffer)

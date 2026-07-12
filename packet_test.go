@@ -5,8 +5,10 @@ import (
 	"encoding"
 	"errors"
 	"io/ioutil"
+	"math"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -54,6 +56,229 @@ func TestUnmarshalFileStatExtendedOverflow(t *testing.T) {
 	}
 	if fs.Extended[0].ExtData != "data" {
 		t.Errorf("got ext data %q, want %q", fs.Extended[0].ExtData, "data")
+	}
+}
+
+func TestUnmarshalStatusShort(t *testing.T) {
+	for _, data := range [][]byte{
+		nil,
+		{0x00},
+		{0x00, 0x00, 0x00, 0x2a}, // only the id, no code
+	} {
+		if err := unmarshalStatus(42, data); err != errShortPacket {
+			t.Errorf("unmarshalStatus(%v): err = %v, want errShortPacket", data, err)
+		}
+	}
+}
+
+func TestUnmarshalDataReply(t *testing.T) {
+	// id matches, declared length exceeds the bytes present. The 32-bit
+	// overflow of the length field itself is covered by TestUnmarshalCount.
+	b := marshalUint32(nil, 1)
+	b = marshalUint32(b, 0x7fffffff)
+	if _, err := unmarshalDataReply(1, b); err != errShortPacket {
+		t.Fatalf("expected errShortPacket, got %v", err)
+	}
+
+	// truncated before the id (less than 4 bytes): rejected by unmarshalSID.
+	if _, err := unmarshalDataReply(1, []byte{0x00, 0x00}); err != errShortPacket {
+		t.Fatalf("expected errShortPacket, got %v", err)
+	}
+
+	// truncated before the length field: id present, nothing after it.
+	if _, err := unmarshalDataReply(1, marshalUint32(nil, 1)); err != errShortPacket {
+		t.Fatalf("expected errShortPacket, got %v", err)
+	}
+
+	// mismatched id.
+	b = marshalUint32(nil, 2)
+	b = marshalUint32(b, 0)
+	_, err := unmarshalDataReply(1, b)
+	var idErr *unexpectedIDErr
+	if !errors.As(err, &idErr) {
+		t.Fatalf("err = %v (%T), want *unexpectedIDErr", err, err)
+	}
+	if idErr.want != 1 {
+		t.Errorf("idErr.want = %d, want 1", idErr.want)
+	}
+	if idErr.got != 2 {
+		t.Errorf("idErr.got = %d, want 2", idErr.got)
+	}
+
+	// well-formed reply: declared length shorter than the bytes present must
+	// return exactly the declared prefix, leaving any trailing bytes out.
+	payload := []byte("hello")
+	b = marshalUint32(nil, 1)
+	b = marshalUint32(b, uint32(len(payload)))
+	b = append(b, payload...)
+	b = append(b, "extra"...) // trailing bytes beyond the declared length
+	got, err := unmarshalDataReply(1, b)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Errorf("got %q, want %q", got, payload)
+	}
+}
+
+// TestUnmarshalSID exercises the request-id check shared by every client reply
+// decoder: a matching id returns the remaining bytes untouched, a mismatch
+// reports both ids, and a truncated reply is rejected rather than panicking.
+func TestUnmarshalSID(t *testing.T) {
+	// matching id: the bytes after the id must be returned verbatim.
+	b := marshalUint32(nil, 42)
+	b = append(b, 'x', 'y')
+	rest, err := unmarshalSID(42, b)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(rest, []byte("xy")) {
+		t.Errorf("rest = %q, want %q", rest, "xy")
+	}
+
+	// matching id with no trailing bytes: rest is empty, not an error.
+	rest, err = unmarshalSID(7, marshalUint32(nil, 7))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rest) != 0 {
+		t.Errorf("rest = % x, want empty", rest)
+	}
+
+	// mismatched id: error carries both the expected and the received id.
+	_, err = unmarshalSID(1, marshalUint32(nil, 2))
+	var idErr *unexpectedIDErr
+	if !errors.As(err, &idErr) {
+		t.Fatalf("err = %v (%T), want *unexpectedIDErr", err, err)
+	}
+	if idErr.want != 1 {
+		t.Errorf("idErr.want = %d, want 1", idErr.want)
+	}
+	if idErr.got != 2 {
+		t.Errorf("idErr.got = %d, want 2", idErr.got)
+	}
+
+	// truncated before the id is fully present.
+	for _, b := range [][]byte{nil, {0x00}, {0x00, 0x00, 0x00}} {
+		if _, err := unmarshalSID(1, b); err != errShortPacket {
+			t.Errorf("unmarshalSID(%v): err = %v, want errShortPacket", b, err)
+		}
+	}
+}
+
+// TestUnmarshalCount exercises the count decoder used for the SSH_FXP_NAME and
+// SSH_FXP_DATA reply lengths. It returns the count and the remaining bytes, and
+// guards the 32-bit overflow case that would otherwise produce a negative
+// length in make/slice.
+func TestUnmarshalCount(t *testing.T) {
+	// valid count: trailing bytes are returned untouched.
+	b := marshalUint32(nil, 3)
+	b = append(b, 'a', 'b', 'c')
+	count, rest, err := unmarshalCount(b)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("count = %d, want 3", count)
+	}
+	if !bytes.Equal(rest, []byte("abc")) {
+		t.Errorf("rest = %q, want %q", rest, "abc")
+	}
+
+	// boundary: math.MaxInt32 (0x7fffffff) is the largest value that fits a
+	// non-negative int everywhere, so it must be accepted — this guards the
+	// off-by-one in the int(v) < 0 check.
+	count, _, err = unmarshalCount(marshalUint32(nil, 0x7fffffff))
+	if err != nil {
+		t.Fatalf("MaxInt32: unexpected error: %v", err)
+	}
+	if count != math.MaxInt32 {
+		t.Errorf("MaxInt32: count = %d, want %d", count, math.MaxInt32)
+	}
+
+	// truncated before the count is fully present.
+	for _, b := range [][]byte{nil, {0x00}, {0x00, 0x00, 0x00}} {
+		if _, _, err := unmarshalCount(b); err != errShortPacket {
+			t.Errorf("unmarshalCount(%v): err = %v, want errShortPacket", b, err)
+		}
+	}
+
+	// A count larger than math.MaxInt32 does not fit in a 32-bit int. On those
+	// platforms it must be rejected with errLongPacket; on 64-bit platforms int
+	// is wide enough and the value is returned as-is. This check is always true
+	// on 64-bit and only ever trips on 32-bit.
+	big := marshalUint32(nil, 0x80000000) // math.MaxInt32 + 1, as a uint32
+	count, _, err = unmarshalCount(big)
+	if strconv.IntSize == 32 {
+		if err != errLongPacket {
+			t.Errorf("32-bit: err = %v, want errLongPacket", err)
+		}
+	} else {
+		if err != nil {
+			t.Fatalf("64-bit: unexpected error: %v", err)
+		}
+		// int64 throughout: math.MaxInt32+1 overflows int on 32-bit at compile
+		// time, even though this branch only runs on 64-bit.
+		if int64(count) != int64(math.MaxInt32)+1 {
+			t.Errorf("64-bit: count = %d, want %d", count, int64(math.MaxInt32)+1)
+		}
+	}
+}
+
+func TestUnmarshalStringSafe(t *testing.T) {
+	// well-formed: the declared bytes are returned as the string and any
+	// trailing bytes are handed back untouched as the remainder.
+	b := marshalString(nil, "hello")
+	b = append(b, 0xde, 0xad)
+	s, rest, err := unmarshalStringSafe(b)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s != "hello" {
+		t.Errorf("s = %q, want %q", s, "hello")
+	}
+	if !bytes.Equal(rest, []byte{0xde, 0xad}) {
+		t.Errorf("rest = % x, want de ad", rest)
+	}
+
+	// empty string: a zero length yields "" and leaves the remainder untouched.
+	empty := append(marshalUint32(nil, 0), 'x', 'y')
+	s, rest, err = unmarshalStringSafe(empty)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s != "" {
+		t.Errorf("s = %q, want empty", s)
+	}
+	if !bytes.Equal(rest, []byte("xy")) {
+		t.Errorf("rest = %q, want %q", rest, "xy")
+	}
+
+	// exact length: the declared bytes consume the whole slice, empty remainder.
+	s, rest, err = unmarshalStringSafe(marshalString(nil, "abc"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s != "abc" {
+		t.Errorf("s = %q, want %q", s, "abc")
+	}
+	if len(rest) != 0 {
+		t.Errorf("rest = % x, want empty", rest)
+	}
+
+	// truncated before the length prefix is fully present.
+	for _, b := range [][]byte{nil, {0x00}, {0x00, 0x00, 0x00}} {
+		if _, _, err := unmarshalStringSafe(b); err != errShortPacket {
+			t.Errorf("unmarshalStringSafe(% x): err = %v, want errShortPacket", b, err)
+		}
+	}
+
+	// declared length exceeds the bytes actually present. The 32-bit overflow
+	// of the length field itself is covered by TestUnmarshalCount.
+	short := marshalUint32(nil, 5)
+	short = append(short, 'a', 'b') // only 2 of the 5 declared bytes
+	if _, _, err := unmarshalStringSafe(short); err != errShortPacket {
+		t.Errorf("unmarshalStringSafe(short): err = %v, want errShortPacket", err)
 	}
 }
 
