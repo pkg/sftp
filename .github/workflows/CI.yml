@@ -15,7 +15,7 @@ jobs:
         go: ['1.26', '1.25']
         exclude:
           - os: macos-latest
-            go: '1.26'
+            go: '1.25'
 
     steps:
       - uses: actions/checkout@v7
