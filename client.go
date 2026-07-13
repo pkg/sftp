@@ -295,7 +295,7 @@ func newClientPipe(rd, stderr io.Reader, wr io.WriteCloser, wait func() error, o
 // Create creates the named file mode 0666 (before umask), truncating it if it
 // already exists. If successful, methods on the returned File can be used for
 // I/O; the associated file descriptor has mode O_RDWR. If you need more
-// control over the flags/mode used to open the file see client.OpenFile.
+// control over the flags/mode used to open the file, see [Client.OpenFile].
 //
 // Note that some SFTP servers (eg. AWS Transfer) do not support opening files
 // read/write at the same time. For those services you will need to use
@@ -1033,8 +1033,8 @@ func (c *Client) MkdirAll(path string) error {
 	return nil
 }
 
-// RemoveAll delete files recursively in the directory and Recursively delete subdirectories.
-// An error will be returned if no file or directory with the specified path exists
+// RemoveAll delete files recursively in the directory and recursively delete subdirectories.
+// An error will be returned if no file or directory with the specified path exists.
 func (c *Client) RemoveAll(path string) error {
 
 	// Get the file/directory information
@@ -2142,7 +2142,7 @@ func (f *File) Chown(uid, gid int) error {
 
 // Chmod changes the permissions of the current file.
 //
-// See Client.Chmod for details.
+// See [Client.Chmod] for details.
 func (f *File) Chmod(mode os.FileMode) error {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
