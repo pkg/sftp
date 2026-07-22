@@ -168,7 +168,8 @@ func (p *Pool[T]) Put(v *T) {
 // relieving pressure on the garbage collector and amortizing allocation overhead.
 // While also co-ordinating outstanding work, so the caller can wait for all work to be complete.
 type WorkPool[T any] struct {
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
+	closed chan struct{}
 
 	ch chan chan T
 }
@@ -178,7 +179,8 @@ type WorkPool[T any] struct {
 // It will panic if given a negative depth, the same as making a negative-buffer channel.
 func NewWorkPool[T any](depth int) *WorkPool[T] {
 	p := &WorkPool[T]{
-		ch: make(chan chan T, depth),
+		closed: make(chan struct{}),
+		ch:     make(chan chan T, depth),
 	}
 
 	for len(p.ch) < cap(p.ch) {
@@ -203,10 +205,11 @@ func (p *WorkPool[T]) Close() error {
 		return errors.New("cannot close nil work pool")
 	}
 
-	close(p.ch)
+	close(p.closed)
 
 	p.wg.Wait()
 
+	close(p.ch)
 	for range p.ch {
 		// drain the pool and drop them on all on the ground for GC.
 	}
@@ -225,11 +228,24 @@ func (p *WorkPool[T]) Get() (chan T, bool) {
 		return make(chan T, 1), true
 	}
 
-	v, ok := <-p.ch
-	if ok {
-		p.wg.Add(1)
+	select {
+	case <-p.closed:
+		return nil, false
+
+	case v, ok := <-p.ch:
+		if !ok {
+			return nil, false
+		}
+
+		select {
+		case <-p.closed:
+			return nil, false
+
+		default:
+			p.wg.Add(1)
+			return v, true
+		}
 	}
-	return v, ok
 }
 
 // Put returns the given work channel to the pool.
@@ -243,9 +259,11 @@ func (p *WorkPool[T]) Put(v chan T) {
 		return
 	}
 
+	defer p.wg.Done()
+
 	select {
+	case <-p.closed:
 	case p.ch <- v:
-		p.wg.Done()
 	default:
 		panic("worker pool overfill")
 		// This is an overfill, which shouldn't happen, but just in case...

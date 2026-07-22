@@ -107,7 +107,7 @@ func (b *Buffer) Packet(payload []byte) (header, payloadPassThru []byte, err err
 	return b.b, payload, nil
 }
 
-func (b *Buffer) checkLen(length int) bool {
+func (b *Buffer) checkCount(length, count int) bool {
 	if b.Err != nil {
 		return false
 	}
@@ -115,13 +115,17 @@ func (b *Buffer) checkLen(length int) bool {
 	// The strconv.IntSize <= 32 short-circuits to false on 64-bit,
 	// which elides the check for a negative length on architectures,
 	// where uint32 cannot overflow to a negative int value.
-	if (strconv.IntSize <= 32 && length < 0) || b.Len() < length {
+	if (strconv.IntSize <= 32 && length < 0) || b.Len()/count < length {
 		b.off = len(b.b)
 		b.Err = ErrShortPacket
 		return false
 	}
 
 	return true
+}
+
+func (b *Buffer) checkLen(length int) bool {
+	return b.checkCount(length, 1)
 }
 
 // ConsumeUint8 consumes a single byte from the buffer.
@@ -197,7 +201,7 @@ func (b *Buffer) ConsumeUint32() uint32 {
 func (b *Buffer) AppendUint32(v uint32) {
 	b.b = binary.BigEndian.AppendUint32(b.b, v)
 }
-//*/
+
 // ConsumeCount consumes a single uint32 count from the buffer, in network byte order (big-endian) as an int.
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeCount() (int, error) {

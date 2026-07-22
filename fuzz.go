@@ -1,6 +1,4 @@
-// go:build gofuzz
 //go:build gofuzz
-// +build gofuzz
 
 package sftp
 
