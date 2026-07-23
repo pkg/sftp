@@ -54,6 +54,7 @@ type FileStat struct {
 	UID      uint32
 	GID      uint32
 	Extended []StatExtended
+	Longname string
 }
 
 // ModTime returns the Mtime SFTP file attribute converted to a time.Time

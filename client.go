@@ -405,12 +405,14 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 			for i := uint32(0); i < count; i++ {
 				var filename string
 				filename, data = unmarshalString(data)
-				_, data = unmarshalString(data) // discard longname
+				var longname string
+				longname, data = unmarshalString(data)
 				var attr *FileStat
 				attr, data, err = unmarshalAttrs(data)
 				if err != nil {
 					return nil, err
 				}
+				attr.Longname = longname
 				if filename == "." || filename == ".." {
 					continue
 				}
