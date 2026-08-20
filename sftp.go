@@ -240,10 +240,10 @@ func getSupportedExtensionByName(extensionName string) (sshExtensionPair, error)
 	return sshExtensionPair{}, fmt.Errorf("unsupported extension: %s", extensionName)
 }
 
-// SetSFTPExtensions allows to customize the supported server extensions.
+// SetSFTPExtensions allows customizing the supported server extensions.
 // See the variable supportedSFTPExtensions for supported extensions.
 // This method accepts a slice of sshExtensionPair names for example 'hardlink@openssh.com'.
-// If an invalid extension is given an error will be returned and nothing will be changed
+// If an invalid extension is given an error will be returned and nothing will be changed.
 func SetSFTPExtensions(extensions ...string) error {
 	tempExtensions := []sshExtensionPair{}
 	for _, extension := range extensions {
