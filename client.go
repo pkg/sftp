@@ -1559,10 +1559,21 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 	// Reduce: serialize the results from the reads into sequential writes.
 	cur := writeCh
+	shortRead := false
 	for {
 		packet, ok := <-cur
 		if !ok {
 			return written, errors.New("sftp.File.WriteTo: unexpectedly closed channel")
+		}
+
+		// The reads are dispatched at fixed offsets (off, off+chunkSize, ...), so a
+		// server returning fewer bytes than requested mid-stream leaves a gap that the
+		// following chunk cannot fill. If a short read is followed by another chunk that
+		// still has data, the stream can no longer be reassembled, so fail loudly rather
+		// than silently drop the skipped bytes. A short final chunk is fine: it is
+		// followed only by the EOF packet, which carries no data.
+		if shortRead && len(packet.b) > 0 {
+			return written, errors.New("sftp: server returned a short read mid-stream, cannot reassemble concurrent WriteTo")
 		}
 
 		// Because writes are serialized, this will always be the last successfully read byte.
@@ -1582,6 +1593,10 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 			}
 
 			return written, packet.err
+		}
+
+		if len(packet.b) < chunkSize {
+			shortRead = true
 		}
 
 		pool.Put(packet.b)
