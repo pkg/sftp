@@ -197,7 +197,7 @@ func (b *Buffer) ConsumeUint32() uint32 {
 func (b *Buffer) AppendUint32(v uint32) {
 	b.b = binary.BigEndian.AppendUint32(b.b, v)
 }
-//*/
+
 // ConsumeCount consumes a single uint32 count from the buffer, in network byte order (big-endian) as an int.
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
 func (b *Buffer) ConsumeCount() (int, error) {
