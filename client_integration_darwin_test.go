@@ -13,6 +13,10 @@ func TestClientStatVFS(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
+	if _, ok := sftp.HasExtension("statvfs@openssh.com"); !ok {
+		t.Fatal("server doesn't list statvfs extension")
+	}
+
 	vfs, err := sftp.StatVFS("/")
 	if err != nil {
 		t.Fatal(err)
@@ -25,16 +29,15 @@ func TestClientStatVFS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// check some stats
-	if vfs.Files != uint64(s.Files) {
-		t.Fatal("fr_size does not match")
+	if vfs.Frsize != uint64(s.Bsize) {
+		t.Fatalf("f_frsize does not match, expected: %v, got: %v", s.Bsize, vfs.Frsize)
 	}
 
-	if vfs.Bfree != uint64(s.Bfree) {
-		t.Fatal("f_bsize does not match")
+	if vfs.Bsize != uint64(s.Iosize) {
+		t.Fatalf("f_bsize does not match, expected: %v, got: %v", s.Iosize, vfs.Bsize)
 	}
 
-	if vfs.Favail != uint64(s.Ffree) {
-		t.Fatal("f_namemax does not match")
+	if vfs.Blocks != s.Blocks {
+		t.Fatalf("f_blocks does not match, expected: %v, got: %v", s.Blocks, vfs.Blocks)
 	}
 }
