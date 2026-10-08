@@ -51,6 +51,9 @@ func (r *Request) AttrFlags() FileAttrFlags {
 
 // Attributes parses file attributes byte blob and return them in a
 // FileStat object.
+//
+// It returns nil when the blob does not hold every field its flags promise,
+// so callers acting on an attribute must check the result before using it.
 func (r *Request) Attributes() *FileStat {
 	fs, _, _ := unmarshalFileStat(r.Flags, r.Attrs)
 	return fs
