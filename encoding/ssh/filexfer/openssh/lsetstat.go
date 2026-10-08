@@ -14,7 +14,7 @@ func ExtensionLSetStat() *sshfx.ExtensionPair {
 	}
 }
 
-// LSetStatExtendedPacket defines the fsync@openssh.com extend packet.
+// LSetStatExtendedPacket defines the lsetstat@openssh.com extend packet.
 type LSetStatExtendedPacket struct {
 	Path  string
 	Attrs sshfx.Attributes
@@ -27,7 +27,7 @@ func (ep *LSetStatExtendedPacket) Type() sshfx.PacketType {
 
 // MarshalSize returns the number of bytes that the extended request data would marshal into.
 func (ep *LSetStatExtendedPacket) MarshalSize() int {
-	// string(handle)
+	// string(handle) + ATTRS(attrs)
 	return 4 + len(ep.Path) + ep.Attrs.MarshalSize()
 }
 
@@ -56,13 +56,13 @@ func (ep *LSetStatExtendedPacket) MarshalPacket(reqid uint32, b []byte) (header,
 	return p.MarshalPacket(reqid, b)
 }
 
-// MarshalInto encodes ep into the binary encoding of the fsync@openssh.com extended packet-specific data.
+// MarshalInto encodes ep into the binary encoding of the lsetstat@openssh.com extended packet-specific data.
 func (ep *LSetStatExtendedPacket) MarshalInto(buf *sshfx.Buffer) {
 	buf.AppendString(ep.Path)
 	ep.Attrs.MarshalInto(buf)
 }
 
-// MarshalBinary encodes ep into the binary encoding of the fsync@openssh.com extended packet-specific data.
+// MarshalBinary encodes ep into the binary encoding of the lsetstat@openssh.com extended packet-specific data.
 //
 // NOTE: This _only_ encodes the packet-specific data, it does not encode the full extended packet.
 func (ep *LSetStatExtendedPacket) MarshalBinary() ([]byte, error) {
@@ -71,7 +71,7 @@ func (ep *LSetStatExtendedPacket) MarshalBinary() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalFrom decodes the fsync@openssh.com extended packet-specific data from buf.
+// UnmarshalFrom decodes the lsetstat@openssh.com extended packet-specific data from buf.
 func (ep *LSetStatExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
 	*ep = LSetStatExtendedPacket{
 		Path: buf.ConsumeString(),
@@ -81,7 +81,7 @@ func (ep *LSetStatExtendedPacket) UnmarshalFrom(buf *sshfx.Buffer) (err error) {
 	return buf.Err
 }
 
-// UnmarshalBinary decodes the fsync@openssh.com extended packet-specific data into ep.
+// UnmarshalBinary decodes the lsetstat@openssh.com extended packet-specific data into ep.
 func (ep *LSetStatExtendedPacket) UnmarshalBinary(data []byte) (err error) {
 	return ep.UnmarshalFrom(sshfx.NewBuffer(data))
 }
