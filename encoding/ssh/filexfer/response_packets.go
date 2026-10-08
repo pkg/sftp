@@ -204,7 +204,7 @@ func (p *NamePacket) MarshalPacket(reqid uint32, b []byte) (header, payload []by
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
 func (p *NamePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
-	count, err := buf.ConsumeCount()
+	count, err := buf.ConsumeCount(minSizeNameEntry)
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func (p *PathPseudoPacket) MarshalPacket(reqid uint32, b []byte) (header, payloa
 // UnmarshalPacketBody unmarshals the packet body from the given Buffer.
 // It is assumed that the uint32(request-id) has already been consumed.
 func (p *PathPseudoPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
-	count, err := buf.ConsumeCount()
+	count, err := buf.ConsumeCount(minSizeNameEntry)
 	if err != nil {
 		return err
 	}
@@ -287,6 +287,8 @@ func (p *PathPseudoPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 		Path: e.Filename,
 	}
 
+	// Throw away any additional NameEntry in the packet,
+	// but still check them for validity.
 	for range count - 1 {
 		var e NameEntry
 		if err := e.UnmarshalFrom(buf); err != nil {
