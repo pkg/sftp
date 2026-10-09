@@ -200,8 +200,18 @@ func (b *Buffer) AppendUint32(v uint32) {
 
 // ConsumeCount consumes a single uint32 count from the buffer, in network byte order (big-endian) as an int.
 // If the buffer does not have enough data, it will set Err to ErrShortPacket.
-func (b *Buffer) ConsumeCount() (int, error) {
+func (b *Buffer) ConsumeCount(minElemSize int) (int, error) {
 	count := int(b.ConsumeUint32())
+
+	if count < 0 {
+		b.Err = ErrLongPacket
+		return 0, b.Err
+	}
+
+	if !b.checkLen(minElemSize * count) {
+		return 0, b.Err
+	}
+
 	return count, b.Err
 }
 
@@ -249,7 +259,7 @@ func (b *Buffer) AppendInt64(v int64) {
 // In no case will consuming calls return overlapping slice aliases,
 // and append calls are guaranteed to not disturb this slice alias.
 func (b *Buffer) ConsumeBytes() []byte {
-	length, _ := b.ConsumeCount()
+	length, _ := b.ConsumeCount(1)
 
 	if length == 0 {
 		// Short-circuit empty strings, or errors from ConsumeCount.

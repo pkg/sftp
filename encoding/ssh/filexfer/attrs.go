@@ -349,7 +349,7 @@ func (a ExtendedAttributes) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom unmarshals the extended attributes from the buffer.
 func (a *ExtendedAttributes) UnmarshalFrom(buf *Buffer) (err error) {
-	count, err := buf.ConsumeCount()
+	count, err := buf.ConsumeCount(minSizeExtendedAttribute)
 	if err != nil {
 		return err
 	}
@@ -444,6 +444,9 @@ type ExtendedAttribute struct {
 	Data string
 }
 
+// string("") + string("")
+const minSizeExtendedAttribute = 4 + 4
+
 // MarshalSize returns the number of bytes the extended attribute would marshal into.
 func (e *ExtendedAttribute) MarshalSize() int {
 	// string(type) + string(data)
@@ -529,6 +532,9 @@ func (e *NameEntry) Type() fs.FileMode {
 func (e *NameEntry) Info() (fs.FileInfo, error) {
 	return e, nil
 }
+
+// string(""), string(""), ATTRS(none)
+const minSizeNameEntry = 4 + 4 + 4
 
 // MarshalSize returns the number of bytes the name entry would marshal into.
 func (e *NameEntry) MarshalSize() int {
