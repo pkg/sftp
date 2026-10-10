@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/kr/fs"
-	"golang.org/x/crypto/ssh"
 
 	"github.com/pkg/sftp/internal/encoding/ssh/filexfer/openssh"
 )
@@ -190,34 +189,6 @@ type Client struct {
 	useConcurrentWrites    bool
 	useFstat               bool
 	disableConcurrentReads bool
-}
-
-// NewClient creates a new SFTP client on conn, using zero or more option
-// functions.
-func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
-	s, err := conn.NewSession()
-	if err != nil {
-		return nil, err
-	}
-
-	pw, err := s.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	pr, err := s.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	perr, err := s.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.RequestSubsystem("sftp"); err != nil {
-		return nil, err
-	}
-
-	return newClientPipe(pr, perr, pw, s.Wait, opts...)
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
