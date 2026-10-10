@@ -465,3 +465,70 @@ func TestClientNoSid(t *testing.T) {
 		t.Fatal("expected ErrSSHFxConnectionLost, got", err)
 	}
 }
+
+// Issue #658: the concurrent File.WriteTo path (used by io.Copy) must not
+// silently drop data when the server returns short reads. A server is free to
+// return fewer bytes than asked for, which it will whenever the client's max
+// packet size is larger than the server's. Because the concurrent path
+// dispatches reads at fixed offsets, it cannot reassemble the stream across a
+// mid-stream short read, so it must fail loudly rather than return a truncated
+// copy that looks successful.
+func TestClientWriteToShortReads(t *testing.T) {
+	cr, sw := io.Pipe()
+	sr, cw := io.Pipe()
+
+	// The default server max packet size is 32768, so a bigger client packet
+	// size makes every read come back short.
+	server, err := NewServer(struct {
+		io.Reader
+		io.WriteCloser
+	}{sr, sw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go server.Serve()
+
+	client, err := NewClientPipe(cr, cw, MaxPacketUnchecked(128*1024))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Close the client first (LIFO), so its receive loop sees the server go away.
+	defer client.Close()
+	defer server.Close()
+
+	// Bigger than the client packet size so WriteTo takes the concurrent path,
+	// and not a multiple of it so the last chunk is partial as well.
+	want := make([]byte, 5*128*1024+123)
+	for i := range want {
+		want[i] = byte(i)
+	}
+
+	tmp, err := os.CreateTemp("", "sftp-writeto-shortread")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(want); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := client.Open(tmp.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	n, err := f.WriteTo(&buf)
+	if err == nil {
+		t.Fatalf("WriteTo succeeded but should have reported the short read; wrote %d of %d bytes", n, len(want))
+	}
+	// Whatever was written must be a correct prefix of the source: we may stop
+	// early, but we must never emit misaligned or skipped bytes.
+	if !bytes.Equal(buf.Bytes(), want[:buf.Len()]) {
+		t.Errorf("WriteTo produced %d bytes that are not a prefix of the source", buf.Len())
+	}
+}
