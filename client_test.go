@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/kr/fs"
+	"golang.org/x/crypto/ssh"
 )
 
 // assert that *Client implements fs.FileSystem
@@ -178,6 +181,88 @@ func TestClientShortPacket(t *testing.T) {
 	_, err := NewClientPipe(r, &sink{})
 	if !errors.Is(err, errShortPacket) {
 		t.Fatalf("expected error: %v, got: %v", errShortPacket, err)
+	}
+}
+
+// subsystemServer accepts one SSH connection and one session on it, answers
+// the subsystem request with ok and then writes reply. closed is closed when
+// the client closes the session.
+func subsystemServer(t *testing.T, ok bool, reply []byte) (client *ssh.Client, closed chan struct{}) {
+	config := &ssh.ServerConfig{NoClientAuth: true}
+	config.AddHostKey(hostPrivateKeySigner)
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
+	closed = make(chan struct{})
+	go func() {
+		c, err := l.Accept()
+		if err != nil {
+			return
+		}
+		_, chans, reqs, err := ssh.NewServerConn(c, config)
+		if err != nil {
+			return
+		}
+		go ssh.DiscardRequests(reqs)
+
+		newCh := <-chans
+		if newCh == nil {
+			return
+		}
+		ch, chReqs, err := newCh.Accept()
+		if err != nil {
+			return
+		}
+		go io.Copy(io.Discard, ch)
+
+		for req := range chReqs {
+			req.Reply(ok, nil)
+			if ok {
+				ch.Write(reply)
+			}
+		}
+		close(closed)
+	}()
+
+	client, err = ssh.Dial("tcp", l.Addr().String(), &ssh.ClientConfig{
+		User:            "test",
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { client.Close() })
+	return client, closed
+}
+
+// Issue #669 in github
+// NewClient left the session open when it returned an error.
+func TestNewClientClosesSessionOnError(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		ok    bool
+		reply []byte
+		opts  []ClientOption
+	}{
+		{"subsystem refused", false, nil, nil},
+		{"bad option", true, nil, []ClientOption{MaxPacketChecked(0)}},
+		{"bad version packet", true, []byte{0, 0, 0, 0}, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, closed := subsystemServer(t, tt.ok, tt.reply)
+			if _, err := NewClient(conn, tt.opts...); err == nil {
+				t.Fatal("expected an error")
+			}
+			select {
+			case <-closed:
+			case <-time.After(5 * time.Second):
+				t.Fatal("session not closed")
+			}
+		})
 	}
 }
 
