@@ -2104,7 +2104,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 			m, err2 := f.writeChunkAt(ch, b[:n], f.offset)
 			f.offset += int64(m)
 
-			if err == nil {
+			if err == nil || (err2 != nil && errors.Is(err, io.ErrUnexpectedEOF)) {
 				err = err2
 			}
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/kr/fs"
@@ -463,5 +464,64 @@ func TestClientNoSid(t *testing.T) {
 	_, err = c.Stat("anything")
 	if !errors.Is(err, ErrSSHFxConnectionLost) {
 		t.Fatal("expected ErrSSHFxConnectionLost, got", err)
+	}
+}
+
+// eofReader fails the test if it is read again after returning io.EOF.
+type eofReader struct {
+	*strings.Reader
+	t   *testing.T
+	eof bool
+}
+
+func (r *eofReader) Read(b []byte) (int, error) {
+	if r.eof {
+		r.t.Error("Read after io.EOF")
+	}
+	n, err := r.Reader.Read(b)
+	r.eof = err == io.EOF
+	return n, err
+}
+
+// Issue #668 in github
+// ReadFrom returned nil when writing a short final chunk failed.
+func TestClientReadFromWriteError(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		maxPacket  int
+		concurrent bool
+		okWrites   int
+		wantErr    bool
+		wantOffset int64
+	}{
+		{"short chunk", 8, false, 0, true, 0},
+		{"short chunk after full chunk", 4, false, 1, true, 4},
+		{"no error", 4, false, 2, false, 5},
+		{"concurrent", 4, true, 1, true, 4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			writes := 0
+			c := startScriptedClient(t, func(_ fxp, id uint32) (fxp, []byte, bool) {
+				code := uint32(sshFxOk)
+				if writes >= tt.okWrites {
+					code = sshFxFailure
+				}
+				writes++
+				return sshFxpStatus, statusBody(marshalUint32(nil, id), code), true
+			}, MaxPacket(tt.maxPacket), UseConcurrentWrites(tt.concurrent))
+			defer c.Close()
+
+			f := &File{c: c, path: "somefile", handle: "somehandle"}
+			n, err := f.ReadFrom(&eofReader{Reader: strings.NewReader("hello"), t: t})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if n != 5 {
+				t.Errorf("n = %d, want 5", n)
+			}
+			if f.offset != tt.wantOffset {
+				t.Errorf("offset = %d, want %d", f.offset, tt.wantOffset)
+			}
+		})
 	}
 }
