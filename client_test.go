@@ -525,3 +525,46 @@ func TestClientReadFromWriteError(t *testing.T) {
 		})
 	}
 }
+
+// truncatedReader fails with io.ErrUnexpectedEOF after its data, like the
+// body of an HTTP response that was cut off.
+type truncatedReader struct {
+	*strings.Reader
+}
+
+func (r truncatedReader) Read(b []byte) (int, error) {
+	n, err := r.Reader.Read(b)
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+// ReadFrom returned nil when the reader failed with io.ErrUnexpectedEOF.
+func TestClientReadFromUnexpectedEOF(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		maxPacket  int
+		concurrent bool
+	}{
+		{"short chunk", 8, false},
+		{"full chunk", 5, false},
+		{"concurrent", 4, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := startScriptedClient(t, func(_ fxp, id uint32) (fxp, []byte, bool) {
+				return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxOk), true
+			}, MaxPacket(tt.maxPacket), UseConcurrentWrites(tt.concurrent))
+			defer c.Close()
+
+			f := &File{c: c, path: "somefile", handle: "somehandle"}
+			n, err := f.ReadFrom(truncatedReader{strings.NewReader("hello")})
+			if !errors.Is(err, io.ErrUnexpectedEOF) {
+				t.Errorf("error = %v, want %v", err, io.ErrUnexpectedEOF)
+			}
+			if n != 5 {
+				t.Errorf("n = %d, want 5", n)
+			}
+		})
+	}
+}
