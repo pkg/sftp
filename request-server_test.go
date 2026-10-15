@@ -844,9 +844,9 @@ func TestRequestStatVFS(t *testing.T) {
 	expected, err := getStatVFSForPath("/")
 	require.NoError(t, err)
 	require.NotEqual(t, 0, expected.ID)
-	// check some stats
-	require.Equal(t, expected.Bavail, vfs.Bavail)
-	require.Equal(t, expected.Bfree, vfs.Bfree)
+	// check some stats that don't change when something else writes to the disk
+	require.Equal(t, expected.Bsize, vfs.Bsize)
+	require.Equal(t, expected.Frsize, vfs.Frsize)
 	require.Equal(t, expected.Blocks, vfs.Blocks)
 
 	checkRequestServerAllocator(t, p)
