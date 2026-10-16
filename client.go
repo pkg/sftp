@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kr/fs"
+	"github.com/pkg/sftp/fswalker"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/pkg/sftp/internal/encoding/ssh/filexfer/openssh"
@@ -362,8 +362,8 @@ func (c *Client) HasExtension(name string) (string, bool) {
 }
 
 // Walk returns a new Walker rooted at root.
-func (c *Client) Walk(root string) *fs.Walker {
-	return fs.WalkFS(root, c)
+func (c *Client) Walk(root string) *fswalker.Walker {
+	return fswalker.WalkFS(root, c)
 }
 
 // ReadDir reads the directory named by p

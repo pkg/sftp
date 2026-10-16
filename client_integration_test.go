@@ -27,7 +27,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/kr/fs"
+	"github.com/pkg/sftp/fswalker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1963,7 +1963,7 @@ func TestClientWalk(t *testing.T) {
 	makeTree(t)
 	errors := make([]error, 0, 10)
 	clear := true
-	markFn := func(walker *fs.Walker) error {
+	markFn := func(walker *fswalker.Walker) error {
 		for walker.Step() {
 			err := mark(walker.Path(), walker.Stat(), walker.Err(), &errors, clear)
 			if err != nil {

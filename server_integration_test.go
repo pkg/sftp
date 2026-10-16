@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/fs"
+	"github.com/pkg/sftp/fswalker"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ssh"
 )
@@ -819,7 +819,7 @@ func TestServerGet(t *testing.T) {
 }
 
 func compareDirectoriesRecursive(t *testing.T, aroot, broot string) {
-	walker := fs.Walk(aroot)
+	walker := fswalker.Walk(aroot)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
 			t.Fatal(err)

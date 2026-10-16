@@ -7,11 +7,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/kr/fs"
+	"github.com/pkg/sftp/fswalker"
 )
 
 // assert that *Client implements fs.FileSystem
-var _ fs.FileSystem = new(Client)
+var _ fswalker.FileSystem = new(Client)
 
 // assert that *File implements io.ReadWriteCloser
 var _ io.ReadWriteCloser = new(File)
