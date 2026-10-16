@@ -16,10 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func clientServerPair(t *testing.T) (*Client, *Server) {
+func clientServerPair(t *testing.T, options ...ServerOption) (*Client, *Server) {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
-	var options []ServerOption
 	if *testAllocator {
 		options = append(options, WithAllocator())
 	}
@@ -289,6 +288,47 @@ func TestOpenWithPermissions(t *testing.T) {
 	}
 
 	checkServerAllocator(t, server)
+}
+
+// Ensure that a read-only server rejects requests that modify the filesystem
+// even when they do not ask for write access.
+func TestReadOnlyServerRejectsWrites(t *testing.T) {
+	skipIfWindows(t)
+
+	client, server := clientServerPair(t, ReadOnly())
+	defer client.Close()
+	defer server.Close()
+
+	dir := t.TempDir()
+	existing := path.Join(dir, "existing")
+	require.NoError(t, os.WriteFile(existing, []byte("content"), 0o644))
+
+	// hardlink@openssh.com
+	link := path.Join(dir, "link")
+	assert.Error(t, client.Link(existing, link))
+	assert.NoFileExists(t, link)
+
+	// SSH_FXF_READ|SSH_FXF_CREAT
+	created := path.Join(dir, "created")
+	if f, err := client.OpenFile(created, os.O_RDONLY|os.O_CREATE); err == nil {
+		f.Close()
+		t.Error("expected error opening with O_CREATE on a read-only server")
+	}
+	assert.NoFileExists(t, created)
+
+	// SSH_FXF_READ|SSH_FXF_TRUNC
+	if f, err := client.OpenFile(existing, os.O_RDONLY|os.O_TRUNC); err == nil {
+		f.Close()
+		t.Error("expected error opening with O_TRUNC on a read-only server")
+	}
+	b, err := os.ReadFile(existing)
+	require.NoError(t, err)
+	assert.Equal(t, "content", string(b))
+
+	// Plain reads must still work.
+	f, err := client.Open(existing)
+	require.NoError(t, err)
+	f.Close()
 }
 
 // Ensure that proper error codes are returned for non existent files, such

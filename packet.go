@@ -1457,7 +1457,7 @@ type sshFxpExtendedPacketHardlink struct {
 
 // https://github.com/openssh/openssh-portable/blob/master/PROTOCOL
 func (p *sshFxpExtendedPacketHardlink) id() uint32     { return p.ID }
-func (p *sshFxpExtendedPacketHardlink) readonly() bool { return true }
+func (p *sshFxpExtendedPacketHardlink) readonly() bool { return false }
 func (p *sshFxpExtendedPacketHardlink) UnmarshalBinary(b []byte) error {
 	var err error
 	if p.ID, b, err = unmarshalUint32Safe(b); err != nil {
