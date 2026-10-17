@@ -2,6 +2,8 @@ package sftp_test
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log"
@@ -162,4 +164,77 @@ func ExampleFile_ReadFrom_bufio() {
 	type writerOnly struct{ io.Writer }
 	bw := bufio.NewWriter(writerOnly{f}) // no ReadFrom()
 	bw.ReadFrom(data_source)
+}
+
+func ExampleNewClientPipe_tls() {
+	var clientCert tls.Certificate
+
+	// SFTP does not need SSH underneath: any reliable stream will do, as long
+	// as the other end runs an SFTP server on it (see ExampleNewServer_tls).
+	// A plain TCP connection works the same way, but has no encryption or
+	// authentication at all, so use TLS and authenticate the client, here
+	// with a client certificate.
+	conn, err := tls.Dial("tcp", "example.com:2022", &tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// open the SFTP session
+	client, err := sftp.NewClientPipe(conn, conn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	// read a directory
+	list, err := client.ReadDir("/")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// print contents
+	for _, item := range list {
+		fmt.Println(item.Name())
+	}
+}
+
+func ExampleNewServer_tls() {
+	var serverCert tls.Certificate
+	var clientCAs *x509.CertPool
+
+	// Serve SFTP directly over TLS, without SSH. SFTP has no authentication
+	// of its own, so require and verify a client certificate.
+	listener, err := tls.Listen("tcp", ":2022", &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    clientCAs,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// NewServer gives every client the local filesystem with the
+		// permissions of the user this process runs as.
+		// Use NewRequestServer to control what clients can do.
+		go func() {
+			server, err := sftp.NewServer(conn)
+			if err != nil {
+				log.Print(err)
+				conn.Close()
+				return
+			}
+			if err := server.Serve(); err != nil && err != io.EOF {
+				log.Print("sftp server completed with error: ", err)
+			}
+			server.Close()
+		}()
+	}
 }
