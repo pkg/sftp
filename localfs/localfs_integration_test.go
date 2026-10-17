@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -776,6 +777,120 @@ func TestStatVFS(t *testing.T) {
 	}
 
 	t.Logf("%+v", resp)
+}
+
+func makeSymlink(t *testing.T, name string) (target, link string) {
+	dir := t.TempDir()
+
+	target = filepath.Join(dir, name+"-target")
+	link = filepath.Join(dir, name+"-link")
+
+	if err := os.WriteFile(target, []byte("foo"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("cannot create symlink:", err)
+	}
+
+	return target, link
+}
+
+func TestLchtimes(t *testing.T) {
+	target, link := makeSymlink(t, "test-lchtimes")
+
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtime := time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)
+
+	if err := cl.Lchtimes(toRemotePath(link), mtime, mtime); err != nil {
+		if errors.Is(err, sshfx.StatusOpUnsupported) {
+			t.Skip("lsetstat@openssh.com not supported")
+		}
+		t.Fatal(err)
+	}
+
+	fi, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !fi.ModTime().Equal(mtime) {
+		t.Errorf("link mtime was %v, but expected %v", fi.ModTime(), mtime)
+	}
+
+	fi, err = os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !fi.ModTime().Equal(before.ModTime()) {
+		t.Errorf("target mtime changed from %v to %v", before.ModTime(), fi.ModTime())
+	}
+}
+
+func TestLchmod(t *testing.T) {
+	target, link := makeSymlink(t, "test-lchmod")
+
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Many systems (Linux among them) cannot change the mode of a symlink,
+	// so an error is fine, but the target must never be changed.
+	err = cl.Lchmod(toRemotePath(link), 0600)
+
+	fi, statErr := os.Stat(target)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+
+	if fi.Mode() != before.Mode() {
+		t.Errorf("target mode changed from %v to %v", before.Mode(), fi.Mode())
+	}
+
+	if err != nil {
+		t.Log("lchmod:", err)
+		return
+	}
+
+	fi, err = os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if perm := fi.Mode().Perm(); perm != 0600 {
+		t.Errorf("link permissions were %v, but expected %v", perm, fs.FileMode(0600))
+	}
+}
+
+func TestLchown(t *testing.T) {
+	if myUID == "" || myGID == "" {
+		t.Skip("no uid and gid on this system")
+	}
+
+	_, link := makeSymlink(t, "test-lchown")
+
+	uid, err := strconv.Atoi(myUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gid, err := strconv.Atoi(myGID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cl.Lchown(toRemotePath(link), uid, gid); err != nil {
+		if errors.Is(err, sshfx.StatusOpUnsupported) {
+			t.Skip("lsetstat@openssh.com not supported")
+		}
+		t.Fatal(err)
+	}
 }
 
 var benchBuf []byte

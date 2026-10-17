@@ -911,6 +911,63 @@ func (cl *Client) Chtimes(name string, atime, mtime time.Time) error {
 	})
 }
 
+func (cl *Client) lsetstat(ctx context.Context, name string, attrs *sshfx.Attributes) error {
+	if !cl.hasExtension(openssh.ExtensionLSetStat()) {
+		return wrapPathError("lsetstat", name, sshfx.StatusOpUnsupported)
+	}
+
+	return wrapPathError("lsetstat", name,
+		cl.sendPacket(ctx, nil, &openssh.LSetStatExtendedPacket{
+			Path:  name,
+			Attrs: *attrs,
+		}),
+	)
+}
+
+// Lchmod changes the mode of the named file to mode.
+// If the file is a symbolic link, it changes the mode of the link itself.
+// Many systems, Linux among them, do not support changing the mode of a symbolic link.
+//
+// If the server did not announce support for the "lsetstat@openssh.com" extension,
+// then no request will be sent,
+// and Lchmod returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
+func (cl *Client) Lchmod(name string, mode fs.FileMode) error {
+	return cl.lsetstat(context.Background(), name, &sshfx.Attributes{
+		Flags:       sshfx.AttrPermissions,
+		Permissions: sshfx.FromGoFileMode(mode),
+	})
+}
+
+// Lchown changes the numeric uid and gid of the named file.
+// If the file is a symbolic link, it changes the uid and gid of the link itself.
+//
+// If the server did not announce support for the "lsetstat@openssh.com" extension,
+// then no request will be sent,
+// and Lchown returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
+func (cl *Client) Lchown(name string, uid, gid int) error {
+	return cl.lsetstat(context.Background(), name, &sshfx.Attributes{
+		Flags: sshfx.AttrUIDGID,
+		UID:   uint32(uid),
+		GID:   uint32(gid),
+	})
+}
+
+// Lchtimes changes the access and modification times of the named file.
+// If the file is a symbolic link, it changes the times of the link itself.
+//
+// The same accuracy limitations as [Client.Chtimes] apply.
+//
+// If the server did not announce support for the "lsetstat@openssh.com" extension,
+// then no request will be sent,
+// and Lchtimes returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
+func (cl *Client) Lchtimes(name string, atime, mtime time.Time) error {
+	return cl.lsetstat(context.Background(), name, &sshfx.Attributes{
+		Flags: sshfx.AttrACModTime,
+		ATime: uint32(atime.Unix()),
+		MTime: uint32(mtime.Unix()),
+	})
+}
+
 // RealPath returns the server canonicalized absolute path for the given path name.
 // This is useful for converting path names containing ".." components,
 // or relative pathnames without a leading slash into absolute paths.
