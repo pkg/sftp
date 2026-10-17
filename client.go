@@ -132,19 +132,24 @@ func (c *clientConn) Wait() error {
 
 func (c *clientConn) disconnect(err error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	c.err = cmp.Or(c.err, err)
 
 	select {
 	case <-c.closed:
 		// already closed
+		c.mu.Unlock()
 		return
 	default:
 	}
 	close(c.closed)
 
+	c.mu.Unlock()
+
 	c.resPool.Close() // close and wait for inflight calls to end
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	bcastRes := result{
 		err: sshfx.StatusConnectionLost,
@@ -208,9 +213,6 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	}
 	defer c.bufPool.Put(header)
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// payload by design of the API is all but guaranteed to alias a caller-held byte slice,
 	// so, _do not_ put it into the bufPool.
 
@@ -218,6 +220,9 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	if !ok {
 		return reqid, nil, sshfx.StatusConnectionLost
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	select {
 	case <-cancel:
