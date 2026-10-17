@@ -4,14 +4,23 @@ package sftp
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
+	"math/rand"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"testing"
+	"testing/quick"
 	"time"
 
 	sshfx "github.com/pkg/sftp/v2/encoding/ssh/filexfer"
@@ -182,6 +191,893 @@ func testClient(t testing.TB, readonly bool, delay time.Duration, opts ...Client
 	}
 
 	return cl, cmd
+}
+
+func sameFile(want, got fs.FileInfo) bool {
+	_, wantName := filepath.Split(want.Name())
+	_, gotName := filepath.Split(got.Name())
+	return wantName == gotName &&
+		want.Size() == got.Size()
+}
+
+func TestClientLStat(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-lstat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	want, err := os.Lstat(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := cl.LStat(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !sameFile(want, got) {
+		t.Fatalf("LStat(%q): want %#v, got %#v", f.Name(), want, got)
+	}
+}
+
+func TestClientLStatIsNotExist(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	name := filepath.Join(t.TempDir(), "sftptest-lstatisnotexist")
+
+	if _, err := cl.LStat(name); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("errors.Is(%v, fs.ErrNotExist) = false, want true", err)
+	}
+}
+
+func TestClientMkdir(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	sub := filepath.Join(t.TempDir(), "mkdir1")
+	if err := cl.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(sub); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientMkdirAll(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	sub := filepath.Join(t.TempDir(), "mkdir1", "mkdir2", "mkdir3")
+	if err := cl.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("Expected mkdirall to create dir at: %s", sub)
+	}
+}
+
+func TestClientOpen(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	got, err := cl.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := got.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientOpenIsNotExist(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	if _, err := cl.Open("/doesnt/exist"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("errors.Is(%v, fs.ErrNotExist) = false, want true", err)
+	}
+}
+
+func TestClientStatIsNotExist(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	if _, err := cl.Stat("/doesnt/exist"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("errors.Is(%v, fs.ErrNotExist) = false, want true", err)
+	}
+}
+
+const seekBytes = 128 * 1024
+
+type seek struct {
+	offset int64
+}
+
+func (s seek) Generate(r *rand.Rand, _ int) reflect.Value {
+	s.offset = int64(r.Int31n(seekBytes))
+	return reflect.ValueOf(s)
+}
+
+func (s seek) set(t *testing.T, r io.ReadSeeker) {
+	if _, err := r.Seek(s.offset, io.SeekStart); err != nil {
+		t.Fatalf("error while seeking with %+v: %v", s, err)
+	}
+}
+
+func (s seek) current(t *testing.T, r io.ReadSeeker) {
+	const mid = seekBytes / 2
+
+	skip := s.offset / 2
+	if s.offset > mid {
+		skip = -skip
+	}
+
+	if _, err := r.Seek(mid, io.SeekStart); err != nil {
+		t.Fatalf("error seeking to midpoint with %+v: %v", s, err)
+	}
+	if _, err := r.Seek(skip, io.SeekCurrent); err != nil {
+		t.Fatalf("error seeking from %d with %+v: %v", mid, s, err)
+	}
+}
+
+func (s seek) end(t *testing.T, r io.ReadSeeker) {
+	if _, err := r.Seek(-s.offset, io.SeekEnd); err != nil {
+		t.Fatalf("error seeking from end with %+v: %v", s, err)
+	}
+}
+
+func readHash(t *testing.T, r io.Reader) (string, int64) {
+	h := sha1.New()
+	read, err := io.Copy(h, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(h.Sum(nil)), read
+}
+
+// writeN writes n bytes of random data to w and returns the
+// hash of that data.
+func writeN(t *testing.T, w io.Writer, n int64) string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	h := sha1.New()
+
+	mw := io.MultiWriter(w, h)
+
+	written, err := io.CopyN(mw, r, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != n {
+		t.Fatalf("CopyN(%v): wrote: %v", n, written)
+	}
+	return string(h.Sum(nil))
+}
+
+func TestClientSeek(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	fOS, err := os.CreateTemp(t.TempDir(), "sftptest-seek")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fOS.Close()
+
+	fSFTP, err := cl.Open(fOS.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fSFTP.Close()
+
+	writeN(t, fOS, seekBytes)
+
+	if err := quick.CheckEqual(
+		func(s seek) (string, int64) { s.set(t, fOS); return readHash(t, fOS) },
+		func(s seek) (string, int64) { s.set(t, fSFTP); return readHash(t, fSFTP) },
+		nil,
+	); err != nil {
+		t.Errorf("Seek: expected equal absolute seeks: %v", err)
+	}
+
+	if err := quick.CheckEqual(
+		func(s seek) (string, int64) { s.current(t, fOS); return readHash(t, fOS) },
+		func(s seek) (string, int64) { s.current(t, fSFTP); return readHash(t, fSFTP) },
+		nil,
+	); err != nil {
+		t.Errorf("Seek: expected equal seeks from middle: %v", err)
+	}
+
+	if err := quick.CheckEqual(
+		func(s seek) (string, int64) { s.end(t, fOS); return readHash(t, fOS) },
+		func(s seek) (string, int64) { s.end(t, fSFTP); return readHash(t, fSFTP) },
+		nil,
+	); err != nil {
+		t.Errorf("Seek: expected equal seeks from end: %v", err)
+	}
+}
+
+func TestClientCreate(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	f2, err := cl.Create(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+}
+
+func TestClientAppend(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-append")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	f2, err := cl.OpenFile(f.Name(), os.O_RDWR|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+}
+
+func TestClientCreateFailed(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-createfailed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	f2, err := cl.Create(f.Name())
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("errors.Is(%v, fs.ErrPermission) = false, want true", err)
+	}
+	if err == nil {
+		f2.Close()
+	}
+}
+
+func TestClientFileName(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-filename")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	f2, err := cl.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+
+	if got, want := f2.Name(), f.Name(); got != want {
+		t.Fatalf("Name: got %q want %q", got, want)
+	}
+}
+
+func TestClientFileStat(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-filestat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	want, err := os.Lstat(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f2, err := cl.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+
+	got, err := f2.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !sameFile(want, got) {
+		t.Fatalf("Stat(%q): want %#v, got %#v", f.Name(), want, got)
+	}
+}
+
+func TestClientStatLink(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-statlink")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	realName := f.Name()
+	linkName := f.Name() + ".softlink"
+
+	// create a symlink that points at sftptest
+	if err := os.Symlink(realName, linkName); err != nil {
+		t.Fatal(err)
+	}
+
+	// compare LStat of links
+	wantLStat, err := os.Lstat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStat, err := os.Stat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gotLStat, err := cl.LStat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotStat, err := cl.Stat(linkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// check that stat is not lstat from os package
+	if sameFile(wantLStat, wantStat) {
+		t.Fatalf("LStat / Stat(%q): both %#v %#v", f.Name(), wantLStat, wantStat)
+	}
+
+	// compare LStat of links
+	if !sameFile(wantLStat, gotLStat) {
+		t.Fatalf("LStat(%q): want %#v, got %#v", f.Name(), wantLStat, gotLStat)
+	}
+
+	// compare Stat of links
+	if !sameFile(wantStat, gotStat) {
+		t.Fatalf("Stat(%q): want %#v, got %#v", f.Name(), wantStat, gotStat)
+	}
+
+	// check that stat is not lstat
+	if sameFile(gotLStat, gotStat) {
+		t.Fatalf("LStat / Stat(%q): both %#v %#v", f.Name(), gotLStat, gotStat)
+	}
+}
+
+func TestClientRemove(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Remove(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f.Name()); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRemoveAll(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp(t.TempDir(), "sftptest-removeAll")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a directory tree
+	dir1, err := os.MkdirTemp(tempDir, "foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir2, err := os.MkdirTemp(dir1, "bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create some files within the directory tree
+	file1 := tempDir + "/file1.txt"
+	file2 := dir1 + "/file2.txt"
+	file3 := dir2 + "/file3.txt"
+	err = os.WriteFile(file1, []byte("File 1"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	err = os.WriteFile(file2, []byte("File 2"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	err = os.WriteFile(file3, []byte("File 3"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+
+	// Call the function to delete the files recursively
+	err = cl.RemoveAll(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to delete files recursively: %v", err)
+	}
+
+	// Check if the directories and files have been deleted
+	for _, name := range []string{tempDir, dir1, dir2, file1, file2, file3} {
+		if _, err := os.Stat(name); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s still exists", name)
+		}
+	}
+}
+
+func TestClientRemoveDir(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	dir, err := os.MkdirTemp(t.TempDir(), "sftptest-removedir")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cl.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRemoveFailed(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-removefailed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Remove(f.Name()); err == nil {
+		t.Fatalf("Remove(%v): want: permission denied, got %v", f.Name(), err)
+	}
+	if _, err := os.Lstat(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRename(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "old"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	f2 := filepath.Join(dir, "new")
+	if err := cl.Rename(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f.Name()); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(f2); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientReadLink(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "file"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	f2 := filepath.Join(dir, "symlink")
+	if err := os.Symlink(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if rl, err := cl.ReadLink(f2); err != nil {
+		t.Fatal(err)
+	} else if rl != f.Name() {
+		t.Fatalf("unexpected link target: %v, not %v", rl, f.Name())
+	}
+}
+
+func TestClientLink(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	dir := t.TempDir()
+
+	f, err := os.Create(filepath.Join(dir, "file"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("linktest")
+	_, err = f.Write(data)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f2 := filepath.Join(dir, "link")
+	if err := cl.Link(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if st2, err := cl.Stat(f2); err != nil {
+		t.Fatal(err)
+	} else if int(st2.Size()) != len(data) {
+		t.Fatalf("unexpected link size: %v, not %v", st2.Size(), len(data))
+	}
+}
+
+func TestClientSymlink(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "file"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	f2 := filepath.Join(dir, "symlink")
+	if err := cl.Symlink(f.Name(), f2); err != nil {
+		t.Fatal(err)
+	}
+	if rl, err := cl.ReadLink(f2); err != nil {
+		t.Fatal(err)
+	} else if rl != f.Name() {
+		t.Fatalf("unexpected link target: %v, not %v", rl, f.Name())
+	}
+}
+
+func TestClientChmod(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-chmod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Chmod(f.Name(), 0531); err != nil {
+		t.Fatal(err)
+	}
+	if stat, err := os.Stat(f.Name()); err != nil {
+		t.Fatal(err)
+	} else if stat.Mode()&os.ModePerm != 0531 {
+		t.Fatalf("invalid perm %o\n", stat.Mode())
+	}
+
+	sf, err := cl.Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sf.Chmod(0500); err != nil {
+		t.Fatal(err)
+	}
+	sf.Close()
+
+	stat, err := os.Stat(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat.Mode() != 0500 {
+		t.Fatalf("invalid perm %o\n", stat.Mode())
+	}
+}
+
+func TestClientChmodReadonly(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-chmodreadonly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Chmod(f.Name(), 0531); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClientSetuid(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-setuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	const allPerm = os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky
+
+	for _, goPerm := range []os.FileMode{
+		os.ModeSetuid,
+		os.ModeSetgid,
+		os.ModeSticky,
+		os.ModeSetuid | os.ModeSticky,
+	} {
+		goPerm |= 0700
+
+		if err := cl.Chmod(f.Name(), goPerm); err != nil {
+			t.Fatal(err)
+		}
+
+		info, err := cl.Stat(f.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode() & allPerm; got != goPerm {
+			t.Errorf("Chmod(%v): got %v", goPerm, got)
+		}
+
+		if err := cl.Chmod(f.Name(), 0700); err != nil { // Reset funny bits.
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestClientChown(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	usr, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usr.Uid != "0" {
+		t.Log("must be root to run chown tests")
+		t.Skip()
+	}
+
+	chownto, err := user.Lookup("daemon") // seems common-ish...
+	if err != nil {
+		t.Fatal(err)
+	}
+	toUID, err := strconv.Atoi(chownto.Uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toGID, err := strconv.Atoi(chownto.Gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-chown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	before, err := exec.Command("ls", "-nl", f.Name()).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.Chown(f.Name(), toUID, toGID); err != nil {
+		t.Fatal(err)
+	}
+	after, err := exec.Command("ls", "-nl", f.Name()).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spaceRegex := regexp.MustCompile(`\s+`)
+
+	beforeWords := spaceRegex.Split(string(before), -1)
+	if beforeWords[2] != "0" {
+		t.Fatalf("bad previous user? should be root")
+	}
+	afterWords := spaceRegex.Split(string(after), -1)
+	if afterWords[2] != chownto.Uid || afterWords[3] != chownto.Gid {
+		t.Fatalf("bad chown: %#v", afterWords)
+	}
+	t.Logf("before: %v", string(before))
+	t.Logf(" after: %v", string(after))
+}
+
+func TestClientChownReadonly(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	usr, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usr.Uid != "0" {
+		t.Log("must be root to run chown tests")
+		t.Skip()
+	}
+
+	chownto, err := user.Lookup("daemon") // seems common-ish...
+	if err != nil {
+		t.Fatal(err)
+	}
+	toUID, err := strconv.Atoi(chownto.Uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toGID, err := strconv.Atoi(chownto.Gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-chownreadonly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Chown(f.Name(), toUID, toGID); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClientChtimes(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-chtimes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	atime := time.Date(2013, 2, 23, 13, 24, 35, 0, time.UTC)
+	mtime := time.Date(1985, 6, 12, 6, 6, 6, 0, time.UTC)
+	if err := cl.Chtimes(f.Name(), atime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	if stat, err := os.Stat(f.Name()); err != nil {
+		t.Fatal(err)
+	} else if stat.ModTime().Sub(mtime) != 0 {
+		t.Fatalf("incorrect mtime: %v vs %v", stat.ModTime(), mtime)
+	}
+}
+
+func TestClientChtimesReadonly(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-chtimesreadonly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	atime := time.Date(2013, 2, 23, 13, 24, 35, 0, time.UTC)
+	mtime := time.Date(1985, 6, 12, 6, 6, 6, 0, time.UTC)
+	if err := cl.Chtimes(f.Name(), atime, mtime); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClientTruncate(t *testing.T) {
+	cl, cmd := testClient(t, ReadWrite, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-truncate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fname := f.Name()
+
+	if n, err := f.Write([]byte("hello world")); n != 11 || err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Truncate(fname, 5); err != nil {
+		t.Fatal(err)
+	}
+	if stat, err := os.Stat(fname); err != nil {
+		t.Fatal(err)
+	} else if stat.Size() != 5 {
+		t.Fatalf("unexpected size: %d", stat.Size())
+	}
+}
+
+func TestClientTruncateReadonly(t *testing.T) {
+	cl, cmd := testClient(t, ReadOnly, NoDelay)
+	defer cmd.Wait()
+	defer cl.Close()
+
+	f, err := os.CreateTemp(t.TempDir(), "sftptest-truncreadonly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fname := f.Name()
+
+	if n, err := f.Write([]byte("hello world")); n != 11 || err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if err := cl.Truncate(fname, 5); err == nil {
+		t.Fatal("expected error")
+	}
+	if stat, err := os.Stat(fname); err != nil {
+		t.Fatal(err)
+	} else if stat.Size() != 11 {
+		t.Fatalf("unexpected size: %d", stat.Size())
+	}
 }
 
 // github.com/pkg/sftp/issues/42, abrupt server hangup would result in client hangs.
