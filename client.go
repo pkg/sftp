@@ -231,15 +231,20 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	default:
 	}
 
+	// A failed write means the connection is gone.
+	// recvLoop closes c.wr before disconnect closes c.closed,
+	// so we cannot tell a server disconnect apart from other write errors here.
+	// Report it as a lost connection, but keep the cause.
+
 	if _, err := c.wr.Write(header); err != nil {
 		c.resPool.Put(ch)
-		return reqid, nil, fmt.Errorf("sftp: write packet header: %w", err)
+		return reqid, nil, fmt.Errorf("sftp: write packet header: %w: %w", sshfx.StatusConnectionLost, err)
 	}
 
 	if len(payload) != 0 {
 		if _, err := c.wr.Write(payload); err != nil {
 			c.resPool.Put(ch)
-			return reqid, nil, fmt.Errorf("sftp: write packet payload: %w", err)
+			return reqid, nil, fmt.Errorf("sftp: write packet payload: %w: %w", sshfx.StatusConnectionLost, err)
 		}
 	}
 
