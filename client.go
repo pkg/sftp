@@ -2539,8 +2539,8 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 		return 0, f.wrapErr("seek", fmt.Errorf("%w: invalid whence: %d", fs.ErrInvalid, whence))
 	}
 
-	if offset < 0 {
-		return 0, f.wrapErr("seek", fmt.Errorf("%w: negative offset: %d", fs.ErrInvalid, whence))
+	if abs < 0 {
+		return 0, f.wrapErr("seek", fmt.Errorf("%w: negative offset: %d", fs.ErrInvalid, abs))
 	}
 
 	f.offset = abs
