@@ -3,6 +3,7 @@ package sftp
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -332,4 +333,30 @@ func TestServerWithBrokenClient(t *testing.T) {
 		assert.Error(t, err)
 		srv.Close()
 	}
+}
+
+func TestServerDoesNotExecuteMalformedPacket(t *testing.T) {
+	dir := path.Join(t.TempDir(), "should-not-exist")
+
+	// A mkdir packet with its trailing attrs flags cut off: the path parses,
+	// but the packet as a whole is malformed and must not be executed.
+	mkdir := sp(&sshFxpMkdirPacket{ID: 1, Path: dir})
+	mkdir = mkdir[:len(mkdir)-4]
+	binary.BigEndian.PutUint32(mkdir, uint32(len(mkdir)-4))
+
+	srv, err := NewServer(struct {
+		io.Reader
+		io.WriteCloser
+	}{
+		bytes.NewReader(append(sp(&sshFxInitPacket{Version: 3}), mkdir...)),
+		&sink{},
+	})
+	require.NoError(t, err)
+
+	err = srv.Serve()
+	assert.ErrorIs(t, err, errShortPacket)
+	srv.Close()
+
+	_, err = os.Stat(dir)
+	assert.True(t, os.IsNotExist(err), "malformed mkdir was executed: %v", err)
 }
