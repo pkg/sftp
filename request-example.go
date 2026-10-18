@@ -156,13 +156,13 @@ func (fs *root) Filecmd(r *Request) error {
 			return err
 		}
 
-		if r.AttrFlags().Size {
-			attrs := r.Attributes()
-			if attrs == nil {
-				// The attribute flags promise fields the packet does not carry.
-				return ErrSSHFxBadMessage
-			}
+		attrs := r.Attributes()
+		if attrs == nil {
+			// The attribute flags promise fields the packet does not carry.
+			return ErrSSHFxBadMessage
+		}
 
+		if r.AttrFlags().Size {
 			return file.Truncate(int64(attrs.Size))
 		}
 
