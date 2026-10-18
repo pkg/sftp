@@ -25,7 +25,7 @@ func (h *ServerHandler) LSetStat(_ context.Context, req *openssh.LSetStatExtende
 	if req.Attrs.HasSize() {
 		// Setting the size of a symbolic link is nonsensical.
 		return &sshfx.StatusPacket{
-			StatusCode:   sshfx.StatusBadMessage,
+			StatusCode:   sshfx.StatusFailure,
 			ErrorMessage: "lsetstat: cannot set size",
 		}
 	}

@@ -796,7 +796,7 @@ func makeSymlink(t *testing.T, name string) (target, link string) {
 	return target, link
 }
 
-func TestLchtimes(t *testing.T) {
+func TestLChtimes(t *testing.T) {
 	target, link := makeSymlink(t, "test-lchtimes")
 
 	before, err := os.Stat(target)
@@ -806,7 +806,7 @@ func TestLchtimes(t *testing.T) {
 
 	mtime := time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)
 
-	if err := cl.Lchtimes(toRemotePath(link), mtime, mtime); err != nil {
+	if err := cl.LChtimes(toRemotePath(link), mtime, mtime); err != nil {
 		if errors.Is(err, sshfx.StatusOpUnsupported) {
 			t.Skip("lsetstat@openssh.com not supported")
 		}
@@ -832,7 +832,7 @@ func TestLchtimes(t *testing.T) {
 	}
 }
 
-func TestLchmod(t *testing.T) {
+func TestLChmod(t *testing.T) {
 	target, link := makeSymlink(t, "test-lchmod")
 
 	before, err := os.Stat(target)
@@ -842,7 +842,7 @@ func TestLchmod(t *testing.T) {
 
 	// Many systems (Linux among them) cannot change the mode of a symlink,
 	// so an error is fine, but the target must never be changed.
-	err = cl.Lchmod(toRemotePath(link), 0600)
+	err = cl.LChmod(toRemotePath(link), 0600)
 
 	fi, statErr := os.Stat(target)
 	if statErr != nil {
@@ -868,7 +868,7 @@ func TestLchmod(t *testing.T) {
 	}
 }
 
-func TestLchown(t *testing.T) {
+func TestLChown(t *testing.T) {
 	if myUID == "" || myGID == "" {
 		t.Skip("no uid and gid on this system")
 	}
@@ -885,7 +885,7 @@ func TestLchown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cl.Lchown(toRemotePath(link), uid, gid); err != nil {
+	if err := cl.LChown(toRemotePath(link), uid, gid); err != nil {
 		if errors.Is(err, sshfx.StatusOpUnsupported) {
 			t.Skip("lsetstat@openssh.com not supported")
 		}
