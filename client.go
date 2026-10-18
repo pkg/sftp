@@ -588,8 +588,7 @@ func (cl *Client) getDataBuf(size int) []byte {
 	return hint[:size] // trim our buffer to length, it might be longer than chunkSize.
 }
 
-// SSHSession is an interface for x/crypto/ssh.Session,
-// in order to break the dependency on x/crypto.
+// SSHSession defines an interface encapsulating the functionality we use from golang.org/x/crypto/ssh.Session.
 type SSHSession interface {
 	StdinPipe() (io.WriteCloser, error)
 	StdoutPipe() (io.Reader, error)
@@ -601,8 +600,7 @@ type SSHSession interface {
 	Wait() error
 }
 
-// SSHClient is an interface for x/crypto/ssh.Client,
-// in order to break the dependency on x/crypto.
+// SSHClient defines an interface encapsulating the functionality we use from golang.org/x/crypto/ssh.Client.
 type SSHClient[Session SSHSession] interface {
 	NewSession() (Session, error)
 }
