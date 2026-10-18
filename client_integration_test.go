@@ -714,6 +714,59 @@ func TestClientRemoveAll(t *testing.T) {
 	}
 }
 
+func TestClientRemoveAllSymlink(t *testing.T) {
+	skipIfWindows(t) // Windows does not support links.
+
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	tempDir, err := ioutil.TempDir("", "sftptest-removeAllSymlink")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	target := tempDir + "/target"
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	file := target + "/file.txt"
+	if err := ioutil.WriteFile(file, []byte("File"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A symlink to a directory, both as the path given and inside the tree
+	link := tempDir + "/link"
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	dir := tempDir + "/dir"
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, dir+"/link"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sftp.RemoveAll(link); err != nil {
+		t.Fatalf("RemoveAll(%q): %v", link, err)
+	}
+	if err := sftp.RemoveAll(dir); err != nil {
+		t.Fatalf("RemoveAll(%q): %v", dir, err)
+	}
+
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("Symlink %s still exists", link)
+	}
+	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
+		t.Errorf("Directory %s still exists", dir)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Errorf("File %s behind the symlink was removed: %v", file, err)
+	}
+}
+
 func TestClientRemoveDir(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
