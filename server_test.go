@@ -70,7 +70,7 @@ func checkServerAllocator(t *testing.T, server *Server) {
 }
 
 // test that errors are sent back when we request an invalid extended packet operation
-// this validates the following rfc draft is followed https://tools.ietf.org/html/draft-ietf-secsh-filexfer-extensions-00
+// this validates the following rfc draft is followed https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-extensions-00
 func TestInvalidExtendedPacket(t *testing.T) {
 	client, server := clientServerPair(t)
 	defer client.Close()
