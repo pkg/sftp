@@ -96,6 +96,53 @@ func ExampleNewClientPipe() {
 	client.Close()
 }
 
+func ExampleNewClientPipe_sudo() {
+	var conn *ssh.Client
+
+	// Instead of requesting the sftp subsystem, run the sftp-server program
+	// through sudo, like `sftp -s "sudo /usr/lib/openssh/sftp-server"`.
+	// This assumes sudo does not ask for a password for this command.
+	// The path to sftp-server depends on the remote system.
+	session, err := conn.NewSession()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer session.Close()
+
+	// get stdin and stdout
+	wr, err := session.StdinPipe()
+	if err != nil {
+		log.Fatal(err)
+	}
+	rd, err := session.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// start sftp-server as root
+	if err := session.Start("sudo /usr/lib/openssh/sftp-server"); err != nil {
+		log.Fatal(err)
+	}
+
+	// open the SFTP session
+	client, err := sftp.NewClientPipe(rd, wr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	// read a directory only root can read
+	list, err := client.ReadDir("/root")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// print contents
+	for _, item := range list {
+		fmt.Println(item.Name())
+	}
+}
+
 func ExampleClient_Mkdir_parents() {
 	// Example of mimicing 'mkdir --parents'; I.E. recursively create
 	// directoryies and don't error if any directories already exists.
