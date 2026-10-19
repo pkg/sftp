@@ -1912,7 +1912,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 
 		for {
 			// Fill the entire buffer.
-			n, err := io.ReadFull(r, b)
+			n, err := readFull(r, b)
 
 			if n > 0 {
 				read += int64(n)
@@ -1938,7 +1938,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 			}
 
 			if err != nil {
-				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+				if !errors.Is(err, io.EOF) {
 					errCh <- rwErr{off, err}
 				}
 				return
@@ -2093,7 +2093,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	for {
 		// Fill the entire buffer.
-		n, err := io.ReadFull(r, b)
+		n, err := readFull(r, b)
 		if n < 0 {
 			panic("sftp.File: reader returned negative count from Read")
 		}
@@ -2104,19 +2104,32 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 			m, err2 := f.writeChunkAt(ch, b[:n], f.offset)
 			f.offset += int64(m)
 
-			if err == nil || (err2 != nil && errors.Is(err, io.ErrUnexpectedEOF)) {
+			if err == nil || (err2 != nil && errors.Is(err, io.EOF)) {
 				err = err2
 			}
 		}
 
 		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			if errors.Is(err, io.EOF) {
 				return read, nil // return nil explicitly.
 			}
 
 			return read, err
 		}
 	}
+}
+
+// readFull reads from r into b until b is full or r returns an error.
+// Unlike io.ReadFull, it returns the error from r unchanged.
+// io.ReadFull turns an io.EOF after a partial read into io.ErrUnexpectedEOF,
+// which can't be told apart from an io.ErrUnexpectedEOF returned by r itself.
+func readFull(r io.Reader, b []byte) (n int, err error) {
+	for n < len(b) && err == nil {
+		var nn int
+		nn, err = r.Read(b[n:])
+		n += nn
+	}
+	return n, err
 }
 
 // Seek implements io.Seeker by setting the client offset for the next Read or
