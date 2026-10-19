@@ -2120,9 +2120,9 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // readFull reads from r into b until b is full or r returns an error.
-// Unlike io.ReadFull, it returns the error from r unchanged. io.ReadFull
-// turns an io.EOF after a partial read into io.ErrUnexpectedEOF, which
-// can't be told apart from an io.ErrUnexpectedEOF returned by r itself.
+// Unlike io.ReadFull, it returns the error from r unchanged.
+// io.ReadFull turns an io.EOF after a partial read into io.ErrUnexpectedEOF,
+// which can't be told apart from an io.ErrUnexpectedEOF returned by r itself.
 func readFull(r io.Reader, b []byte) (n int, err error) {
 	for n < len(b) && err == nil {
 		var nn int
