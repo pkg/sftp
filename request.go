@@ -485,11 +485,7 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 			err := posixRenamer.PosixRename(r)
 			return statusFromError(pkt.id(), err)
 		}
-
-		// PosixRenameFileCmder not implemented handle this request as a Rename
-		r.Method = "Rename"
-		err := h.Filecmd(r)
-		return statusFromError(pkt.id(), err)
+		return statusFromError(pkt.id(), ErrSSHFxOpUnsupported)
 
 	case "StatVFS":
 		if statVFSCmdr, ok := h.(StatVFSFileCmder); ok {
@@ -561,9 +557,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if lstatFileLister, ok := h.(LstatFileLister); ok {
 			lister, err = lstatFileLister.Lstat(r)
 		} else {
-			// LstatFileLister not implemented handle this request as a Stat
-			r.Method = "Stat"
-			lister, err = h.Filelist(r)
+			return statusFromError(pkt.id(), ErrSSHFxOpUnsupported)
 		}
 	} else {
 		lister, err = h.Filelist(r)
