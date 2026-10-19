@@ -46,22 +46,12 @@ func newFileAttrFlags(flags uint32) FileAttrFlags {
 // AttrFlags returns a FileAttrFlags boolean struct based on the
 // bitmap/uint32 file attribute flags from the SFTP packaet.
 func (r *Request) AttrFlags() FileAttrFlags {
-	return newFileAttrFlags(r.attrFlagBits())
+	return newFileAttrFlags(r.attrFlags)
 }
 
 // Attributes parses file attributes byte blob and return them in a
 // FileStat object.
 func (r *Request) Attributes() *FileStat {
-	fs, _, _ := unmarshalFileStat(r.attrFlagBits(), r.Attrs)
+	fs, _, _ := unmarshalFileStat(r.attrFlags, r.Attrs)
 	return fs
-}
-
-// attrFlagBits returns the flags that go with r.Attrs. For an open
-// request, Flags holds the pflags.
-func (r *Request) attrFlagBits() uint32 {
-	switch r.Method {
-	case "Get", "Put", "Open":
-		return r.attrFlags
-	}
-	return r.Flags
 }
