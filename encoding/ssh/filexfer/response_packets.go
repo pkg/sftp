@@ -209,6 +209,10 @@ func (p *NamePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 		return err
 	}
 
+	if !buf.checkCount(count, smallestNameEntry) {
+		return buf.Err
+	}
+
 	*p = NamePacket{
 		Entries: make([]*NameEntry, 0, count),
 	}

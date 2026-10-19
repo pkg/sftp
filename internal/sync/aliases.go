@@ -12,3 +12,6 @@ type RWMutex = sync.RWMutex
 
 // WaitGroup is an alias to [sync.WaitGroup]
 type WaitGroup = sync.WaitGroup
+
+// Once is an alias to [sync.Once]
+type Once = sync.Once

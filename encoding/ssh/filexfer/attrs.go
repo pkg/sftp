@@ -354,6 +354,10 @@ func (a *ExtendedAttributes) UnmarshalFrom(buf *Buffer) (err error) {
 		return err
 	}
 
+	if !buf.checkCount(count, smallestExtendedAttribute) {
+		return buf.Err
+	}
+
 	*a = make([]ExtendedAttribute, count)
 	for i := range count {
 		(*a)[i].UnmarshalFrom(buf)
@@ -436,6 +440,8 @@ func (a ExtendedAttributes) All() iter.Seq2[string, string] {
 	}
 }
 
+const smallestExtendedAttribute = 8
+
 // ExtendedAttribute defines the extended file attribute type defined in draft-ietf-secsh-filexfer-02
 //
 // Defined in: https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt#section-5
@@ -477,6 +483,8 @@ func (e *ExtendedAttribute) UnmarshalFrom(buf *Buffer) (err error) {
 func (e *ExtendedAttribute) UnmarshalBinary(data []byte) error {
 	return e.UnmarshalFrom(NewBuffer(data))
 }
+
+const smallestNameEntry = 4 + 4 + 4
 
 // NameEntry implements the SSH_FXP_NAME repeated data type from draft-ietf-secsh-filexfer-02
 //
