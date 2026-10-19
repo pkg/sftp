@@ -58,6 +58,12 @@ type StatVFSServerHandler interface {
 	StatVFS(ctx context.Context, req *openssh.StatVFSExtendedPacket) (*openssh.StatVFSExtendedReplyPacket, error)
 }
 
+// LSetStatServerHandler is an extension interface for supporting the "lsetstat@openssh.com" extension.
+type LSetStatServerHandler interface {
+	ServerHandler
+	LSetStat(ctx context.Context, req *openssh.LSetStatExtendedPacket) error
+}
+
 // FileHandler defines an interface that the Server code can use to support file-handle request packets.
 type FileHandler interface {
 	io.Closer
@@ -270,6 +276,11 @@ func (srv *Server) handshake(conn io.ReadWriter, maxPktLen uint32) error {
 
 		sshfx.RegisterExtendedPacketType[openssh.FStatVFSExtendedPacket]()
 		verPkt.Extensions = append(verPkt.Extensions, openssh.ExtensionFStatVFS())
+	}
+
+	if _, ok := srv.Handler.(LSetStatServerHandler); ok {
+		sshfx.RegisterExtendedPacketType[openssh.LSetStatExtendedPacket]()
+		verPkt.Extensions = append(verPkt.Extensions, openssh.ExtensionLSetStat())
 	}
 
 	for name, data := range srv.Extensions {
@@ -600,6 +611,11 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 		case *openssh.HardlinkExtendedPacket:
 			if hardlinker, ok := srv.Handler.(HardlinkServerHandler); ok {
 				return do(srv, req, hardlinker.Hardlink)
+			}
+
+		case *openssh.LSetStatExtendedPacket:
+			if lsetstater, ok := srv.Handler.(LSetStatServerHandler); ok {
+				return do(srv, req, lsetstater.LSetStat)
 			}
 
 		case *openssh.StatVFSExtendedPacket:
