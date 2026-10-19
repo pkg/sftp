@@ -43,6 +43,35 @@ func TestClient(t *testing.T) {
 	var _ allFS = new(fsys)
 }
 
+func TestClientForceSerializationOpenSlot(t *testing.T) {
+	cl := &Client{
+		forceSerialization: true,
+		handles:            make(map[string]struct{}),
+	}
+
+	unlock, err := cl.lockOpenSlot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.addHandle("first"); err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+
+	if _, err := cl.lockOpenSlot(); err == nil {
+		t.Fatal("expected an error while a handle is open")
+	} else if status, ok := err.(*sshfx.StatusPacket); !ok || status.StatusCode != sshfx.StatusFailure {
+		t.Fatalf("open-slot error = %v, want SSH_FX_FAILURE", err)
+	}
+
+	cl.removeHandle("first")
+	unlock, err = cl.lockOpenSlot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+}
+
 type sink struct{}
 
 func (sink) Close() error                { return nil }

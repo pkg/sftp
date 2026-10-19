@@ -168,6 +168,7 @@ func (p *Pool[T]) Put(v *T) {
 // relieving pressure on the garbage collector and amortizing allocation overhead.
 // While also co-ordinating outstanding work, so the caller can wait for all work to be complete.
 type WorkPool[T any] struct {
+	mu     sync.Mutex
 	wg     sync.WaitGroup
 	closed chan struct{}
 
@@ -205,7 +206,9 @@ func (p *WorkPool[T]) Close() error {
 		return errors.New("cannot close nil work pool")
 	}
 
+	p.mu.Lock()
 	close(p.closed)
+	p.mu.Unlock()
 
 	p.wg.Wait()
 
@@ -237,11 +240,16 @@ func (p *WorkPool[T]) Get() (chan T, bool) {
 			return nil, false
 		}
 
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
 		select {
 		case <-p.closed:
 			return nil, false
 
 		default:
+			// Serialize Add with Close's Wait so no Get can start after Close
+			// observes a zero count.
 			p.wg.Add(1)
 			return v, true
 		}

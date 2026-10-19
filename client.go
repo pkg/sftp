@@ -132,19 +132,23 @@ func (c *clientConn) Wait() error {
 
 func (c *clientConn) disconnect(err error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	c.err = cmp.Or(c.err, err)
 
 	select {
 	case <-c.closed:
 		// already closed
+		c.mu.Unlock()
 		return
 	default:
 	}
 	close(c.closed)
+	c.mu.Unlock()
 
 	c.resPool.Close() // close and wait for inflight calls to end
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	bcastRes := result{
 		err: sshfx.StatusConnectionLost,
@@ -208,15 +212,22 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 	}
 	defer c.bufPool.Put(header)
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// payload by design of the API is all but guaranteed to alias a caller-held byte slice,
 	// so, _do not_ put it into the bufPool.
 
 	ch, ok := c.resPool.Get()
 	if !ok {
 		return reqid, nil, sshfx.StatusConnectionLost
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	select {
+	case <-c.closed:
+		c.resPool.Put(ch)
+		return reqid, nil, sshfx.StatusConnectionLost
+	default:
 	}
 
 	select {
@@ -334,6 +345,16 @@ func WithMaxInflight(count int) ClientOption {
 	}
 }
 
+// ForceSerialization restricts the client to one open file or directory at a time.
+// A second open returns an SSH_FX_FAILURE status until the current handle is closed.
+// This can be used with servers that cannot safely keep more than one handle open.
+func ForceSerialization() ClientOption {
+	return func(cl *Client) error {
+		cl.forceSerialization = true
+		return nil
+	}
+}
+
 // WithMaxDataLength sets the maximum length of a data that will be used in SSH_FX_READ and SSH_FX_WRITE requests.
 // This will also adjust the maximum packet length to at least the data length + 1232 bytes as overhead room.
 // (This is the difference between the 34000 byte packet size vs 32768 data packet size.)
@@ -422,6 +443,11 @@ type Client struct {
 	maxInflight int
 
 	exts map[string]string
+
+	handlesMu          sync.Mutex
+	handles            map[string]struct{}
+	openMu             sync.Mutex
+	forceSerialization bool
 }
 
 type respPacket[PKT any] interface {
@@ -466,6 +492,46 @@ func (cl *Client) getHandle(ctx context.Context, cancel <-chan struct{}, req ssh
 		return "", err
 	}
 	return resp.Handle, nil
+}
+
+func (cl *Client) lockOpenSlot() (func(), error) {
+	if !cl.forceSerialization {
+		return func() {}, nil
+	}
+
+	cl.openMu.Lock()
+	cl.handlesMu.Lock()
+	open := len(cl.handles) > 0
+	cl.handlesMu.Unlock()
+	if open {
+		cl.openMu.Unlock()
+		return nil, &sshfx.StatusPacket{
+			StatusCode:   sshfx.StatusFailure,
+			ErrorMessage: "ForceSerialization allows only one open file or directory at a time",
+		}
+	}
+
+	return cl.openMu.Unlock, nil
+}
+
+func (cl *Client) addHandle(handle string) error {
+	cl.handlesMu.Lock()
+	if _, ok := cl.handles[handle]; ok {
+		cl.handlesMu.Unlock()
+		err := fmt.Errorf("sftp: server returned handle %q which is already open; the server may not support multiple open files, use ForceSerialization", handle)
+		cl.conn.disconnect(err)
+		_ = cl.conn.wr.Close()
+		return err
+	}
+	cl.handles[handle] = struct{}{}
+	cl.handlesMu.Unlock()
+	return nil
+}
+
+func (cl *Client) removeHandle(handle string) {
+	cl.handlesMu.Lock()
+	delete(cl.handles, handle)
+	cl.handlesMu.Unlock()
 }
 
 func (cl *Client) getNames(ctx context.Context, cancel <-chan struct{}, req sshfx.PacketMarshaller) ([]*sshfx.NameEntry, error) {
@@ -660,6 +726,7 @@ func newClientPipe(ctx context.Context, rd, stderr io.Reader, wr io.WriteCloser,
 		maxPacket:   sshfx.DefaultMaxPacketLength,
 		maxDataLen:  sshfx.DefaultMaxDataLength,
 		maxInflight: 64,
+		handles:     make(map[string]struct{}),
 	}
 
 	for _, opt := range opts {
@@ -1169,6 +1236,11 @@ func (h *handle) get() (handle string, cancel <-chan struct{}, err error) {
 }
 
 func (h *handle) close(cl *Client) error {
+	if cl.forceSerialization {
+		cl.openMu.Lock()
+		defer cl.openMu.Unlock()
+	}
+
 	// The design principle here is that when `openssh-portable/sftp-server.c` is doing `handle_close`,
 	// it will unconditionally mark the handle as unused,
 	// so we need to also unconditionally mark this handle as invalid.
@@ -1177,6 +1249,9 @@ func (h *handle) close(cl *Client) error {
 	handle := h.value.Swap(nil)
 	if handle == nil {
 		return fs.ErrClosed
+	}
+	if !cl.forceSerialization {
+		cl.removeHandle(*handle)
 	}
 
 	// The atomic Swap above ensures that only one Close can ever get here.
@@ -1201,9 +1276,13 @@ func (h *handle) close(cl *Client) error {
 	// It should be obvious, but do not pass h.closed into this sendPacket, or it will never be sent.
 	// Less obviously, DO NOT pipe a context through this function to the sendPacket.
 	// We want to ensure that even in a closed-context codepath, that the SSH_FXP_CLOSED packet is still sent.
-	return cl.sendPacket(context.Background(), nil, &sshfx.ClosePacket{
+	err := cl.sendPacket(context.Background(), nil, &sshfx.ClosePacket{
 		Handle: *handle,
 	})
+	if cl.forceSerialization && err == nil {
+		cl.removeHandle(*handle)
+	}
+	return err
 }
 
 // Dir represents an open directory handle.
@@ -1227,10 +1306,19 @@ type Dir struct {
 //
 // The semantics of SSH_FX_OPENDIR is such that the associated file handle is in a read-only mode.
 func (cl *Client) OpenDir(name string) (*Dir, error) {
+	unlock, err := cl.lockOpenSlot()
+	if err != nil {
+		return nil, wrapPathError("opendir", name, err)
+	}
+	defer unlock()
+
 	handle, err := cl.getHandle(context.Background(), nil, &sshfx.OpenDirPacket{
 		Path: name,
 	})
 	if err != nil {
+		return nil, wrapPathError("opendir", name, err)
+	}
+	if err := cl.addHandle(handle); err != nil {
 		return nil, wrapPathError("opendir", name, err)
 	}
 
@@ -1516,12 +1604,21 @@ func attrsFromPerm(perm fs.FileMode) sshfx.Attributes {
 // Note well: since all Write operations are down through an offset-specifying operation,
 // the OpenFlagAppend flag is currently ignored.
 func (cl *Client) OpenFile(name string, flag int, perm fs.FileMode) (*File, error) {
+	unlock, err := cl.lockOpenSlot()
+	if err != nil {
+		return nil, wrapPathError("openfile", name, err)
+	}
+	defer unlock()
+
 	handle, err := cl.getHandle(context.Background(), nil, &sshfx.OpenPacket{
 		Filename: name,
 		PFlags:   toPortableFlags(flag),
 		Attrs:    attrsFromPerm(perm),
 	})
 	if err != nil {
+		return nil, wrapPathError("openfile", name, err)
+	}
+	if err := cl.addHandle(handle); err != nil {
 		return nil, wrapPathError("openfile", name, err)
 	}
 
