@@ -227,6 +227,12 @@ type Server struct {
 // GracefulStop stops the SFTP server gracefully.
 func (srv *Server) GracefulStop() error {
 	srv.mu.Lock()
+	if srv.shutdown == nil {
+		// Serve was never called, so there is nothing to stop.
+		srv.mu.Unlock()
+		return nil
+	}
+
 	select {
 	case <-srv.shutdown:
 		srv.mu.Unlock()
@@ -238,8 +244,10 @@ func (srv *Server) GracefulStop() error {
 
 	srv.wg.Wait()
 
-	for handle, f := range srv.handles.Range {
-		fmt.Fprintf(srv.Debug, "sftp server file with handle %q left open: %T", handle, f.Name())
+	if srv.Debug != nil {
+		for handle, f := range srv.handles.Range {
+			fmt.Fprintf(srv.Debug, "sftp server file with handle %q left open: %q\n", handle, f.Name())
+		}
 	}
 
 	return srv.err
@@ -383,6 +391,10 @@ func (srv *Server) register(typ sshfx.PacketType, wrap wrapHandler) error {
 		return fmt.Errorf("sftp server: handler already registered for type: %s", typ)
 	}
 
+	if srv.hijacks == nil {
+		srv.hijacks = make(map[sshfx.PacketType]wrapHandler)
+	}
+
 	srv.hijacks[typ] = wrap
 	return nil
 }
@@ -397,6 +409,7 @@ func (srv *Server) register(typ sshfx.PacketType, wrap wrapHandler) error {
 func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 	srv.mu.Lock()
 	if srv.shutdown != nil {
+		srv.mu.Unlock()
 		return fmt.Errorf("sftp: already serving")
 	}
 	srv.shutdown = make(chan struct{})
