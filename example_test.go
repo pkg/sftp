@@ -166,11 +166,11 @@ func ExampleFile_ReadFrom_bufio() {
 	bw.ReadFrom(data_source)
 }
 
-func ExampleNewClientPipeTLS() {
+func ExampleNewClientPipe_tls() {
 	var clientCert tls.Certificate
 
 	// SFTP does not need SSH underneath: any reliable stream will do, as long
-	// as the other end runs an SFTP server on it (see ExampleNewServerTLS).
+	// as the other end runs an SFTP server on it (see ExampleNewServer).
 	// A plain TCP connection works the same way, but has no encryption or
 	// authentication at all, so use TLS and authenticate the client, here
 	// with a client certificate.
@@ -200,7 +200,7 @@ func ExampleNewClientPipeTLS() {
 	}
 }
 
-func ExampleNewServerTLS() {
+func ExampleNewServer() {
 	var serverCert tls.Certificate
 	var clientCAs *x509.CertPool
 
