@@ -392,6 +392,7 @@ func (svr *Server) Serve() error {
 	var pkt requestPacket
 	var pktType fxp
 	var pktBytes []byte
+recvLoop:
 	for {
 		pktType, pktBytes, err = svr.serverConn.recvPacket(svr.pktMgr.getNextOrderID())
 		if err != nil {
@@ -415,7 +416,7 @@ func (svr *Server) Serve() error {
 			default:
 				debug("makePacket err: %v", err)
 				svr.conn.Close() // shuts down recvPacket
-				break
+				break recvLoop
 			}
 		}
 
