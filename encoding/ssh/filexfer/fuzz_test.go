@@ -15,6 +15,7 @@ func packetBody(tb testing.TB, p PacketMarshaller) []byte {
 		tb.Fatal(err)
 	}
 
+	// The unmarshallers expect the packet type, but not ComposePacket's length prefix.
 	return data[4:]
 }
 
@@ -32,7 +33,7 @@ var fuzzAttrs = Attributes{
 // FuzzRequestPacket decodes request packets the way the server does,
 // and checks that whatever decodes can be encoded and decoded again unchanged.
 func FuzzRequestPacket(f *testing.F) {
-	for _, p := range []PacketMarshaller{
+	packets := []PacketMarshaller{
 		&OpenPacket{Filename: "/foo", PFlags: FlagRead | FlagWrite | FlagCreate, Attrs: fuzzAttrs},
 		&WritePacket{Handle: "1", Offset: 1 << 40, Data: []byte("data")},
 		&ReadPacket{Handle: "1", Offset: 1 << 40, Length: 1 << 15},
@@ -40,7 +41,9 @@ func FuzzRequestPacket(f *testing.F) {
 		&RenamePacket{OldPath: "/foo", NewPath: "/bar"},
 		&ReadDirPacket{Handle: "2"},
 		&ExtendedPacket{ExtendedRequest: "foo@example.com", Data: NewBuffer([]byte("data"))},
-	} {
+	}
+
+	for _, p := range packets {
 		f.Add(packetBody(f, p))
 	}
 
@@ -74,7 +77,7 @@ func FuzzRequestPacket(f *testing.F) {
 // FuzzPacketBody decodes packets of any type the way the client does for responses,
 // and checks that whatever decodes can be encoded and decoded again unchanged.
 func FuzzPacketBody(f *testing.F) {
-	for _, p := range []PacketMarshaller{
+	packets := []PacketMarshaller{
 		&StatusPacket{StatusCode: StatusNoSuchFile, ErrorMessage: "no such file", LanguageTag: "en"},
 		&HandlePacket{Handle: "1"},
 		&DataPacket{Data: []byte("data")},
@@ -84,7 +87,9 @@ func FuzzPacketBody(f *testing.F) {
 		}},
 		&AttrsPacket{Attrs: fuzzAttrs},
 		&ExtendedReplyPacket{Data: NewBuffer([]byte("data"))},
-	} {
+	}
+
+	for _, p := range packets {
 		f.Add(packetBody(f, p))
 	}
 
