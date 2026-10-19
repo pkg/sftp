@@ -449,7 +449,7 @@ func TestRequestPosixRenameUnsupported(t *testing.T) {
 	err := p.cli.PosixRename("/from", "/to")
 	var statusErr *StatusError
 	require.ErrorAs(t, err, &statusErr)
-	assert.Equal(t, sshFxOpUnsupported, statusErr.Code)
+	assert.Equal(t, sshFxOPUnsupported, statusErr.Code)
 }
 
 func TestRequestStat(t *testing.T) {
@@ -569,7 +569,7 @@ func TestRequestLstatUnsupported(t *testing.T) {
 	_, err := p.cli.Lstat("/path")
 	var statusErr *StatusError
 	require.ErrorAs(t, err, &statusErr)
-	assert.Equal(t, sshFxOpUnsupported, statusErr.Code)
+	assert.Equal(t, sshFxOPUnsupported, statusErr.Code)
 }
 
 func TestRequestLink(t *testing.T) {
