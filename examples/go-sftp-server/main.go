@@ -143,12 +143,23 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := server.Serve(); err != nil {
-			if err != io.EOF {
-				log.Fatal("sftp server completed with error:", err)
-			}
+		err = server.Serve()
+		if err == io.EOF {
+			err = nil
 		}
+
+		// Like sshd, tell the client how the subsystem exited before closing the channel.
+		// Some clients wait for this before they consider the session finished.
+		exitStatus := uint32(0)
+		if err != nil {
+			exitStatus = 1
+		}
+		channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{exitStatus}))
+
 		server.Close()
+		if err != nil {
+			log.Fatal("sftp server completed with error:", err)
+		}
 		log.Print("sftp client exited session.")
 	}
 }
