@@ -239,13 +239,13 @@ func (c *clientConn) dispatch(cancel <-chan struct{}, req sshfx.PacketMarshaller
 
 	if _, err := c.wr.Write(header); err != nil {
 		c.resPool.Put(ch)
-		return reqid, nil, fmt.Errorf("sftp: write packet header: %w", err)
+		return reqid, nil, fmt.Errorf("%w: write packet header: %v", sshfx.StatusConnectionLost, err)
 	}
 
 	if len(payload) != 0 {
 		if _, err := c.wr.Write(payload); err != nil {
 			c.resPool.Put(ch)
-			return reqid, nil, fmt.Errorf("sftp: write packet payload: %w", err)
+			return reqid, nil, fmt.Errorf("%w: write packet payload: %v", sshfx.StatusConnectionLost, err)
 		}
 	}
 
