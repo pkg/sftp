@@ -483,6 +483,7 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 	switch p := pkt.(type) {
 	case *sshFxpFsetstatPacket:
 		r.Flags = p.Flags
+		r.attrFlags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
 	}
 

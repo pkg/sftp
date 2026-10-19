@@ -972,7 +972,7 @@ func TestRealPathFileLister(t *testing.T) {
 			files:    make(map[string]*memFile),
 		},
 	}
-	handlers := Handlers{FilePut: root}
+	handlers := Handlers{root, root, root, root}
 	p := clientRequestServerPairWithHandlers(t, handlers)
 	defer p.Close()
 
@@ -1046,7 +1046,7 @@ func TestRequestOpenAttributes(t *testing.T) {
 			files:    make(map[string]*memFile),
 		},
 	}
-	handlers := Handlers{root, root, root, root}
+	handlers := Handlers{FilePut: root}
 	p := clientRequestServerPairWithHandlers(t, handlers)
 	defer p.Close()
 
