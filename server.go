@@ -466,7 +466,8 @@ func (p *sshFxpStatResponse) MarshalBinary() ([]byte, error) {
 var emptyFileStat = []any{uint32(0)}
 
 func (p *sshFxpOpenPacket) readonly() bool {
-	return !p.hasPflags(sshFxfWrite)
+	// SSH_FXF_CREAT and SSH_FXF_TRUNC modify the filesystem even without SSH_FXF_WRITE.
+	return p.Pflags&(sshFxfWrite|sshFxfCreat|sshFxfTrunc) == 0
 }
 
 func (p *sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
