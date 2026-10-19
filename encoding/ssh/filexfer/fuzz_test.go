@@ -132,13 +132,14 @@ func FuzzPacketBody(f *testing.F) {
 
 // FuzzVersionPacket decodes the version packet the client receives during the handshake.
 func FuzzVersionPacket(f *testing.F) {
-	seed, err := (&VersionPacket{
+	packet := &VersionPacket{
 		Version: 3,
 		Extensions: []*ExtensionPair{
 			{Name: "posix-rename@openssh.com", Data: "1"},
 			{Name: "statvfs@openssh.com", Data: "2"},
 		},
-	}).MarshalBinary()
+	}
+	seed, err := packet.MarshalBinary()
 	if err != nil {
 		f.Fatal(err)
 	}
