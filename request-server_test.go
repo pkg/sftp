@@ -1022,8 +1022,6 @@ func TestLegacyRealPathFileLister(t *testing.T) {
 
 // In memory file-system which records the attributes sent with an open
 type rootWithOpenAttrs struct {
-	root
-
 	mu        sync.Mutex
 	attrFlags FileAttrFlags
 	attrs     *FileStat
@@ -1034,18 +1032,13 @@ func (fs *rootWithOpenAttrs) Filewrite(r *Request) (io.WriterAt, error) {
 	fs.attrFlags = r.AttrFlags()
 	fs.attrs = r.Attributes()
 	fs.mu.Unlock()
-	return fs.root.Filewrite(r)
+	return &memFile{}, nil
 }
 
 // Issue #557 in github
 // The attributes sent with an open were parsed with the open flags.
 func TestRequestOpenAttributes(t *testing.T) {
-	root := &rootWithOpenAttrs{
-		root: root{
-			rootFile: &memFile{name: "/", modtime: time.Now(), isdir: true},
-			files:    make(map[string]*memFile),
-		},
-	}
+	root := &rootWithOpenAttrs{}
 	handlers := Handlers{FilePut: root}
 	p := clientRequestServerPairWithHandlers(t, handlers)
 	defer p.Close()
