@@ -1066,7 +1066,7 @@ func (c *Client) MkdirAll(path string) error {
 func (c *Client) RemoveAll(path string) error {
 
 	// Get the file/directory information
-	fi, err := c.Stat(path)
+	fi, err := c.Lstat(path)
 	if err != nil {
 		return err
 	}

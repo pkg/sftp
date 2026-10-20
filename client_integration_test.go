@@ -714,6 +714,42 @@ func TestClientRemoveAll(t *testing.T) {
 	}
 }
 
+func TestClientRemoveAllSymlink(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	dir, err := ioutil.TempDir("", "sftptest-removeAllSymlink")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	target := dir + "/target"
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	file := target + "/file.txt"
+	if err := ioutil.WriteFile(file, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := dir + "/link"
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sftp.RemoveAll(link); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("symlink %s still exists", link)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Errorf("file %s behind the symlink was removed: %v", file, err)
+	}
+}
+
 func TestClientRemoveDir(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
