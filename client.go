@@ -202,22 +202,32 @@ func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
 
 	pw, err := s.StdinPipe()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 	pr, err := s.StdoutPipe()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 	perr, err := s.StderrPipe()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 
 	if err := s.RequestSubsystem("sftp"); err != nil {
+		s.Close()
 		return nil, err
 	}
 
-	return newClientPipe(pr, perr, pw, s.Wait, opts...)
+	c, err := newClientPipe(pr, perr, pw, s.Wait, opts...)
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
+
+	return c, nil
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and a WriteCloser.
