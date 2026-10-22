@@ -260,8 +260,18 @@ func handlePacket(s *Server, p orderedRequest) error {
 			rpkt = statusFromError(p.ID, err)
 		}
 	case *sshFxpMkdirPacket:
-		// TODO FIXME: ignore flags field
-		err := os.Mkdir(s.toLocalPath(p.Path), 0o755)
+		// Like OpenSSH, honor the permissions requested by the client.
+		mode := os.FileMode(0o755)
+		var err error
+		if p.Flags&sshFileXferAttrPermissions != 0 {
+			var fs *FileStat
+			if fs, err = p.unmarshalFileStat(p.Flags); err == nil {
+				mode = fs.FileMode() & os.ModePerm
+			}
+		}
+		if err == nil {
+			err = os.Mkdir(s.toLocalPath(p.Path), mode)
+		}
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpRmdirPacket:
 		err := os.Remove(s.toLocalPath(p.Path))
