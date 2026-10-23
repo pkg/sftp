@@ -1065,8 +1065,8 @@ func (c *Client) MkdirAll(path string) error {
 // An error will be returned if no file or directory with the specified path exists
 func (c *Client) RemoveAll(path string) error {
 
-	// Get the file/directory information
-	fi, err := c.Stat(path)
+	// Get the file/directory information, without following symlinks
+	fi, err := c.Lstat(path)
 	if err != nil {
 		return err
 	}
