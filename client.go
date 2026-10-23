@@ -933,7 +933,7 @@ func (cl *Client) Remove(name string) error {
 // f the path does not exist, RemoveAll returns nil (no error).
 // If there is an error, it will be of type *PathError.
 func (cl *Client) RemoveAll(pathname string) error {
-	fi, err := cl.Stat(pathname)
+	fi, err := cl.LStat(pathname)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil

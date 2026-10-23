@@ -893,6 +893,50 @@ func TestLChown(t *testing.T) {
 	}
 }
 
+func TestRemoveAllSymlink(t *testing.T) {
+	dir := t.TempDir()
+
+	target := filepath.Join(dir, "removeall-target")
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	file := filepath.Join(target, "file")
+	if err := os.WriteFile(file, []byte("foo"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(dir, "removeall-link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("cannot create symlink:", err)
+	}
+
+	sub := filepath.Join(dir, "removeall-dir")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(target, filepath.Join(sub, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cl.RemoveAll(toRemotePath(link)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cl.RemoveAll(toRemotePath(sub)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("symlink still exists: %v", err)
+	}
+
+	if _, err := os.Stat(file); err != nil {
+		t.Errorf("file behind the symlink was removed: %v", err)
+	}
+}
+
 var benchBuf []byte
 
 func benchHelperWriteTo(b *testing.B, length int) {
