@@ -33,3 +33,24 @@ jobs:
           make integration
         env:
           GOARCH: 386
+
+  run-tests-windows:
+    name: Run test cases (windows-latest)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      # The client integration tests do not build on Windows yet,
+      # but the localfs tests run against both the package server and the sftp-server from Git for Windows.
+      - name: Run tests
+        shell: bash
+        run: |
+          go test -v -tags=integration,sftp.sync.metrics ./...
+          cd localfs
+          go test -v -tags=integration,sftp.sync.metrics -testserver=false

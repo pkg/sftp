@@ -726,16 +726,16 @@ func TestReadFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		t.Log("close: client-readfrom.go")
-
-		if err := f.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
 
 	n, err := f.ReadFrom(bytes.NewReader(clData))
 	if err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+
+	// Close the file before reading it back:
+	// on Windows, the server process may not allow reading a file it still has open for writing.
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -797,6 +797,10 @@ func makeSymlink(t *testing.T, name string) (target, link string) {
 }
 
 func TestLChtimes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows SFTP test server follows symlinks when setting times")
+	}
+
 	target, link := makeSymlink(t, "test-lchtimes")
 
 	before, err := os.Stat(target)
@@ -833,6 +837,10 @@ func TestLChtimes(t *testing.T) {
 }
 
 func TestLChmod(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose independent symlink permissions")
+	}
+
 	target, link := makeSymlink(t, "test-lchmod")
 
 	before, err := os.Stat(target)

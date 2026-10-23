@@ -1032,7 +1032,7 @@ func (cl *Client) Chtimes(name string, atime, mtime time.Time) error {
 }
 
 func (cl *Client) lsetstat(ctx context.Context, name string, attrs *sshfx.Attributes) error {
-	if !cl.hasExtension(openssh.ExtensionLSetStat()) {
+	if !cl.HasExtension(openssh.ExtensionLSetStat()) {
 		return wrapPathError("lsetstat", name, sshfx.StatusOpUnsupported)
 	}
 
