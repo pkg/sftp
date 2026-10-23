@@ -435,6 +435,23 @@ func TestRequestRenameFail(t *testing.T) {
 	checkRequestServerAllocator(t, p)
 }
 
+type requestServerWithoutPosixRename struct{}
+
+func (*requestServerWithoutPosixRename) Filecmd(*Request) error {
+	return fmt.Errorf("unexpected Rename fallback")
+}
+
+func TestRequestPosixRenameUnsupported(t *testing.T) {
+	handler := &requestServerWithoutPosixRename{}
+	p := clientRequestServerPairWithHandlers(t, Handlers{FileCmd: handler})
+	defer p.Close()
+
+	err := p.cli.PosixRename("/from", "/to")
+	var statusErr *StatusError
+	require.ErrorAs(t, err, &statusErr)
+	assert.Equal(t, uint32(sshFxOPUnsupported), statusErr.Code)
+}
+
 func TestRequestStat(t *testing.T) {
 	p := clientRequestServerPair(t)
 	defer p.Close()
@@ -536,6 +553,23 @@ func TestRequestLstat(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, fi.Mode()&os.ModeSymlink == os.ModeSymlink)
 	checkRequestServerAllocator(t, p)
+}
+
+type requestServerWithoutLstat struct{}
+
+func (*requestServerWithoutLstat) Filelist(*Request) (ListerAt, error) {
+	return nil, fmt.Errorf("unexpected Stat fallback")
+}
+
+func TestRequestLstatUnsupported(t *testing.T) {
+	handler := &requestServerWithoutLstat{}
+	p := clientRequestServerPairWithHandlers(t, Handlers{FileList: handler})
+	defer p.Close()
+
+	_, err := p.cli.Lstat("/path")
+	var statusErr *StatusError
+	require.ErrorAs(t, err, &statusErr)
+	assert.Equal(t, uint32(sshFxOPUnsupported), statusErr.Code)
 }
 
 func TestRequestLink(t *testing.T) {
