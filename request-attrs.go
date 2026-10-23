@@ -4,7 +4,7 @@ package sftp
 // Attr(ibutes) byte blob easier. Use Pflags() when working with an Open/Write
 // request and AttrFlags() and Attributes() when working with SetStat requests.
 
-// FileOpenFlags defines Open and Write Flags. Correlate directly with with os.OpenFile flags
+// FileOpenFlags defines Open and Write Flags. Correlate directly with os.OpenFile flags
 // (https://golang.org/pkg/os/#pkg-constants).
 type FileOpenFlags struct {
 	Read, Write, Append, Creat, Trunc, Excl bool
@@ -44,7 +44,7 @@ func newFileAttrFlags(flags uint32) FileAttrFlags {
 }
 
 // AttrFlags returns a FileAttrFlags boolean struct based on the
-// bitmap/uint32 file attribute flags from the SFTP packaet.
+// bitmap/uint32 file attribute flags from the SFTP packet.
 func (r *Request) AttrFlags() FileAttrFlags {
 	return newFileAttrFlags(r.Flags)
 }
