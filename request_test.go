@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -227,6 +228,19 @@ func TestRequestInfoReadlink(t *testing.T) {
 		assert.IsType(t, &sshFxpNameAttr{}, npkt.NameAttrs[0])
 		assert.Equal(t, npkt.NameAttrs[0].Name, "request_test.go")
 	}
+}
+
+func TestRequestFromMkdirPacketAttrs(t *testing.T) {
+	pkt := &sshFxpMkdirPacket{
+		ID:    1,
+		Path:  "/foo",
+		Flags: sshFileXferAttrPermissions,
+		Attrs: marshalUint32(nil, 0o700),
+	}
+	request := requestFromPacket(context.Background(), pkt, "/")
+	assert.Equal(t, "Mkdir", request.Method)
+	assert.True(t, request.AttrFlags().Permissions)
+	assert.Equal(t, os.FileMode(0o700), request.Attributes().FileMode().Perm())
 }
 
 func TestOpendirHandleReuse(t *testing.T) {
