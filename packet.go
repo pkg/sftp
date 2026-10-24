@@ -1033,7 +1033,7 @@ type sshFxpMkdirPacket struct {
 
 func (p *sshFxpMkdirPacket) id() uint32 { return p.ID }
 
-func (p *sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
+func (p *sshFxpMkdirPacket) marshalPacket() ([]byte, []byte, error) {
 	l := 4 + 1 + 4 + // uint32(length) + byte(type) + uint32(id)
 		4 + len(p.Path) +
 		4 // uint32
@@ -1044,11 +1044,22 @@ func (p *sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
 	b = marshalString(b, p.Path)
 	b = marshalUint32(b, p.Flags)
 
-	if fs, ok := p.Attrs.(*FileStat); ok {
-		b = marshalFileStat(b, p.Flags, fs)
+	switch attrs := p.Attrs.(type) {
+	case []byte:
+		return b, attrs, nil // may as well short-ciruit this case.
+	case os.FileInfo:
+		_, fs := fileStatFromInfo(attrs) // we throw away the flags, and override with those in packet.
+		return b, marshalFileStat(nil, p.Flags, fs), nil
+	case *FileStat:
+		return b, marshalFileStat(nil, p.Flags, attrs), nil
 	}
 
-	return b, nil
+	return b, marshal(nil, p.Attrs), nil
+}
+
+func (p *sshFxpMkdirPacket) MarshalBinary() ([]byte, error) {
+	header, payload, err := p.marshalPacket()
+	return append(header, payload...), err
 }
 
 func (p *sshFxpMkdirPacket) UnmarshalBinary(b []byte) error {
