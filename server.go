@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -273,7 +274,12 @@ func handlePacket(s *Server, p orderedRequest) error {
 		err := os.Rename(s.toLocalPath(p.Oldpath), s.toLocalPath(p.Newpath))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpSymlinkPacket:
-		err := os.Symlink(s.toLocalPath(p.Targetpath), s.toLocalPath(p.Linkpath))
+		// Relative targets are resolved from the link's directory, not workDir.
+		target := filepath.FromSlash(p.Targetpath)
+		if path.IsAbs(p.Targetpath) {
+			target = s.toLocalPath(p.Targetpath)
+		}
+		err := os.Symlink(target, s.toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpClosePacket:
 		rpkt = statusFromError(p.ID, s.closeHandle(p.Handle))
