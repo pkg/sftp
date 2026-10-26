@@ -377,12 +377,29 @@ func (c *Client) ReadDir(p string) ([]os.FileInfo, error) {
 // The passed context can be used to cancel the operation
 // returning all entries listed up to the cancellation.
 func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, error) {
+	return c.readDir(ctx, p, 0, 0)
+}
+
+// ErrListingLimit is returned when a directory listing exceeds a requested limit.
+var ErrListingLimit = errors.New("directory listing exceeds limit")
+
+// ReadDirWithLimits bounds listing records and total SSH_FXP_NAME response bytes.
+// Both limits must be positive; skipped dot entries also count toward the record limit.
+func (c *Client) ReadDirWithLimits(ctx context.Context, p string, maxEntries, maxBytes int) ([]os.FileInfo, error) {
+	if maxEntries <= 0 || maxBytes <= 0 {
+		return nil, errors.New("directory listing limits must be positive")
+	}
+	return c.readDir(ctx, p, maxEntries, maxBytes)
+}
+
+func (c *Client) readDir(ctx context.Context, p string, maxEntries, maxBytes int) ([]os.FileInfo, error) {
 	handle, err := c.opendir(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 	defer c.close(handle) // this has to defer earlier than the lock below
 	var entries []os.FileInfo
+	bytesRead, records := 0, 0
 	var done = false
 	for !done {
 		id := c.nextID()
@@ -397,6 +414,12 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 		}
 		switch typ {
 		case sshFxpName:
+			if maxBytes > 0 {
+				if len(data) > maxBytes-bytesRead {
+					return nil, ErrListingLimit
+				}
+				bytesRead += len(data)
+			}
 			data, err = unmarshalSID(id, data)
 			if err != nil {
 				return nil, err
@@ -405,6 +428,12 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 			count, data, err = unmarshalCount(data)
 			if err != nil {
 				return nil, err
+			}
+			if maxEntries > 0 {
+				if count > maxEntries-records {
+					return nil, ErrListingLimit
+				}
+				records += count
 			}
 			for range count {
 				var filename string
