@@ -28,7 +28,7 @@ func TestGlobLiteralPaths(t *testing.T) {
 
 	matches, err := p.cli.Glob("/missing")
 	require.NoError(t, err)
-	assert.Nil(t, matches)
+	assert.Empty(t, matches)
 	matches, err = p.cli.Glob("/home/*")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/home/file"}, matches)
