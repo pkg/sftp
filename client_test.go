@@ -3,6 +3,7 @@ package sftp
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -287,6 +288,73 @@ func TestClientReadDataReply(t *testing.T) {
 			}
 			if string(b[:n]) != payload {
 				t.Errorf("read %q, want %q", b[:n], payload)
+			}
+		})
+	}
+}
+
+func TestClientReadChunkAtShortReplies(t *testing.T) {
+	for _, reuseChannel := range []bool{false, true} {
+		for _, eof := range []bool{false, true} {
+			t.Run(fmt.Sprintf("reuseChannel=%t/eof=%t", reuseChannel, eof), func(t *testing.T) {
+				var requests int
+				c := startScriptedClient(t, func(_ fxp, id uint32) (fxp, []byte, bool) {
+					requests++
+					if eof && requests > 1 {
+						return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxEOF), true
+					}
+					return sshFxpData, marshalString(marshalUint32(nil, id), "AB"), true
+				})
+				defer c.Close()
+
+				var ch chan result
+				if reuseChannel {
+					ch = make(chan result, 1)
+				}
+				f := &File{c: c, handle: "somehandle"}
+				b := make([]byte, 6)
+				n, err := f.readChunkAt(ch, b, 11)
+				want, wantErr := "ABABAB", error(nil)
+				if eof {
+					want, wantErr = "AB", io.EOF
+				}
+				if !errors.Is(err, wantErr) || n != len(want) || string(b[:n]) != want {
+					t.Fatalf("readChunkAt = (%d, %v, %q), want (%d, %v, %q)", n, err, b[:n], len(want), wantErr, want)
+				}
+			})
+		}
+	}
+}
+
+func TestClientReadAtFirstChunk(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		first   string
+		eof     bool
+		want    string
+		wantErr error
+	}{
+		{name: "short replies", first: "AB", want: "ABABAB"},
+		{name: "EOF after first chunk", first: "AB", eof: true, want: "AB", wantErr: io.EOF},
+		{name: "initial EOF", eof: true, wantErr: io.EOF},
+		{name: "no progress", wantErr: io.ErrNoProgress},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			c := startScriptedClient(t, func(_ fxp, id uint32) (fxp, []byte, bool) {
+				requests++
+				if tc.eof && (tc.first == "" || requests > 1) {
+					return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxEOF), true
+				}
+				return sshFxpData, marshalString(marshalUint32(nil, id), tc.first), true
+			}, MaxPacket(4))
+			defer c.Close()
+
+			f := &File{c: c, handle: "somehandle"}
+			b := make([]byte, 6)
+			n, err := f.ReadAt(b, 11)
+			if !errors.Is(err, tc.wantErr) || n != len(tc.want) || string(b[:n]) != tc.want {
+				t.Fatalf("ReadAt = (%d, %v, %q), want (%d, %v, %q)", n, err, b[:n], len(tc.want), tc.wantErr, tc.want)
 			}
 		})
 	}
