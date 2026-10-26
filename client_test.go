@@ -449,6 +449,47 @@ func TestClientReadDirSuccess(t *testing.T) {
 	}
 }
 
+// A malicious server must not be able to return "." or ".." entries by
+// wrapping them in a path that path.Base reduces to them.
+func TestClientReadDirSkipsDotNames(t *testing.T) {
+	var readdirs int
+	c := startScriptedClient(t, func(typ fxp, id uint32) (fxp, []byte, bool) {
+		switch typ {
+		case sshFxpOpendir:
+			return sshFxpHandle, marshalString(marshalUint32(nil, id), "somehandle"), true
+		case sshFxpReaddir:
+			readdirs++
+			if readdirs > 1 {
+				return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxEOF), true
+			}
+			names := []string{".", "..", "x/..", "x/.", "../..", "/", "", "file1"}
+			body := marshalUint32(nil, id)
+			body = marshalUint32(body, uint32(len(names)))
+			for _, name := range names {
+				body = dirEntry(body, name)
+			}
+			return sshFxpName, body, true
+		case sshFxpClose:
+			return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxOk), true
+		default:
+			return 0, nil, false
+		}
+	})
+	defer c.Close()
+
+	entries, err := c.ReadDir("/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "file1" {
+		var got []string
+		for _, e := range entries {
+			got = append(got, e.Name())
+		}
+		t.Fatalf("entries = %q, want [file1]", got)
+	}
+}
+
 // Issue #418: panic in clientConn.recv when the sid is incomplete.
 func TestClientNoSid(t *testing.T) {
 	stream := new(bytes.Buffer)

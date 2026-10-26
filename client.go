@@ -421,10 +421,13 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 				if err != nil {
 					return nil, err
 				}
-				if filename == "." || filename == ".." {
+				// Check the name after path.Base, so that a server cannot
+				// smuggle "." or ".." through as e.g. "x/..".
+				name := path.Base(filename)
+				if name == "." || name == ".." || name == "/" {
 					continue
 				}
-				entries = append(entries, fileInfoFromStat(attr, path.Base(filename)))
+				entries = append(entries, fileInfoFromStat(attr, name))
 			}
 		case sshFxpStatus:
 			// TODO(dfc) scope warning!
