@@ -4,6 +4,7 @@
 package sftp
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,8 +57,7 @@ func TestServerSymlinkTargets(t *testing.T) {
 					file, err := client.Open(link)
 					require.NoError(t, err)
 					defer file.Close()
-					contents := make([]byte, len(tt.contents))
-					_, err = file.ReadAt(contents, 0)
+					contents, err := io.ReadAll(file)
 					require.NoError(t, err)
 					require.Equal(t, tt.contents, string(contents))
 				})
