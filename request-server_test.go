@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -1017,6 +1018,48 @@ func TestLegacyRealPathFileLister(t *testing.T) {
 	realPath, err = p.cli.RealPath("relpath")
 	require.NoError(t, err)
 	assert.Equal(t, "/relpath", realPath)
+}
+
+// In memory file-system which records the attributes sent with an open
+type rootWithOpenAttrs struct {
+	mu        sync.Mutex
+	attrFlags FileAttrFlags
+	attrs     *FileStat
+}
+
+func (fs *rootWithOpenAttrs) Filewrite(r *Request) (io.WriterAt, error) {
+	fs.mu.Lock()
+	fs.attrFlags = r.AttrFlags()
+	fs.attrs = r.Attributes()
+	fs.mu.Unlock()
+	return &memFile{}, nil
+}
+
+// Issue #557 in github
+// The attributes sent with an open were parsed with the open flags.
+func TestRequestOpenAttributes(t *testing.T) {
+	root := &rootWithOpenAttrs{}
+	handlers := Handlers{FilePut: root}
+	p := clientRequestServerPairWithHandlers(t, handlers)
+	defer p.Close()
+
+	id := p.cli.nextID()
+	typ, _, err := p.cli.sendPacket(context.Background(), nil, &sshFxpOpenPacket{
+		ID:     id,
+		Path:   "/foo",
+		Pflags: sshFxfWrite | sshFxfCreat | sshFxfTrunc,
+		Flags:  sshFileXferAttrSize | sshFileXferAttrPermissions,
+		Attrs:  &FileStat{Size: 1234, Mode: 0o640},
+	})
+	require.NoError(t, err)
+	require.Equal(t, fxp(sshFxpHandle), typ)
+
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	assert.Equal(t, FileAttrFlags{Size: true, Permissions: true}, root.attrFlags)
+	require.NotNil(t, root.attrs)
+	assert.Equal(t, uint64(1234), root.attrs.Size)
+	assert.Equal(t, uint32(0o640), root.attrs.Mode)
 }
 
 func TestCleanPath(t *testing.T) {
