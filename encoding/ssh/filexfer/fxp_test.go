@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// This string data is copied verbatim from https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-13.txt
+// This string data is copied verbatim from https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-13
 // except where commented that it was taken from a different source.
 var fxpStandardsText = `
 SSH_FXP_INIT                1
