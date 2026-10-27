@@ -462,12 +462,15 @@ func TestClientReadDirSkipsDotNames(t *testing.T) {
 			if readdirs > 1 {
 				return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxEOF), true
 			}
-			names := []string{".", "..", "x/..", "x/.", "../..", "/", "", "file1"}
+
 			body := marshalUint32(nil, id)
+
+			names := []string{".", "..", "x/..", "x/.", "../..", "/", "", "file1"}
 			body = marshalUint32(body, uint32(len(names)))
 			for _, name := range names {
 				body = dirEntry(body, name)
 			}
+
 			return sshFxpName, body, true
 		case sshFxpClose:
 			return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxOk), true
@@ -479,14 +482,14 @@ func TestClientReadDirSkipsDotNames(t *testing.T) {
 
 	entries, err := c.ReadDir("/")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal("unexpected error:", err)
 	}
 	if len(entries) != 1 || entries[0].Name() != "file1" {
 		var got []string
 		for _, e := range entries {
 			got = append(got, e.Name())
 		}
-		t.Fatalf("entries = %q, want [file1]", got)
+		t.Fatalf(`entries = %q, want ["file1"]`, got)
 	}
 }
 
