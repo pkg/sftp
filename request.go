@@ -198,6 +198,9 @@ func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Reques
 	case *sshFxpSetstatPacket:
 		request.Flags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
+	case *sshFxpMkdirPacket:
+		request.Flags = p.Flags
+		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
 		request.Target = cleanPathWithBase(baseDir, p.Newpath)
 	case *sshFxpSymlinkPacket:
