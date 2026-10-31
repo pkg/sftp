@@ -269,9 +269,6 @@ func handlePacket(s *Server, p orderedRequest) error {
 	case *sshFxpRemovePacket:
 		err := os.Remove(s.toLocalPath(p.Filename))
 		rpkt = statusFromError(p.ID, err)
-	case *sshFxpRenamePacket:
-		err := os.Rename(s.toLocalPath(p.Oldpath), s.toLocalPath(p.Newpath))
-		rpkt = statusFromError(p.ID, err)
 	case *sshFxpSymlinkPacket:
 		err := os.Symlink(s.toLocalPath(p.Targetpath), s.toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
@@ -548,6 +545,19 @@ func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
 		})
 	}
 	return ret
+}
+
+func (p *sshFxpRenamePacket) respond(svr *Server) responsePacket {
+	oldpath := svr.toLocalPath(p.Oldpath)
+	newpath := svr.toLocalPath(p.Newpath)
+
+	// SSH_FXP_RENAME may not replace an existing file; posix-rename@openssh.com is the overwriting form.
+	// Like OpenSSH, refuse the request when newpath already exists rather than letting os.Rename clobber it.
+	if _, err := svr.lstat(newpath); err == nil {
+		return statusFromError(p.ID, &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EEXIST})
+	}
+
+	return statusFromError(p.ID, os.Rename(oldpath, newpath))
 }
 
 func (p *sshFxpSetstatPacket) respond(svr *Server) responsePacket {

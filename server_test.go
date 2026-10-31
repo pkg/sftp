@@ -332,6 +332,47 @@ func TestReadOnlyServerRejectsWrites(t *testing.T) {
 	f.Close()
 }
 
+// Ensure that SSH_FXP_RENAME does not replace an existing file,
+// matching the protocol and OpenSSH. posix-rename@openssh.com is the overwriting form.
+func TestRenameDoesNotOverwrite(t *testing.T) {
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	dir := t.TempDir()
+	oldpath := path.Join(dir, "old")
+	newpath := path.Join(dir, "new")
+	require.NoError(t, os.WriteFile(oldpath, []byte("old"), 0o644))
+	require.NoError(t, os.WriteFile(newpath, []byte("new"), 0o644))
+
+	assert.Error(t, client.Rename(oldpath, newpath))
+
+	b, err := os.ReadFile(oldpath)
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(b))
+	b, err = os.ReadFile(newpath)
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(b))
+
+	// Renaming onto a path that does not exist still works.
+	require.NoError(t, os.Remove(newpath))
+	require.NoError(t, client.Rename(oldpath, newpath))
+	assert.NoFileExists(t, oldpath)
+	b, err = os.ReadFile(newpath)
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(b))
+
+	// posix-rename@openssh.com may overwrite.
+	require.NoError(t, os.WriteFile(oldpath, []byte("posix"), 0o644))
+	require.NoError(t, client.PosixRename(oldpath, newpath))
+	assert.NoFileExists(t, oldpath)
+	b, err = os.ReadFile(newpath)
+	require.NoError(t, err)
+	assert.Equal(t, "posix", string(b))
+
+	checkServerAllocator(t, server)
+}
+
 // Ensure that proper error codes are returned for non existent files, such
 // that they are mapped back to a 'not exists' error on the client side.
 func TestStatNonExistent(t *testing.T) {
