@@ -11,7 +11,7 @@ type PacketType uint8
 
 // Request packet types.
 const (
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt#section-3
+	// https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-3
 	PacketTypeInit = PacketType(iota + 1)
 	PacketTypeVersion
 	PacketTypeOpen
@@ -33,17 +33,17 @@ const (
 	PacketTypeReadLink
 	PacketTypeSymlink
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-07.txt#section-3.3
+	// https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-07#section-3.3
 	PacketTypeV6Link
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-08.txt#section-3.3
+	// https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-08#section-3.3
 	PacketTypeV6Block
 	PacketTypeV6Unblock
 )
 
 // Response packet types.
 const (
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt#section-3
+	// https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-3
 	PacketTypeStatus = PacketType(iota + 101)
 	PacketTypeHandle
 	PacketTypeData
@@ -53,7 +53,7 @@ const (
 
 // Extended packet types.
 const (
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt#section-3
+	// https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-3
 	PacketTypeExtended = PacketType(iota + 200)
 	PacketTypeExtendedReply
 )
