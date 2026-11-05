@@ -50,6 +50,8 @@ type Server struct {
 	workDir       string
 	winRoot       bool
 	maxTxPacket   uint32
+
+	regularFilesOnly bool
 }
 
 func (svr *Server) nextHandle(f file) string {
@@ -137,6 +139,18 @@ func ReadOnly() ServerOption {
 func WindowsRootEnumeratesDrives() ServerOption {
 	return func(s *Server) error {
 		s.winRoot = true
+		return nil
+	}
+}
+
+// WithRegularFilesOnly configures a Server to only open regular files.
+//
+// Opening a FIFO, socket or device node fails instead of blocking the server
+// or reaching the device. Directories can still be listed. Only supported on
+// Unix, the option is ignored on other platforms.
+func WithRegularFilesOnly() ServerOption {
+	return func(s *Server) error {
+		s.regularFilesOnly = true
 		return nil
 	}
 }
