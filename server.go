@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -270,7 +271,8 @@ func handlePacket(s *Server, p orderedRequest) error {
 		err := os.Remove(s.toLocalPath(p.Filename))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpSymlinkPacket:
-		err := os.Symlink(s.toLocalPath(p.Targetpath), s.toLocalPath(p.Linkpath))
+		// Relative targets are resolved from the link's directory, not workDir.
+		err := os.Symlink(s.toLocalTarget(p.Targetpath), s.toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpClosePacket:
 		rpkt = statusFromError(p.ID, s.closeHandle(p.Handle))
@@ -363,6 +365,14 @@ func handlePacket(s *Server, p orderedRequest) error {
 
 	s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, orderID))
 	return nil
+}
+
+func (s *Server) toLocalPath(p string) string {
+	if s.workDir != "" && !path.IsAbs(p) {
+		p = path.Join(s.workDir, p)
+	}
+
+	return s.toLocalTarget(p)
 }
 
 // Serve serves SFTP connections until the streams stop or the SFTP subsystem

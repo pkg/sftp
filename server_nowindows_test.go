@@ -4,8 +4,67 @@
 package sftp
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestServerSymlinkTargets(t *testing.T) {
+	for _, withWorkDir := range []bool{false, true} {
+		name := "without working directory"
+		if withWorkDir {
+			name = "with working directory"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "file"), []byte("subdirectory"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "file"), []byte("parent"), 0o600))
+
+			var options []ServerOption
+			if withWorkDir {
+				options = append(options, WithServerWorkingDirectory(dir))
+			}
+			client, server := clientServerPair(t, options...)
+			defer client.Close()
+			defer server.Close()
+
+			for _, tt := range []struct {
+				name, target, contents string
+			}{
+				{"relative", "file", "subdirectory"},
+				{"parent", "../file", "parent"},
+				{"absolute", filepath.ToSlash(filepath.Join(dir, "file")), "parent"},
+				{"dangling", "missing", ""},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					link := "sub/" + tt.name
+					if !withWorkDir {
+						link = filepath.ToSlash(filepath.Join(dir, link))
+					}
+					require.NoError(t, client.Symlink(tt.target, link))
+					target, err := client.ReadLink(link)
+					require.NoError(t, err)
+					require.Equal(t, tt.target, target)
+					if tt.name == "dangling" {
+						_, err := client.Stat(link)
+						require.True(t, os.IsNotExist(err), "stat dangling link: %v", err)
+						return
+					}
+					file, err := client.Open(link)
+					require.NoError(t, err)
+					defer file.Close()
+					contents, err := io.ReadAll(file)
+					require.NoError(t, err)
+					require.Equal(t, tt.contents, string(contents))
+				})
+			}
+		})
+	}
+}
 
 func TestServer_toLocalPath(t *testing.T) {
 	tests := []struct {
