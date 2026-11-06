@@ -1026,8 +1026,8 @@ func (p *sshFxpWritePacket) UnmarshalBinary(b []byte) error {
 
 type sshFxpMkdirPacket struct {
 	ID    uint32
-	Flags uint32
 	Path  string
+	Flags uint32
 	Attrs any
 }
 
