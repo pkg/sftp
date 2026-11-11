@@ -68,7 +68,7 @@ func (c *clientConn) handshake(ctx context.Context, maxPacket uint32) (map[strin
 
 		b := make([]byte, maxPacket)
 
-		if err := verPkt.ReadFrom(c.rd, b, maxPacket); err != nil {
+		if err := verPkt.ReadSSHFXPFrom(c.rd, b, maxPacket); err != nil {
 			errch <- err
 			return
 		}
@@ -179,7 +179,7 @@ func (c *clientConn) recvLoop(maxPacket uint32) error {
 			pkt: raw,
 		}
 
-		if err := res.pkt.ReadFrom(c.rd, hint, maxPacket); err != nil {
+		if err := res.pkt.ReadSSHFXPFrom(c.rd, hint, maxPacket); err != nil {
 			// Do we plumb a context into this?
 			return err
 		}

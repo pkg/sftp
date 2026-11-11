@@ -69,7 +69,7 @@ func (p *InitPacket) UnmarshalFrom(buf *Buffer) error {
 	return buf.Err
 }
 
-// ReadFrom provides a simple functional packet reader,
+// ReadSSHFXPFrom provides a simple functional packet reader,
 // using the given byte slice as a backing array.
 //
 // To protect against potential denial of service attacks,
@@ -82,7 +82,7 @@ func (p *InitPacket) UnmarshalFrom(buf *Buffer) error {
 // then a throw-away slice will allocated to meet the exact packet length.
 // This can be used to limit the length of reused buffers,
 // while still allowing reception of occasional large packets.
-func (p *InitPacket) ReadFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
+func (p *InitPacket) ReadSSHFXPFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
 	b, err := readPacket(r, b, maxPacketLength)
 	if err != nil {
 		return err
@@ -166,7 +166,7 @@ func (p *VersionPacket) UnmarshalFrom(buf *Buffer) error {
 	return nil
 }
 
-// ReadFrom provides a simple functional packet reader,
+// ReadSSHFXPFrom provides a simple functional packet reader,
 // using the given byte slice as a backing array.
 //
 // To protect against potential denial of service attacks,
@@ -179,7 +179,7 @@ func (p *VersionPacket) UnmarshalFrom(buf *Buffer) error {
 // then a throw-away slice will allocated to meet the exact packet length.
 // This can be used to limit the length of reused buffers,
 // while still allowing reception of occasional large packets.
-func (p *VersionPacket) ReadFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
+func (p *VersionPacket) ReadSSHFXPFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
 	b, err := readPacket(r, b, maxPacketLength)
 	if err != nil {
 		return err

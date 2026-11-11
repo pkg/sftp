@@ -257,7 +257,7 @@ func (srv *Server) handshake(conn io.ReadWriter, maxPktLen uint32) error {
 	b := make([]byte, maxPktLen)
 
 	var initPkt sshfx.InitPacket
-	if err := initPkt.ReadFrom(conn, b, maxPktLen); err != nil {
+	if err := initPkt.ReadSSHFXPFrom(conn, b, maxPktLen); err != nil {
 		return fmt.Errorf("handshake: %w", err)
 	}
 
@@ -474,7 +474,7 @@ func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 		var err error
 		var resp sshfx.Packet
 
-		if err = reqPkt.ReadFrom(conn, scratch, maxPktLen); err != nil {
+		if err = reqPkt.ReadSSHFXPFrom(conn, scratch, maxPktLen); err != nil {
 			select {
 			case <-srv.shutdown:
 				return nil

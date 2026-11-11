@@ -12,7 +12,7 @@ func main() {
 
 	for {
 		var pkt sshfx.RawPacket
-		if err := pkt.ReadFrom(os.Stdin, buf, sshfx.DefaultMaxPacketLength); err != nil {
+		if err := pkt.ReadSSHFXPFrom(os.Stdin, buf, sshfx.DefaultMaxPacketLength); err != nil {
 			fmt.Fprintln(os.Stderr, "dump-packets:", err)
 			os.Exit(1)
 		}
