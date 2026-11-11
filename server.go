@@ -20,6 +20,8 @@ import (
 var errInvalidHandle = errors.New("invalid handle")
 
 // ServerHandler defines an interface that an SFTP service must implement in order to be handled by [Server] code.
+//
+// Receiver methods receive sshfx packets in order to maximize flexibility of implementations.
 type ServerHandler interface {
 	Mkdir(ctx context.Context, req *sshfx.MkdirPacket) error
 	Remove(ctx context.Context, req *sshfx.RemovePacket) error
@@ -70,10 +72,13 @@ type FileHandler interface {
 	io.ReaderAt
 	io.WriterAt
 
-	Name() string
-	Handle() string
+	Name() string   // the base name of the file
+ 	Handle() string // the handle to be used by the protocol to reference the file
+	Sync() error    // called when the server receives an "fsync@openssh.com" extended packet.
+
+	// Stat returns an *sshfx.Attributes, which allows a FileHandler to give broad support of arbitrary attributes.
 	Stat() (*sshfx.Attributes, error)
-	Sync() error
+
 }
 
 // SetStatFileHandler is an extension interface for handling the SSH_FXP_FSETSTAT request packet.
@@ -151,7 +156,7 @@ func fchmod(attr *sshfx.Attributes, f FileHandler) error {
 	}
 }
 
-// ChtimesFileHandler is an extension interface for handling the chmod subfunction of an SSH_FXP_FSETSTAT request.
+// ChtimesFileHandler is an extension interface for handling the chtime subfunction of an SSH_FXP_FSETSTAT request.
 type ChtimesFileHandler interface {
 	FileHandler
 	Chtimes(atime, mtime time.Time) error
@@ -185,8 +190,9 @@ type StatVFSFileHandler interface {
 type DirHandler interface {
 	io.Closer
 
-	Name() string
-	Handle() string
+	Name() string   // the base name of the directory
+ 	Handle() string // the handle to be used by the protocol to reference the directory
+
 	ReadDir(maxDataLen uint32) ([]*sshfx.NameEntry, error)
 }
 
@@ -325,7 +331,7 @@ func (srv *Server) FileFromHandle(handle string) (FileHandler, error) {
 
 // DirFromHandle returns the DirHandler associated with the given handle.
 // It returns an error if there is no handler associated with the handle,
-// or if the handler is not a FileHandler.
+// or if the handler is not a DirHandler.
 func (srv *Server) DirFromHandle(handle string) (DirHandler, error) {
 	f, _ := srv.handles.Load(handle)
 	file, _ := f.(DirHandler)

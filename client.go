@@ -355,20 +355,28 @@ func ForceSerialization() ClientOption {
 	}
 }
 
-// WithMaxDataLength sets the maximum length of a data that will be used in SSH_FX_READ and SSH_FX_WRITE requests.
+// WithMaxDataLength sets the maximum length of data that will be used in SSH_FX_READ and SSH_FX_WRITE requests.
 // This will also adjust the maximum packet length to at least the data length + 1232 bytes as overhead room.
 // (This is the difference between the 34000 byte packet size vs 32768 data packet size.)
 //
 // The maximum data length can only be increased,
 // if an attempt is made to set this value lower than it currently is,
-// it will simply not perform any operation.
+// it will return an error.
 //
-// It will generate an error if one attempts to set the length beyond the 2^32-1 limitation of the sftp protocol.
+// It will also return an error if one attempts to set the length beyond the 2^32-1 limitation of the sftp protocol.
 // There may also be compatibility issues if setting the value above 2^31-1.
 func WithMaxDataLength(length int) ClientOption {
 	withPktLen := WithMaxPacketLength(length + sshfx.MaxPacketLengthOverhead)
 
 	return func(cl *Client) error {
+		if length < 0 {
+			return fmt.Errorf("sftp: cannot set maximum data length to a negative value")
+		}
+
+		if length < cl.maxDataLen {
+			return fmt.Errorf("sftp: cannot decrease maximum data length")
+		}
+
 		if err := withPktLen(cl); err != nil {
 			return err
 		}
@@ -384,7 +392,7 @@ func WithMaxDataLength(length int) ClientOption {
 		}
 
 		// Negative values will be stomped by the max with cl.maxDataLen.
-		cl.maxDataLen = max(cl.maxDataLen, length)
+		cl.maxDataLen = length
 
 		return nil
 	}
@@ -394,9 +402,16 @@ func WithMaxDataLength(length int) ClientOption {
 //
 // The maximum packet length can only be increased,
 // if an attempt is made to set this value lower than it currently is,
-// it will simply not perform any operation.
+// it will return an error.
 func WithMaxPacketLength(length int) ClientOption {
 	return func(cl *Client) error {
+		if length < 0 {
+			return fmt.Errorf("sftp: cannot set maximum packet length to a negative value")
+		}
+
+		if int64(length) < int64(cl.maxPacket) {
+			return fmt.Errorf("sftp: cannot decrease maximum packet length")
+		}
 
 		// This has to be cast to int64 to safely perform this test on 32-bit archs.
 		// It should be identified as always false, and elided for them anyways.
@@ -408,12 +423,7 @@ func WithMaxPacketLength(length int) ClientOption {
 			return fmt.Errorf("sftp: max packet length must fit in a int: %d", length)
 		}
 
-		if length < 0 {
-			// Short circuit to avoid a negative value handling during the cast to uint32.
-			return nil
-		}
-
-		cl.maxPacket = max(cl.maxPacket, uint32(length))
+		cl.maxPacket = uint32(length)
 		return nil
 	}
 }
@@ -931,7 +941,7 @@ func (cl *Client) Remove(name string) error {
 // RemoveAll removes path and any children it contains.
 // It removes everything it can but returns the first error it encounters.
 // f the path does not exist, RemoveAll returns nil (no error).
-// If there is an error, it will be of type *PathError.
+// If there is an error, it will be of type *fs.PathError.
 func (cl *Client) RemoveAll(pathname string) error {
 	fi, err := cl.LStat(pathname)
 	if err != nil {
@@ -988,7 +998,7 @@ func (cl *Client) Truncate(name string, size int64) error {
 // Chmod changes the mode of the named file to mode.
 // If the file is a symbolic link, it changes the mode of the link's target.
 //
-// The Go FileMdoe, will be converted to a "portable" POSIX file permission, and then sent to the server.
+// The Go FileMode, will be converted to a "portable" POSIX file permission, and then sent to the server.
 // The server is then responsible for interpreting that permission.
 // It is possible the server and this client disagree on what some flags mean.
 func (cl *Client) Chmod(name string, mode fs.FileMode) error {
@@ -1003,7 +1013,7 @@ func (cl *Client) Chmod(name string, mode fs.FileMode) error {
 //
 // [os.Chown] provides that a uid or gid of -1 means to not change that value,
 // but we cannot guarantee the same semantics here.
-// The server is told to set the uid and gid as given, and it is up to the server to define that behavior.
+// The server is told to set the uid and gid as given, and it is up to the server to implement that behavior.
 func (cl *Client) Chown(name string, uid, gid int) error {
 	return cl.setstat(context.Background(), name, &sshfx.Attributes{
 		Flags: sshfx.AttrUIDGID,
@@ -1022,7 +1032,7 @@ func (cl *Client) Chown(name string, uid, gid int) error {
 // [os.Chtimes] provides that a zero [time.Time] value will leave the corresponding file time unchanged,
 // but we cannot guarantee the same semantics here.
 // The server is told to set the atime and mtime as given,
-// and it is up to the server to define that behavior.
+// and it is up to the server to implement that behavior.
 func (cl *Client) Chtimes(name string, atime, mtime time.Time) error {
 	return cl.setstat(context.Background(), name, &sshfx.Attributes{
 		Flags: sshfx.AttrACModTime,
@@ -1257,7 +1267,7 @@ func (cl *Client) Stat(name string) (fs.FileInfo, error) {
 
 // LStat returns a FileInfo describing the named file.
 // If the file is a symbolic link, the returned FileInfo describes the symbolic link
-// LStat makes no attempte to follow the link.
+// LStat makes no attempt to follow the link.
 //
 // The description returned may have server specific caveats and special cases that cannot be covered here.
 func (cl *Client) LStat(name string) (fs.FileInfo, error) {
@@ -1397,7 +1407,7 @@ func (d *Dir) wrapErr(op string, err error) error {
 }
 
 // Close closes the Dir, rendering it unusable for I/O.
-// Close will not send any request, and return an error if it has already been called.
+// If a Dir has already been closed, then an error is returned, and no request will be sent to the server.
 func (d *Dir) Close() error {
 	if d == nil {
 		return os.ErrInvalid
@@ -1655,7 +1665,7 @@ func attrsFromPerm(perm fs.FileMode) sshfx.Attributes {
 // OpenFile is the generalized open call;
 // most users can use the simplified Open or Create methods instead.
 // It opens the named file with the specified flag (OpenFlagReadOnly, etc.).
-// If the file does not exist, and the OpenFileCreate flag is passed, it is created with mode perm (before umask).
+// If the file does not exist, and the OpenFlagCreate flag is passed, it is created with mode perm (before umask).
 // If successful, methods on the returned File can be used for I/O.
 //
 // Note well: since all Write operations are down through an offset-specifying operation,
@@ -1694,7 +1704,7 @@ func (f *File) wrapErr(op string, err error) error {
 }
 
 // Close closes the File, rendering it unusable for I/O.
-// Close will not send any request, and return an error if it has already been called.
+// If a File has already been closed, then an error is returned, and no request will be sent to the server.
 func (f *File) Close() error {
 	if f == nil {
 		return fs.ErrInvalid
@@ -2042,7 +2052,7 @@ func (e panicInstead) Error() string {
 // The return value is the number of bytes read from the Reader.
 // Any error except io.EOF encountered during the read or write is also returned.
 //
-// This method is prefered over calling Write multiple times
+// This method is preferred over calling Write multiple times
 // to maximize throughput when transferring an entire file,
 // especially over high-latency links.
 func (f *File) ReadFrom(r io.Reader) (read int64, err error) {
@@ -2588,7 +2598,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	return written, f.wrapErr("read", readErr)
 }
 
-// WriteFile writes data to the named file, creating it if neccessary.
+// WriteFile writes data to the named file, creating it if necessary.
 // If the file does not exist, WriteFile creates it with permissions perm (before umask);
 // otherwise WriteFile truncates it before writing, without changing permissions.
 // Since WriteFile requires multiple system calls to complete,
@@ -2610,7 +2620,7 @@ func (cl *Client) WriteFile(name string, data []byte, perm fs.FileMode) error {
 //
 // Note that ReadFile will call Stat on the file to get the file size,
 // in order to avoid unnecessary allocations before reading in all the data.
-// Some "read once" servers will delete the file if they recceive a stat call on an open file,
+// Some "read once" servers will delete the file if they receive a stat call on an open file,
 // and then the download will fail.
 //
 // TODO(puellannivis): Before release, we should resolve this, or have knobs to prevent it.
@@ -2650,7 +2660,7 @@ const (
 )
 
 // Seek sets the offset for the next Read or Write on file to offset,
-// interpreted accoreding to whence:
+// interpreted according to whence:
 // SeekStart means relative to the origin of the file,
 // SeekCurrent means relative to the current offset,
 // and SeekEnd means relative to the end.
