@@ -15,6 +15,7 @@ import (
 
 // File wraps an [os.File] to provide the additional operations necessary to implement [sftp.FileHandler].
 type File struct {
+	// We intentionally embed *os.File as a demonstration that FileHandler can have a wider API.
 	*os.File
 
 	filename string
@@ -85,7 +86,7 @@ func (f *File) rangedir(grow func(int)) iter.Seq2[fs.FileInfo, error] {
 }
 
 // ReadDir overrides the [os.File.ReadDir] receiver method
-// by converting the slice of [fs.DirEntry] into into a slice of [sshfx.NameEntry].
+// by converting the slice of [fs.DirEntry] into a slice of [sshfx.NameEntry].
 func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -136,10 +137,10 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 
 // SetStat implements [sftp.SetStatFileHandler].
 func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
-	if len(attrs.Extended) > 0 {
+	if len(attrs.GetExtended()) > 0 {
 		err = &sshfx.StatusPacket{
 			StatusCode:   sshfx.StatusOpUnsupported,
-			ErrorMessage: "unsupported fsetstat: extended atributes",
+			ErrorMessage: "unsupported fsetstat: extended attributes",
 		}
 	}
 

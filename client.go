@@ -989,10 +989,10 @@ func (cl *Client) setstat(ctx context.Context, name string, attrs *sshfx.Attribu
 // Truncate changes the size of the named file.
 // If the file is a symbolic link, it changes the size of the link's target.
 func (cl *Client) Truncate(name string, size int64) error {
-	return cl.setstat(context.Background(), name, &sshfx.Attributes{
-		Flags: sshfx.AttrSize,
-		Size:  uint64(size),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetSize(uint64(size))
+
+	return cl.setstat(context.Background(), name, attrs)
 }
 
 // Chmod changes the mode of the named file to mode.
@@ -1002,10 +1002,10 @@ func (cl *Client) Truncate(name string, size int64) error {
 // The server is then responsible for interpreting that permission.
 // It is possible the server and this client disagree on what some flags mean.
 func (cl *Client) Chmod(name string, mode fs.FileMode) error {
-	return cl.setstat(context.Background(), name, &sshfx.Attributes{
-		Flags:       sshfx.AttrPermissions,
-		Permissions: sshfx.FromGoFileMode(mode),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetPermissions(sshfx.FromGoFileMode(mode))
+
+	return cl.setstat(context.Background(), name, attrs)
 }
 
 // Chown changes the numeric uid and gid of the named file.
@@ -1015,11 +1015,10 @@ func (cl *Client) Chmod(name string, mode fs.FileMode) error {
 // but we cannot guarantee the same semantics here.
 // The server is told to set the uid and gid as given, and it is up to the server to implement that behavior.
 func (cl *Client) Chown(name string, uid, gid int) error {
-	return cl.setstat(context.Background(), name, &sshfx.Attributes{
-		Flags: sshfx.AttrUIDGID,
-		UID:   uint32(uid),
-		GID:   uint32(gid),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetUserGroup(uint32(uid), uint32(gid))
+
+	return cl.setstat(context.Background(), name, attrs)
 }
 
 // Chtimes changes the access and modification times of the named file,
@@ -1034,11 +1033,10 @@ func (cl *Client) Chown(name string, uid, gid int) error {
 // The server is told to set the atime and mtime as given,
 // and it is up to the server to implement that behavior.
 func (cl *Client) Chtimes(name string, atime, mtime time.Time) error {
-	return cl.setstat(context.Background(), name, &sshfx.Attributes{
-		Flags: sshfx.AttrACModTime,
-		ATime: uint32(atime.Unix()),
-		MTime: uint32(mtime.Unix()),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetACModTime(uint32(atime.Unix()), uint32(mtime.Unix()))
+
+	return cl.setstat(context.Background(), name, attrs)
 }
 
 func (cl *Client) lsetstat(ctx context.Context, name string, attrs *sshfx.Attributes) error {
@@ -1062,10 +1060,10 @@ func (cl *Client) lsetstat(ctx context.Context, name string, attrs *sshfx.Attrib
 // then no request will be sent,
 // and LChmod returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
 func (cl *Client) LChmod(name string, mode fs.FileMode) error {
-	return cl.lsetstat(context.Background(), name, &sshfx.Attributes{
-		Flags:       sshfx.AttrPermissions,
-		Permissions: sshfx.FromGoFileMode(mode),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetPermissions(sshfx.FromGoFileMode(mode))
+
+	return cl.lsetstat(context.Background(), name, attrs)
 }
 
 // LChown changes the numeric uid and gid of the named file.
@@ -1075,11 +1073,10 @@ func (cl *Client) LChmod(name string, mode fs.FileMode) error {
 // then no request will be sent,
 // and LChown returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
 func (cl *Client) LChown(name string, uid, gid int) error {
-	return cl.lsetstat(context.Background(), name, &sshfx.Attributes{
-		Flags: sshfx.AttrUIDGID,
-		UID:   uint32(uid),
-		GID:   uint32(gid),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetUserGroup(uint32(uid), uint32(gid))
+
+	return cl.lsetstat(context.Background(), name, attrs)
 }
 
 // LChtimes changes the access and modification times of the named file.
@@ -1091,11 +1088,10 @@ func (cl *Client) LChown(name string, uid, gid int) error {
 // then no request will be sent,
 // and LChtimes returns an *fs.PathError wrapping sshfx.StatusOpUnsupported.
 func (cl *Client) LChtimes(name string, atime, mtime time.Time) error {
-	return cl.lsetstat(context.Background(), name, &sshfx.Attributes{
-		Flags: sshfx.AttrACModTime,
-		ATime: uint32(atime.Unix()),
-		MTime: uint32(mtime.Unix()),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetACModTime(uint32(atime.Unix()), uint32(mtime.Unix()))
+
+	return cl.lsetstat(context.Background(), name, attrs)
 }
 
 // RealPath returns the server canonicalized absolute path for the given path name.
@@ -1741,10 +1737,10 @@ func (f *File) setstat(ctx context.Context, attrs *sshfx.Attributes) error {
 // Truncate changes the size of the file.
 // It does not change the I/O offset.
 func (f *File) Truncate(size int64) error {
-	return f.setstat(context.Background(), &sshfx.Attributes{
-		Flags: sshfx.AttrSize,
-		Size:  uint64(size),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetSize(uint64(size))
+
+	return f.setstat(context.Background(), attrs)
 }
 
 // Chmod changes the mode of the file to mode.
@@ -1753,20 +1749,19 @@ func (f *File) Truncate(size int64) error {
 // The server is then responsible for interpreting that permission.
 // It is possible the server and this client disagree on what some flags mean.
 func (f *File) Chmod(mode fs.FileMode) error {
-	return f.setstat(context.Background(), &sshfx.Attributes{
-		Flags:       sshfx.AttrPermissions,
-		Permissions: sshfx.FromGoFileMode(mode),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetPermissions(sshfx.FromGoFileMode(mode))
+
+	return f.setstat(context.Background(), attrs)
 }
 
 // Chown changes the numeric uid and gid of the named file.
 // The server is told to set the uid and gid as given, and it is up to the server to define that behavior.
 func (f *File) Chown(uid, gid int) error {
-	return f.setstat(context.Background(), &sshfx.Attributes{
-		Flags: sshfx.AttrUIDGID,
-		UID:   uint32(uid),
-		GID:   uint32(gid),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetUserGroup(uint32(uid), uint32(gid))
+
+	return f.setstat(context.Background(), attrs)
 }
 
 // Chtimes sends a request to change the access and modification times of the file.
@@ -1774,11 +1769,10 @@ func (f *File) Chown(uid, gid int) error {
 // Be careful, the server may later alter the access or modification time upon Close of this file.
 // To ensure the times stick, you should Close the file, and then use [Client.Chtimes] to update the times.
 func (f *File) Chtimes(atime, mtime time.Time) error {
-	return f.setstat(context.Background(), &sshfx.Attributes{
-		Flags: sshfx.AttrACModTime,
-		ATime: uint32(atime.Unix()),
-		MTime: uint32(mtime.Unix()),
-	})
+	attrs := new(sshfx.Attributes)
+	attrs.SetACModTime(uint32(atime.Unix()), uint32(mtime.Unix()))
+
+	return f.setstat(context.Background(), attrs)
 }
 
 // Stat returns the FileInfo structure describing file.

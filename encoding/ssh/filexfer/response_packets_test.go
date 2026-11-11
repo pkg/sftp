@@ -242,16 +242,16 @@ func TestNamePacket(t *testing.T) {
 				Filename: filename + "1",
 				Longname: longname + "1",
 				Attrs: Attributes{
-					Flags:       AttrPermissions | (1 << 8),
-					Permissions: perms | 1,
+					flags:       AttrPermissions | (1 << 8),
+					permissions: perms | 1,
 				},
 			},
 			{
 				Filename: filename + "2",
 				Longname: longname + "2",
 				Attrs: Attributes{
-					Flags:       AttrPermissions | (2 << 8),
-					Permissions: perms | 2,
+					flags:       AttrPermissions | (2 << 8),
+					permissions: perms | 2,
 				},
 			},
 		},
@@ -301,11 +301,11 @@ func TestNamePacket(t *testing.T) {
 			t.Errorf("UnmarshalBinary(): Entries[%d].Longname was %q, but expected %q", i, got, want)
 		}
 
-		if got, want := e.Attrs.Flags, AttrPermissions|((i+1)<<8); got != uint32(want) {
+		if got, want := e.Attrs.flags, AttrPermissions|((i+1)<<8); got != uint32(want) {
 			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Flags was %#x, but expected %#x", i, got, want)
 		}
 
-		if got, want := e.Attrs.Permissions, perms|FileMode(i+1); got != want {
+		if got, want := e.Attrs.permissions, perms|FileMode(i+1); got != want {
 			t.Errorf("UnmarshalBinary(): Entries[%d].Attrs.Permissions was %#v, but expected %#v", i, got, want)
 		}
 	}
@@ -364,8 +364,8 @@ func TestAttrsPacket(t *testing.T) {
 
 	p := &AttrsPacket{
 		Attrs: Attributes{
-			Flags:       AttrPermissions,
-			Permissions: perms,
+			flags:       AttrPermissions,
+			permissions: perms,
 		},
 	}
 
@@ -393,11 +393,11 @@ func TestAttrsPacket(t *testing.T) {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalBinary(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+	if p.Attrs.flags != AttrPermissions {
+		t.Errorf("UnmarshalBinary(): Attrs.Flags was %#x, but expected %#x", p.Attrs.flags, AttrPermissions)
 	}
 
-	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
+	if p.Attrs.permissions != perms {
+		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.permissions, perms)
 	}
 }

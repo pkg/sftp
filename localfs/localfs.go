@@ -156,13 +156,6 @@ func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) err
 		}
 	}
 
-	if req.Attrs.HasUserGroup() {
-		uid, gid := req.Attrs.GetUserGroup()
-		if err := os.Chown(lpath, int(uid), int(gid)); err != nil {
-			return err
-		}
-	}
-
 	if req.Attrs.HasPermissions() {
 		perms := req.Attrs.GetPermissions()
 		if err := os.Chmod(lpath, fs.FileMode(perms.Perm())); err != nil {
@@ -173,6 +166,13 @@ func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) err
 	if req.Attrs.HasACModTime() {
 		atime, mtime := req.Attrs.GetACModTime()
 		if err := os.Chtimes(lpath, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)); err != nil {
+			return err
+		}
+	}
+
+	if req.Attrs.HasUserGroup() {
+		uid, gid := req.Attrs.GetUserGroup()
+		if err := os.Chown(lpath, int(uid), int(gid)); err != nil {
 			return err
 		}
 	}
@@ -193,6 +193,21 @@ func (h *ServerHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket) err
 	}
 
 	return os.Symlink(target, link)
+}
+
+// Hardlink implements [sftp.HardlinkServerHandler].
+func (h *ServerHandler) Hardlink(_ context.Context, req *sshfx.SymlinkPacket) error {
+	target, err := h.toLocalPath(req.TargetPath)
+	if err != nil {
+		return err
+	}
+
+	link, err := h.toLocalPath(req.LinkPath)
+	if err != nil {
+		return err
+	}
+
+	return os.Link(target, link)
 }
 
 func fileInfoToAttrs(fi fs.FileInfo) *sshfx.Attributes {

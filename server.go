@@ -73,12 +73,11 @@ type FileHandler interface {
 	io.WriterAt
 
 	Name() string   // the base name of the file
- 	Handle() string // the handle to be used by the protocol to reference the file
+	Handle() string // the handle to be used by the protocol to reference the file
 	Sync() error    // called when the server receives an "fsync@openssh.com" extended packet.
 
 	// Stat returns an *sshfx.Attributes, which allows a FileHandler to give broad support of arbitrary attributes.
 	Stat() (*sshfx.Attributes, error)
-
 }
 
 // SetStatFileHandler is an extension interface for handling the SSH_FXP_FSETSTAT request packet.
@@ -191,7 +190,7 @@ type DirHandler interface {
 	io.Closer
 
 	Name() string   // the base name of the directory
- 	Handle() string // the handle to be used by the protocol to reference the directory
+	Handle() string // the handle to be used by the protocol to reference the directory
 
 	ReadDir(maxDataLen uint32) ([]*sshfx.NameEntry, error)
 }
@@ -809,7 +808,7 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 			var err error
 
-			if len(req.Attrs.Extended) > 0 {
+			if len(req.Attrs.GetExtended()) > 0 {
 				err = &sshfx.StatusPacket{
 					StatusCode:   sshfx.StatusOpUnsupported,
 					ErrorMessage: "unsupported fsetstat: extended attributes",

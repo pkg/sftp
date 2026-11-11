@@ -21,24 +21,24 @@ const (
 //
 // Defined in: https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-5
 type Attributes struct {
-	Flags uint32
+	flags uint32
 
 	// AttrSize
-	Size uint64
+	size uint64
 
 	// AttrUIDGID
-	UID uint32
-	GID uint32
+	uid uint32
+	gid uint32
 
 	// AttrPermissions
-	Permissions FileMode
+	permissions FileMode
 
 	// AttrACModTime
-	ATime uint32
-	MTime uint32
+	atime uint32
+	mtime uint32
 
 	// AttrExtended
-	Extended ExtendedAttributes
+	extended ExtendedAttributes
 }
 
 // GetSize returns the size field.
@@ -48,7 +48,7 @@ func (a *Attributes) GetSize() (size uint64) {
 		return 0
 	}
 
-	return a.Size
+	return a.size
 }
 
 // HasSize returns true if the Attributes has a size defined.
@@ -57,19 +57,19 @@ func (a *Attributes) HasSize() bool {
 		return false
 	}
 
-	return a.Flags&AttrSize != 0
+	return a.flags&AttrSize != 0
 }
 
 // SetSize sets the size field to a specific value.
 func (a *Attributes) SetSize(size uint64) {
-	a.Size = size
-	a.Flags |= AttrSize
+	a.size = size
+	a.flags |= AttrSize
 }
 
 // ClearSize clears the size field, so that it is no longer set.
 func (a *Attributes) ClearSize() {
-	a.Size = 0
-	a.Flags &^= AttrSize
+	a.size = 0
+	a.flags &^= AttrSize
 }
 
 // GetUserGroup returns the uid and gid field.
@@ -79,7 +79,7 @@ func (a *Attributes) GetUserGroup() (uid, gid uint32) {
 		return 0, 0
 	}
 
-	return a.UID, a.GID
+	return a.uid, a.gid
 }
 
 // HasUserGroup returns true if the uid and gid fields are set.
@@ -88,21 +88,21 @@ func (a *Attributes) HasUserGroup() bool {
 		return false
 	}
 
-	return a.Flags&AttrUIDGID != 0
+	return a.flags&AttrUIDGID != 0
 }
 
 // SetUserGroup sets the uid and gid fields to specific values.
 func (a *Attributes) SetUserGroup(uid, gid uint32) {
-	a.UID = uid
-	a.GID = gid
-	a.Flags |= AttrUIDGID
+	a.uid = uid
+	a.gid = gid
+	a.flags |= AttrUIDGID
 }
 
 // ClearUserGroup clears the uid and gid fields, so that they are no longer set.
 func (a *Attributes) ClearUserGroup() {
-	a.UID = 0
-	a.GID = 0
-	a.Flags &^= AttrUIDGID
+	a.uid = 0
+	a.gid = 0
+	a.flags &^= AttrUIDGID
 }
 
 // GetPermissions returns the permissions field.
@@ -112,7 +112,7 @@ func (a *Attributes) GetPermissions() FileMode {
 		return 0
 	}
 
-	return a.Permissions
+	return a.permissions
 }
 
 // HasPermissions returns true if the permissions field is set.
@@ -121,44 +121,44 @@ func (a *Attributes) HasPermissions() bool {
 		return false
 	}
 
-	return a.Flags&AttrPermissions != 0
+	return a.flags&AttrPermissions != 0
 }
 
 // SetPermissions sets the permissions field to a specific value.
 func (a *Attributes) SetPermissions(perms FileMode) {
-	a.Permissions = perms
-	a.Flags |= AttrPermissions
+	a.permissions = perms
+	a.flags |= AttrPermissions
 }
 
 // ClearPermissions clears the permissions field, so that it is no longer set.
 func (a *Attributes) ClearPermissions() {
-	a.Permissions = 0
-	a.Flags &^= AttrPermissions
+	a.permissions = 0
+	a.flags &^= AttrPermissions
 }
 
 // GetACModTime returns the atime and mtime fields.
 // It returns zeros if the fields are not set.
 func (a *Attributes) GetACModTime() (atime, mtime uint32) {
-	return a.ATime, a.MTime
+	return a.atime, a.mtime
 }
 
 // HasACModTime returns true if the atime and mtime fields are set.
 func (a *Attributes) HasACModTime() bool {
-	return a.Flags&AttrACModTime != 0
+	return a.flags&AttrACModTime != 0
 }
 
 // SetACModTime sets the atime and mtime fields to specific values.
 func (a *Attributes) SetACModTime(atime, mtime uint32) {
-	a.ATime = atime
-	a.MTime = mtime
-	a.Flags |= AttrACModTime
+	a.atime = atime
+	a.mtime = mtime
+	a.flags |= AttrACModTime
 }
 
 // ClearACModTime clears the atime and mtime fields, so that they are no longer set.
 func (a *Attributes) ClearACModTime() {
-	a.ATime = 0
-	a.MTime = 0
-	a.Flags &^= AttrACModTime
+	a.atime = 0
+	a.mtime = 0
+	a.flags &^= AttrACModTime
 }
 
 // GetExtended returns the extended field.
@@ -168,7 +168,7 @@ func (a *Attributes) GetExtended() ExtendedAttributes {
 		return nil
 	}
 
-	return a.Extended
+	return a.extended
 }
 
 // GetExtendedAsMap returns the extended field converted into a map[string]string.
@@ -179,7 +179,7 @@ func (a *Attributes) GetExtendedAsMap() map[string]string {
 		return nil
 	}
 
-	return a.Extended.AsMap()
+	return a.extended.AsMap()
 }
 
 // HasExtended returns true if the extended field is set.
@@ -188,13 +188,13 @@ func (a *Attributes) HasExtended() bool {
 		return false
 	}
 
-	return a.Flags&AttrExtended != 0
+	return a.flags&AttrExtended != 0
 }
 
 // SetExtended sets the extended field to the specific slice.
 func (a *Attributes) SetExtended(exts ExtendedAttributes) {
-	a.Extended = exts
-	a.Flags |= AttrExtended
+	a.extended = exts
+	a.flags |= AttrExtended
 }
 
 // SetExtendedFromMap sets the extended field to the specific map.
@@ -207,8 +207,8 @@ func (a *Attributes) SetExtendedFromMap(exts map[string]string) {
 
 // ClearExtended clears the extended field, so that it is no longer set.
 func (a *Attributes) ClearExtended() {
-	a.Extended = nil
-	a.Flags &^= AttrExtended
+	a.extended = nil
+	a.flags &^= AttrExtended
 }
 
 // MarshalSize returns the number of bytes the attributes would marshal into.
@@ -233,7 +233,7 @@ func (a *Attributes) MarshalSize() int {
 	}
 
 	if a.HasExtended() {
-		size += a.Extended.MarshalSize()
+		size += a.extended.MarshalSize()
 	}
 
 	return size
@@ -241,28 +241,28 @@ func (a *Attributes) MarshalSize() int {
 
 // MarshalInto marshals the attributes onto the end of the buffer.
 func (a *Attributes) MarshalInto(buf *Buffer) {
-	buf.AppendUint32(a.Flags)
+	buf.AppendUint32(a.flags)
 
 	if a.HasSize() {
-		buf.AppendUint64(a.Size)
+		buf.AppendUint64(a.size)
 	}
 
 	if a.HasUserGroup() {
-		buf.AppendUint32(a.UID)
-		buf.AppendUint32(a.GID)
+		buf.AppendUint32(a.uid)
+		buf.AppendUint32(a.gid)
 	}
 
 	if a.HasPermissions() {
-		buf.AppendUint32(uint32(a.Permissions))
+		buf.AppendUint32(uint32(a.permissions))
 	}
 
 	if a.HasACModTime() {
-		buf.AppendUint32(a.ATime)
-		buf.AppendUint32(a.MTime)
+		buf.AppendUint32(a.atime)
+		buf.AppendUint32(a.mtime)
 	}
 
 	if a.HasExtended() {
-		a.Extended.MarshalInto(buf)
+		a.extended.MarshalInto(buf)
 	}
 }
 
@@ -275,33 +275,33 @@ func (a *Attributes) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom unmarshals the attributes from the buffer.
 func (a *Attributes) UnmarshalFrom(buf *Buffer) (err error) {
-	a.Flags = buf.ConsumeUint32()
+	a.flags = buf.ConsumeUint32()
 
 	// Short-circuit dummy attributes.
-	if a.Flags == 0 {
+	if a.flags == 0 {
 		return buf.Err
 	}
 
 	if a.HasSize() {
-		a.Size = buf.ConsumeUint64()
+		a.size = buf.ConsumeUint64()
 	}
 
 	if a.HasUserGroup() {
-		a.UID = buf.ConsumeUint32()
-		a.GID = buf.ConsumeUint32()
+		a.uid = buf.ConsumeUint32()
+		a.gid = buf.ConsumeUint32()
 	}
 
 	if a.HasPermissions() {
-		a.Permissions = FileMode(buf.ConsumeUint32())
+		a.permissions = FileMode(buf.ConsumeUint32())
 	}
 
 	if a.HasACModTime() {
-		a.ATime = buf.ConsumeUint32()
-		a.MTime = buf.ConsumeUint32()
+		a.atime = buf.ConsumeUint32()
+		a.mtime = buf.ConsumeUint32()
 	}
 
 	if a.HasExtended() {
-		a.Extended.UnmarshalFrom(buf)
+		a.extended.UnmarshalFrom(buf)
 	}
 
 	return buf.Err
@@ -507,33 +507,33 @@ func (e *NameEntry) Name() string {
 
 // Size implements [fs.FileInfo].
 func (e *NameEntry) Size() int64 {
-	return int64(e.Attrs.Size)
+	return int64(e.Attrs.size)
 }
 
 // Mode implements [fs.FileInfo].
 func (e *NameEntry) Mode() fs.FileMode {
-	return ToGoFileMode(e.Attrs.Permissions)
+	return ToGoFileMode(e.Attrs.permissions)
 }
 
 // ModTime implements [fs.FileInfo].
 func (e *NameEntry) ModTime() time.Time {
-	return time.Unix(int64(e.Attrs.MTime), 0)
+	return time.Unix(int64(e.Attrs.mtime), 0)
 }
 
 // IsDir implements [fs.FileInfo].
 func (e *NameEntry) IsDir() bool {
-	return e.Attrs.Permissions.IsDir()
+	return e.Attrs.permissions.IsDir()
 }
 
 // Sys implements [fs.FileInfo].
-// It returns a pointer of type *Attribute to the Attr field of this name entry.
+// It returns a pointer of type *Attributes to the Attr field of this name entry.
 func (e *NameEntry) Sys() any {
 	return &e.Attrs
 }
 
 // Type implements [fs.DirEntry].
 func (e *NameEntry) Type() fs.FileMode {
-	return ToGoFileMode(e.Attrs.Permissions).Type()
+	return ToGoFileMode(e.Attrs.permissions).Type()
 }
 
 // Info implements [fs.DirEntry].

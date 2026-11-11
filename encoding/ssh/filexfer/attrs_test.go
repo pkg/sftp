@@ -24,13 +24,13 @@ func TestAttributes(t *testing.T) {
 	}
 
 	attr := &Attributes{
-		Size:        size,
-		UID:         uid,
-		GID:         gid,
-		Permissions: perms,
-		ATime:       atime,
-		MTime:       mtime,
-		Extended: []ExtendedAttribute{
+		size:        size,
+		uid:         uid,
+		gid:         gid,
+		permissions: perms,
+		atime:       atime,
+		mtime:       mtime,
+		extended: []ExtendedAttribute{
 			extAttr,
 		},
 	}
@@ -115,7 +115,7 @@ func TestAttributes(t *testing.T) {
 		attr := *attr
 
 		t.Run(tt.name, func(t *testing.T) {
-			attr.Flags = tt.flags
+			attr.flags = tt.flags
 
 			expectOnlyOneAlloc(t, func() {
 				_, _ = attr.MarshalBinary()
@@ -136,40 +136,40 @@ func TestAttributes(t *testing.T) {
 				t.Fatal("unexpected error:", err)
 			}
 
-			if attr.Flags != tt.flags {
-				t.Errorf("UnmarshalBinary(): Flags was %x, but wanted %x", attr.Flags, tt.flags)
+			if attr.flags != tt.flags {
+				t.Errorf("UnmarshalBinary(): Flags was %x, but wanted %x", attr.flags, tt.flags)
 			}
 
-			if attr.Flags&AttrSize != 0 && attr.Size != size {
-				t.Errorf("UnmarshalBinary(): Size was %x, but wanted %x", attr.Size, size)
+			if attr.flags&AttrSize != 0 && attr.size != size {
+				t.Errorf("UnmarshalBinary(): Size was %x, but wanted %x", attr.size, size)
 			}
 
-			if attr.Flags&AttrUIDGID != 0 {
-				if attr.UID != uid {
-					t.Errorf("UnmarshalBinary(): UID was %x, but wanted %x", attr.UID, uid)
+			if attr.flags&AttrUIDGID != 0 {
+				if attr.uid != uid {
+					t.Errorf("UnmarshalBinary(): UID was %x, but wanted %x", attr.uid, uid)
 				}
 
-				if attr.GID != gid {
-					t.Errorf("UnmarshalBinary(): GID was %x, but wanted %x", attr.GID, gid)
-				}
-			}
-
-			if attr.Flags&AttrPermissions != 0 && attr.Permissions != perms {
-				t.Errorf("UnmarshalBinary(): Permissions was %#v, but wanted %#v", attr.Permissions, perms)
-			}
-
-			if attr.Flags&AttrACModTime != 0 {
-				if attr.ATime != atime {
-					t.Errorf("UnmarshalBinary(): ATime was %x, but wanted %x", attr.ATime, atime)
-				}
-
-				if attr.MTime != mtime {
-					t.Errorf("UnmarshalBinary(): MTime was %x, but wanted %x", attr.MTime, mtime)
+				if attr.gid != gid {
+					t.Errorf("UnmarshalBinary(): GID was %x, but wanted %x", attr.gid, gid)
 				}
 			}
 
-			if attr.Flags&AttrExtended != 0 {
-				extAttrs := attr.Extended
+			if attr.flags&AttrPermissions != 0 && attr.permissions != perms {
+				t.Errorf("UnmarshalBinary(): Permissions was %#v, but wanted %#v", attr.permissions, perms)
+			}
+
+			if attr.flags&AttrACModTime != 0 {
+				if attr.atime != atime {
+					t.Errorf("UnmarshalBinary(): ATime was %x, but wanted %x", attr.atime, atime)
+				}
+
+				if attr.mtime != mtime {
+					t.Errorf("UnmarshalBinary(): MTime was %x, but wanted %x", attr.mtime, mtime)
+				}
+			}
+
+			if attr.flags&AttrExtended != 0 {
+				extAttrs := attr.extended
 
 				if count := len(extAttrs); count != 1 {
 					t.Fatalf("UnmarshalBinary(): len(ExtendedAttributes) was %d, but wanted %d", count, 1)
@@ -194,8 +194,8 @@ func TestNameEntry(t *testing.T) {
 		Filename: filename,
 		Longname: longname,
 		Attrs: Attributes{
-			Flags:       AttrPermissions,
-			Permissions: perms,
+			flags:       AttrPermissions,
+			permissions: perms,
 		},
 	}
 
@@ -233,11 +233,11 @@ func TestNameEntry(t *testing.T) {
 		t.Errorf("UnmarhsalFrom(): Longname was %q, but expected %q", e.Longname, longname)
 	}
 
-	if e.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalBinary(): Attrs.Flag was %#x, but expected %#x", e.Attrs.Flags, AttrPermissions)
+	if e.Attrs.flags != AttrPermissions {
+		t.Errorf("UnmarshalBinary(): Attrs.Flag was %#x, but expected %#x", e.Attrs.flags, AttrPermissions)
 	}
 
-	if e.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalBinary(): Attrs.Permissions was %#v, but expected %#v", e.Attrs.Permissions, perms)
+	if e.Attrs.permissions != perms {
+		t.Errorf("UnmarshalBinary(): Attrs.permissions was %#v, but expected %#v", e.Attrs.permissions, perms)
 	}
 }

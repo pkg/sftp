@@ -83,7 +83,7 @@ func newExtendedPacket(extension string) ExtendedData {
 	return new(Buffer)
 }
 
-// ExtendedPacket defines the SSH_FXP_CLOSE packet.
+// ExtendedPacket defines the SSH_FXP_EXTENDED packet.
 type ExtendedPacket struct {
 	ExtendedRequest string
 

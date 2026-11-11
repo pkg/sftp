@@ -18,8 +18,8 @@ func TestOpenPacket(t *testing.T) {
 		Filename: "/foo",
 		PFlags:   FlagRead,
 		Attrs: Attributes{
-			Flags:       AttrPermissions,
-			Permissions: perms,
+			flags:       AttrPermissions,
+			permissions: perms,
 		},
 	}
 
@@ -57,12 +57,12 @@ func TestOpenPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): PFlags was %#x, but expected %#x", p.PFlags, FlagRead)
 	}
 
-	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+	if p.Attrs.flags != AttrPermissions {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.flags, AttrPermissions)
 	}
 
-	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
+	if p.Attrs.permissions != perms {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.permissions, perms)
 	}
 }
 

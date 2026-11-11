@@ -20,14 +20,14 @@ func packetBody(tb testing.TB, p PacketMarshaller) []byte {
 }
 
 var fuzzAttrs = Attributes{
-	Flags:       AttrSize | AttrUIDGID | AttrPermissions | AttrACModTime | AttrExtended,
-	Size:        1 << 40,
-	UID:         1000,
-	GID:         100,
-	Permissions: ModeRegular | 0o644,
-	ATime:       1,
-	MTime:       2,
-	Extended:    []ExtendedAttribute{{Type: "foo", Data: "bar"}},
+	flags:       AttrSize | AttrUIDGID | AttrPermissions | AttrACModTime | AttrExtended,
+	size:        1 << 40,
+	uid:         1000,
+	gid:         100,
+	permissions: ModeRegular | 0o644,
+	atime:       1,
+	mtime:       2,
+	extended:    []ExtendedAttribute{{Type: "foo", Data: "bar"}},
 }
 
 // FuzzRequestPacket decodes request packets the way the server does,

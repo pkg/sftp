@@ -30,13 +30,6 @@ func (h *ServerHandler) LSetStat(_ context.Context, req *openssh.LSetStatExtende
 		}
 	}
 
-	if req.Attrs.HasUserGroup() {
-		uid, gid := req.Attrs.GetUserGroup()
-		if err := os.Lchown(lpath, int(uid), int(gid)); err != nil {
-			return err
-		}
-	}
-
 	if req.Attrs.HasPermissions() {
 		perms := req.Attrs.GetPermissions()
 		if err := unix.Fchmodat(unix.AT_FDCWD, lpath, uint32(perms.Perm()), unix.AT_SYMLINK_NOFOLLOW); err != nil {
@@ -52,6 +45,13 @@ func (h *ServerHandler) LSetStat(_ context.Context, req *openssh.LSetStatExtende
 		}
 		if err := unix.UtimesNanoAt(unix.AT_FDCWD, lpath, ts, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 			return &fs.PathError{Op: "lchtimes", Path: lpath, Err: err}
+		}
+	}
+
+	if req.Attrs.HasUserGroup() {
+		uid, gid := req.Attrs.GetUserGroup()
+		if err := os.Lchown(lpath, int(uid), int(gid)); err != nil {
+			return err
 		}
 	}
 

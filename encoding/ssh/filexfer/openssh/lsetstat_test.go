@@ -20,12 +20,12 @@ func TestLSetStatExtendedPacket(t *testing.T) {
 		perm sshfx.FileMode = 0x87654321
 	)
 
+	var attrs sshfx.Attributes
+	attrs.SetPermissions(perm)
+
 	ep := &LSetStatExtendedPacket{
-		Path: path,
-		Attrs: sshfx.Attributes{
-			Flags:       sshfx.AttrPermissions,
-			Permissions: perm,
-		},
+		Path:  path,
+		Attrs: attrs,
 	}
 
 	data, err := sshfx.ComposePacket(ep.MarshalPacket(id, nil))
@@ -67,11 +67,11 @@ func TestLSetStatExtendedPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", ep.Path, path)
 	}
 
-	if ep.Attrs.Flags != sshfx.AttrPermissions {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", ep.Attrs.Flags, sshfx.AttrPermissions)
+	if !ep.Attrs.HasPermissions() {
+		t.Errorf("UnmarshalPacketBody(): Attrs.HasPermission should be true")
 	}
 
-	if ep.Attrs.Permissions != perm {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", ep.Attrs.Permissions, perm)
+	if perms := ep.Attrs.GetPermissions(); perms != perm {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#x, but expected %#x", perms, perm)
 	}
 }

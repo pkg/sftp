@@ -319,7 +319,7 @@ func (p *RequestPacket) UnmarshalBinary(data []byte) error {
 // while still allowing reception of occasional large packets.
 //
 // The Request field may alias the passed in byte slice,
-// so the byte slice passed in should not be reused before RawPacket.Reset().
+// so the byte slice passed in should not be reused before RequestPacket.Reset().
 func (p *RequestPacket) ReadSSHFXPFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
 	b, err := readPacket(r, b, maxPacketLength)
 	if err != nil {

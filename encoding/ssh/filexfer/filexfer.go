@@ -28,7 +28,7 @@ type PacketMarshaller interface {
 //
 // InitPacket, and VersionPacket are not generic SFTP packets, and instead implement (Un)MarshalBinary.
 //
-// ExtendedPacket types should not iplement this interface,
+// ExtendedPacket types should not implement this interface,
 // since decoding the whole packet body of an ExtendedPacket can only be done dependent on the ExtendedRequest field.
 type Packet interface {
 	PacketMarshaller

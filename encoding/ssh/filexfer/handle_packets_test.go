@@ -206,8 +206,8 @@ func TestFSetStatPacket(t *testing.T) {
 	p := &FSetStatPacket{
 		Handle: "somehandle",
 		Attrs: Attributes{
-			Flags:       AttrPermissions,
-			Permissions: perms,
+			flags:       AttrPermissions,
+			permissions: perms,
 		},
 	}
 

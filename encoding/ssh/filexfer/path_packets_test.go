@@ -57,8 +57,8 @@ func TestSetStatPacket(t *testing.T) {
 	p := &SetStatPacket{
 		Path: "/foo",
 		Attrs: Attributes{
-			Flags:       AttrPermissions,
-			Permissions: perms,
+			flags:       AttrPermissions,
+			permissions: perms,
 		},
 	}
 
@@ -91,12 +91,12 @@ func TestSetStatPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 
-	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+	if p.Attrs.flags != AttrPermissions {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.flags, AttrPermissions)
 	}
 
-	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
+	if p.Attrs.permissions != perms {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.permissions, perms)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestMkdirPacket(t *testing.T) {
 	p := &MkdirPacket{
 		Path: "/foo",
 		Attrs: Attributes{
-			Flags:       AttrPermissions,
-			Permissions: perms,
+			flags:       AttrPermissions,
+			permissions: perms,
 		},
 	}
 
@@ -186,12 +186,12 @@ func TestMkdirPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 
-	if p.Attrs.Flags != AttrPermissions {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.Flags, AttrPermissions)
+	if p.Attrs.flags != AttrPermissions {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Flags was %#x, but expected %#x", p.Attrs.flags, AttrPermissions)
 	}
 
-	if p.Attrs.Permissions != perms {
-		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
+	if p.Attrs.permissions != perms {
+		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.permissions, perms)
 	}
 }
 
