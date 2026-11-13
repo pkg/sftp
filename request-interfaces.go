@@ -20,7 +20,7 @@ type WriterAtReaderAt interface {
 // The request.Method attribute is initially the most important one as it
 // determines which Handler gets called.
 
-// FileReader should return an io.ReaderAt for the filepath
+// FileReader should return an io.ReaderAt for the filepath.
 // Note in cases of an error, the error text will be sent to the client.
 // Called for Methods: Get
 type FileReader interface {
@@ -48,7 +48,7 @@ type OpenFileWriter interface {
 	OpenFile(*Request) (WriterAtReaderAt, error)
 }
 
-// FileCmder should return an error
+// FileCmder should return an error.
 // Note in cases of an error, the error text will be sent to the client.
 // Called for Methods: Setstat, Rename, Rmdir, Mkdir, Link, Symlink, Remove
 type FileCmder interface {
@@ -71,7 +71,7 @@ type StatVFSFileCmder interface {
 	StatVFS(*Request) (*StatVFS, error)
 }
 
-// FileLister should return an object that fulfils the ListerAt interface
+// FileLister should return an object that fulfils the ListerAt interface.
 // Note in cases of an error, the error text will be sent to the client.
 // Called for Methods: List, Stat, Readlink
 //
