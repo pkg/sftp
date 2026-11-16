@@ -496,6 +496,28 @@ func (p *sshFxpOpenPacket) hasPflags(flags ...uint32) bool {
 	return true
 }
 
+// openfileCreated opens the file like openfile,
+// and when WithServerChown is in use it also reports whether the open created the file.
+func (svr *Server) openfileCreated(path string, flag int, mode fs.FileMode) (f file, created bool, err error) {
+	if svr.chownUID <= 0 || svr.chownGID <= 0 || flag&os.O_CREATE == 0 {
+		f, err = svr.openfile(path, flag, mode)
+		return f, false, err
+	}
+
+	// Create the file exclusively first, so that we know whether it is new.
+	f, err = svr.openfile(path, flag|os.O_EXCL, mode)
+	if err == nil {
+		return f, true, nil
+	}
+	if flag&os.O_EXCL != 0 || !errors.Is(err, os.ErrExist) {
+		return nil, false, err
+	}
+
+	// The path already exists, so open it as requested.
+	f, err = svr.openfile(path, flag, mode)
+	return f, false, err
+}
+
 func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 	var osFlags int
 	if p.hasPflags(sshFxfRead, sshFxfWrite) {
@@ -533,13 +555,15 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		mode = fs.FileMode() & os.ModePerm
 	}
 
-	f, err := svr.openfile(svr.toLocalPath(p.Path), osFlags, mode)
+	f, created, err := svr.openfileCreated(svr.toLocalPath(p.Path), osFlags, mode)
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
-	if svr.chownUID > 0 && svr.chownGID > 0 {
-		err := f.Chown(svr.chownUID, svr.chownGID)
-		if err != nil {
+	// Only a file created by this open is chowned.
+	// Chowning an existing file would change its ctime (and possibly its owner) even on a read.
+	if created {
+		if err := f.Chown(svr.chownUID, svr.chownGID); err != nil {
+			f.Close()
 			return statusFromError(p.ID, err)
 		}
 	}
