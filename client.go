@@ -1512,6 +1512,78 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 	}
 }
 
+// copyDataTo copies the rest of f, from its current offset, to dst at its current offset,
+// using the "copy-data" extension so the data never passes through the client.
+//
+// It reports ok == false, having sent nothing, when the copy cannot be done this way:
+// dst is f, dst belongs to a different client, f is not a regular file,
+// or the server does not advertise "copy-data".
+// The caller must then fall back to reading and writing the data.
+//
+// f.mu must be held by the caller.
+func (f *File) copyDataTo(dst *File) (written int64, ok bool, err error) {
+	if dst == f || dst.c != f.c {
+		return 0, false, nil
+	}
+	if data, ok := f.c.HasExtension("copy-data"); !ok || data != "1" {
+		return 0, false, nil
+	}
+
+	dst.mu.Lock()
+	defer dst.mu.Unlock()
+
+	if dst.handle == "" {
+		return 0, true, os.ErrClosed
+	}
+
+	var fileStat *FileStat
+	if f.c.useFstat {
+		fileStat, err = f.c.fstat(f.handle)
+	} else {
+		fileStat, err = f.c.stat(f.path)
+	}
+	if err != nil {
+		return 0, true, err
+	}
+	if !isRegular(fileStat.Mode) {
+		return 0, false, nil
+	}
+
+	// copy-data treats a length of zero as "until EOF", which would leave us not knowing how much was copied.
+	// So we always send the exact length.
+	if fileStat.Size <= uint64(f.offset) {
+		return 0, true, nil
+	}
+	length := fileStat.Size - uint64(f.offset)
+
+	id := f.c.nextID()
+	typ, data, err := f.c.sendPacket(context.Background(), nil, &sshFxpCopyDataPacket{
+		ID:             id,
+		ReadFromHandle: f.handle,
+		ReadFromOffset: uint64(f.offset),
+		ReadDataLength: length,
+		WriteToHandle:  dst.handle,
+		WriteToOffset:  uint64(dst.offset),
+	})
+	if err != nil {
+		return 0, true, err
+	}
+
+	switch typ {
+	case sshFxpStatus:
+		if err := normaliseError(unmarshalStatus(id, data)); err != nil {
+			return 0, true, err
+		}
+	default:
+		return 0, true, unimplementedPacketErr(typ)
+	}
+
+	f.offset += int64(length)
+	dst.offset += int64(length)
+
+	return int64(length), true, nil
+}
+
 // WriteTo writes the file to the given Writer.
 // The return value is the number of bytes written.
 // Any error encountered during the write is also returned.
@@ -1519,12 +1591,23 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 // This method is preferred over calling Read multiple times
 // to maximise throughput for transferring the entire file,
 // especially over high latency links.
+//
+// If w is a *File opened by the same Client, and the server supports the
+// "copy-data" extension (OpenSSH 9.0 and later), the server copies the data
+// directly from f's current offset to w's current offset, without it passing
+// through the client. Both offsets are advanced by the number of bytes copied.
 func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if f.handle == "" {
 		return 0, os.ErrClosed
+	}
+
+	if dst, ok := w.(*File); ok {
+		if written, ok, err := f.copyDataTo(dst); ok {
+			return written, err
+		}
 	}
 
 	if f.c.disableConcurrentReads {
