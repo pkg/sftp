@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -1087,4 +1088,30 @@ func TestCleanPath(t *testing.T) {
 	assert.Equal(t, "/a/b/c",
 		cleanPath(bslash+"a"+bslash+bslash+"b"+bslash+bslash+"c"+bslash))
 	assert.Equal(t, "/C:/a", cleanPath("C:"+bslash+"a"))
+}
+
+// A client can pipeline a READ on the handle it is about to be given, without
+// waiting for the OPEN/OPENDIR reply. That READ must not see the Request before
+// open/opendir has finished setting it up. Run with -race.
+func TestRequestServerPipelinedOpenRead(t *testing.T) {
+	cliConn, svrConn := net.Pipe()
+	server := NewRequestServer(svrConn, InMemHandler())
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Serve() }()
+	go io.Copy(io.Discard, cliConn)
+
+	require.NoError(t, sendPacket(cliConn, &sshFxInitPacket{Version: sftpProtocolVersion}))
+	for i := uint32(1); i <= 100; i++ {
+		var err error
+		if i%2 == 0 {
+			err = sendPacket(cliConn, &sshFxpOpendirPacket{ID: 2 * i, Path: "/"})
+		} else {
+			err = sendPacket(cliConn, &sshFxpOpenPacket{ID: 2 * i, Path: "/foo", Pflags: sshFxfRead | sshFxfWrite | sshFxfCreat})
+		}
+		require.NoError(t, err)
+		require.NoError(t, sendPacket(cliConn, &sshFxpReadPacket{ID: 2*i + 1, Handle: strconv.Itoa(int(i)), Len: 16}))
+	}
+
+	cliConn.Close()
+	<-serveDone
 }
