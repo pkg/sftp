@@ -1512,76 +1512,94 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 	}
 }
 
-// copyDataTo copies the rest of f, from its current offset, to dst at its current offset,
-// using the "copy-data" extension so the data never passes through the client.
+// WriteToLimited asks the server to copy n bytes from f, starting at f's current offset,
+// to dst, starting at dst's current offset, using the "copy-data" extension,
+// so the data does not pass through the client.
+// On success, the offsets of both f and dst are advanced by n.
 //
-// It reports ok == false, having sent nothing, when the copy cannot be done this way:
-// dst is f, dst belongs to a different client, f is not a regular file,
-// or the server does not advertise "copy-data".
-// The caller must then fall back to reading and writing the data.
+// The server only reports success or failure, not how many bytes it copied.
+// If f is shorter than expected, for example because it is truncated while the copy runs,
+// the server may stop at EOF and still report success.
+// Callers that need to be sure should check the size of dst afterwards.
 //
-// f.mu must be held by the caller.
-func (f *File) copyDataTo(dst *File) (written int64, ok bool, err error) {
-	if dst == f || dst.c != f.c {
-		return 0, false, nil
+// f and dst must be different files opened by the same Client.
+// If the server does not advertise "copy-data", WriteToLimited sends nothing
+// and returns a *StatusError with the code SSH_FX_OP_UNSUPPORTED.
+func (f *File) WriteToLimited(dst *File, n int64) error {
+	if dst == nil || n < 0 {
+		return os.ErrInvalid
+	}
+	if dst == f {
+		return errors.New("sftp: WriteToLimited: source and destination are the same file")
+	}
+	if dst.c != f.c {
+		return errors.New("sftp: WriteToLimited: source and destination belong to different clients")
+	}
+	if n == 0 {
+		// A length of zero means "until EOF" to copy-data, so never send it.
+		return nil
 	}
 	if data, ok := f.c.HasExtension("copy-data"); !ok || data != "1" {
-		return 0, false, nil
+		return &StatusError{
+			Code: sshFxOPUnsupported,
+			msg:  "copy-data not supported",
+		}
 	}
 
-	dst.mu.Lock()
-	defer dst.mu.Unlock()
+	// Take the two locks in a fixed order (by handle) so that two concurrent calls
+	// going in opposite directions between the same files cannot deadlock.
+	f.mu.RLock()
+	srcHandle := f.handle
+	f.mu.RUnlock()
 
-	if dst.handle == "" {
-		return 0, true, os.ErrClosed
-	}
+	dst.mu.RLock()
+	dstHandle := dst.handle
+	dst.mu.RUnlock()
 
-	var fileStat *FileStat
-	if f.c.useFstat {
-		fileStat, err = f.c.fstat(f.handle)
-	} else {
-		fileStat, err = f.c.stat(f.path)
-	}
-	if err != nil {
-		return 0, true, err
-	}
-	if !isRegular(fileStat.Mode) {
-		return 0, false, nil
+	if srcHandle == "" || dstHandle == "" {
+		return os.ErrClosed
 	}
 
-	// copy-data treats a length of zero as "until EOF", which would leave us not knowing how much was copied.
-	// So we always send the exact length.
-	if fileStat.Size <= uint64(f.offset) {
-		return 0, true, nil
+	first, second := f, dst
+	if dstHandle < srcHandle {
+		first, second = dst, f
 	}
-	length := fileStat.Size - uint64(f.offset)
+	first.mu.Lock()
+	defer first.mu.Unlock()
+	second.mu.Lock()
+	defer second.mu.Unlock()
+
+	// A file may have been closed while we were not holding its lock.
+	if f.handle != srcHandle || dst.handle != dstHandle {
+		return os.ErrClosed
+	}
 
 	id := f.c.nextID()
 	typ, data, err := f.c.sendPacket(context.Background(), nil, &sshFxpCopyDataPacket{
 		ID:             id,
 		ReadFromHandle: f.handle,
 		ReadFromOffset: uint64(f.offset),
-		ReadDataLength: length,
+		ReadDataLength: uint64(n),
 		WriteToHandle:  dst.handle,
 		WriteToOffset:  uint64(dst.offset),
 	})
 	if err != nil {
-		return 0, true, err
+		return err
 	}
 
 	switch typ {
 	case sshFxpStatus:
 		if err := normaliseError(unmarshalStatus(id, data)); err != nil {
-			return 0, true, err
+			return err
 		}
 	default:
-		return 0, true, unimplementedPacketErr(typ)
+		return unimplementedPacketErr(typ)
 	}
 
-	f.offset += int64(length)
-	dst.offset += int64(length)
+	f.offset += n
+	dst.offset += n
 
-	return int64(length), true, nil
+	return nil
 }
 
 // WriteTo writes the file to the given Writer.
@@ -1591,23 +1609,12 @@ func (f *File) copyDataTo(dst *File) (written int64, ok bool, err error) {
 // This method is preferred over calling Read multiple times
 // to maximise throughput for transferring the entire file,
 // especially over high latency links.
-//
-// If w is a *File opened by the same Client, and the server supports the
-// "copy-data" extension (OpenSSH 9.0 and later), the server copies the data
-// directly from f's current offset to w's current offset, without it passing
-// through the client. Both offsets are advanced by the number of bytes copied.
 func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if f.handle == "" {
 		return 0, os.ErrClosed
-	}
-
-	if dst, ok := w.(*File); ok {
-		if written, ok, err := f.copyDataTo(dst); ok {
-			return written, err
-		}
 	}
 
 	if f.c.disableConcurrentReads {

@@ -931,7 +931,7 @@ func TestClientLink(t *testing.T) {
 	}
 }
 
-func TestClientCopyData(t *testing.T) {
+func TestClientWriteToLimited(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -940,7 +940,7 @@ func TestClientCopyData(t *testing.T) {
 		t.Skip("server does not support copy-data")
 	}
 
-	dir, err := ioutil.TempDir("", "sftptest-copydata")
+	dir, err := ioutil.TempDir("", "sftptest-writetolimited")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
@@ -950,7 +950,7 @@ func TestClientCopyData(t *testing.T) {
 	srcPath := filepath.Join(dir, "src")
 	require.NoError(t, ioutil.WriteFile(srcPath, data, 0o600))
 
-	t.Run("io.Copy", func(t *testing.T) {
+	t.Run("whole file", func(t *testing.T) {
 		src, err := sftp.Open(srcPath)
 		require.NoError(t, err)
 		defer src.Close()
@@ -959,31 +959,12 @@ func TestClientCopyData(t *testing.T) {
 		dst, err := sftp.Create(dstPath)
 		require.NoError(t, err)
 
-		n, err := io.Copy(dst, src)
-		require.NoError(t, err)
-		assert.Equal(t, int64(len(data)), n)
+		require.NoError(t, src.WriteToLimited(dst, int64(len(data))))
 		require.NoError(t, dst.Close())
 
 		got, err := ioutil.ReadFile(dstPath)
 		require.NoError(t, err)
 		assert.True(t, bytes.Equal(data, got), "copied data does not match source")
-	})
-
-	t.Run("uses copy-data", func(t *testing.T) {
-		src, err := sftp.Open(srcPath)
-		require.NoError(t, err)
-		defer src.Close()
-
-		dst, err := sftp.Create(filepath.Join(dir, "direct"))
-		require.NoError(t, err)
-		defer dst.Close()
-
-		src.mu.Lock()
-		n, ok, err := src.copyDataTo(dst)
-		src.mu.Unlock()
-		require.NoError(t, err)
-		assert.True(t, ok, "copy-data was not used")
-		assert.Equal(t, int64(len(data)), n)
 	})
 
 	t.Run("offsets", func(t *testing.T) {
@@ -995,44 +976,56 @@ func TestClientCopyData(t *testing.T) {
 		dst, err := sftp.Create(dstPath)
 		require.NoError(t, err)
 
-		const srcOffset, dstOffset = 1000, 10
+		const srcOffset, length, dstOffset = 1000, 70000, 10
 		_, err = src.Seek(srcOffset, io.SeekStart)
 		require.NoError(t, err)
 		_, err = dst.Seek(dstOffset, io.SeekStart)
 		require.NoError(t, err)
 
-		n, err := src.WriteTo(dst)
-		require.NoError(t, err)
-		assert.Equal(t, int64(len(data)-srcOffset), n)
+		require.NoError(t, src.WriteToLimited(dst, length))
 
 		pos, err := src.Seek(0, io.SeekCurrent)
 		require.NoError(t, err)
-		assert.Equal(t, int64(len(data)), pos)
+		assert.Equal(t, int64(srcOffset+length), pos)
 		pos, err = dst.Seek(0, io.SeekCurrent)
 		require.NoError(t, err)
-		assert.Equal(t, int64(dstOffset+len(data)-srcOffset), pos)
+		assert.Equal(t, int64(dstOffset+length), pos)
 		require.NoError(t, dst.Close())
 
 		got, err := ioutil.ReadFile(dstPath)
 		require.NoError(t, err)
-		require.Len(t, got, dstOffset+len(data)-srcOffset)
-		assert.True(t, bytes.Equal(data[srcOffset:], got[dstOffset:]), "copied range does not match source")
+		require.Len(t, got, dstOffset+length)
+		assert.True(t, bytes.Equal(data[srcOffset:srcOffset+length], got[dstOffset:]), "copied range does not match source")
 	})
 
-	t.Run("at EOF", func(t *testing.T) {
+	t.Run("zero length", func(t *testing.T) {
 		src, err := sftp.Open(srcPath)
 		require.NoError(t, err)
 		defer src.Close()
-		_, err = src.Seek(0, io.SeekEnd)
+
+		dstPath := filepath.Join(dir, "zero")
+		dst, err := sftp.Create(dstPath)
 		require.NoError(t, err)
 
-		dst, err := sftp.Create(filepath.Join(dir, "eof"))
+		require.NoError(t, src.WriteToLimited(dst, 0))
+		require.NoError(t, dst.Close())
+
+		st, err := os.Stat(dstPath)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), st.Size(), "zero length must not copy until EOF")
+	})
+
+	t.Run("invalid arguments", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+		dst, err := sftp.Create(filepath.Join(dir, "invalid"))
 		require.NoError(t, err)
 		defer dst.Close()
 
-		n, err := src.WriteTo(dst)
-		require.NoError(t, err)
-		assert.Equal(t, int64(0), n)
+		assert.ErrorIs(t, src.WriteToLimited(dst, -1), os.ErrInvalid)
+		assert.ErrorIs(t, src.WriteToLimited(nil, 1), os.ErrInvalid)
+		assert.Error(t, src.WriteToLimited(src, 1))
 	})
 
 	t.Run("closed destination", func(t *testing.T) {
@@ -1044,12 +1037,48 @@ func TestClientCopyData(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, dst.Close())
 
-		_, err = src.WriteTo(dst)
-		assert.ErrorIs(t, err, os.ErrClosed)
+		assert.ErrorIs(t, src.WriteToLimited(dst, 1), os.ErrClosed)
+	})
+
+	t.Run("opposite directions concurrently", func(t *testing.T) {
+		a, err := sftp.OpenFile(filepath.Join(dir, "a"), os.O_RDWR|os.O_CREATE)
+		require.NoError(t, err)
+		defer a.Close()
+		b, err := sftp.OpenFile(filepath.Join(dir, "b"), os.O_RDWR|os.O_CREATE)
+		require.NoError(t, err)
+		defer b.Close()
+		_, err = a.Write(data[:4096])
+		require.NoError(t, err)
+		_, err = b.Write(data[:4096])
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		for i := 0; i < 50; i++ {
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				_ = a.WriteToLimited(b, 1)
+			}()
+			go func() {
+				defer wg.Done()
+				_ = b.WriteToLimited(a, 1)
+			}()
+		}
+
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("WriteToLimited deadlocked")
+		}
 	})
 }
 
-func TestClientCopyDataUnsupported(t *testing.T) {
+func TestClientWriteToLimitedUnsupported(t *testing.T) {
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
 	defer sftp.Close()
@@ -1058,29 +1087,21 @@ func TestClientCopyDataUnsupported(t *testing.T) {
 		t.Skip("server supports copy-data")
 	}
 
-	dir, err := ioutil.TempDir("", "sftptest-copydata-unsupported")
+	dir, err := ioutil.TempDir("", "sftptest-writetolimited-unsupported")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	data := []byte("copy-data fallback")
-	srcPath := filepath.Join(dir, "src")
-	require.NoError(t, ioutil.WriteFile(srcPath, data, 0o600))
-
-	src, err := sftp.Open(srcPath)
+	src, err := sftp.Create(filepath.Join(dir, "src"))
 	require.NoError(t, err)
 	defer src.Close()
-	dstPath := filepath.Join(dir, "dst")
-	dst, err := sftp.Create(dstPath)
+	dst, err := sftp.Create(filepath.Join(dir, "dst"))
 	require.NoError(t, err)
+	defer dst.Close()
 
-	n, err := io.Copy(dst, src)
-	require.NoError(t, err)
-	assert.Equal(t, int64(len(data)), n)
-	require.NoError(t, dst.Close())
-
-	got, err := ioutil.ReadFile(dstPath)
-	require.NoError(t, err)
-	assert.Equal(t, data, got)
+	err = src.WriteToLimited(dst, 1)
+	var statusErr *StatusError
+	require.ErrorAs(t, err, &statusErr)
+	assert.Equal(t, ErrSSHFxOpUnsupported, statusErr.FxCode())
 }
 
 func TestClientSymlink(t *testing.T) {
