@@ -1025,7 +1025,23 @@ func TestClientWriteToLimited(t *testing.T) {
 
 		assert.ErrorIs(t, src.WriteToLimited(dst, -1), os.ErrInvalid)
 		assert.ErrorIs(t, src.WriteToLimited(nil, 1), os.ErrInvalid)
-		assert.Error(t, src.WriteToLimited(src, 1))
+	})
+
+	t.Run("same file", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+
+		// OpenSSH refuses a copy within one handle; the point is that the client
+		// passes the request to the server and does not deadlock on its own lock.
+		done := make(chan error, 1)
+		go func() { done <- src.WriteToLimited(src, 1) }()
+		select {
+		case err := <-done:
+			assert.Error(t, err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("WriteToLimited deadlocked on the same file")
+		}
 	})
 
 	t.Run("closed destination", func(t *testing.T) {
@@ -1053,7 +1069,7 @@ func TestClientWriteToLimited(t *testing.T) {
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
@@ -1083,6 +1099,8 @@ func TestClientWriteToLimitedUnsupported(t *testing.T) {
 	defer cmd.Wait()
 	defer sftp.Close()
 
+	// This only checks the client side when a server does not advertise copy-data.
+	// It is skipped against any server that does, including the Go server if it adds support.
 	if _, ok := sftp.HasExtension("copy-data"); ok {
 		t.Skip("server supports copy-data")
 	}
