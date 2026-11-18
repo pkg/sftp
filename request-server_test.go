@@ -1101,15 +1101,14 @@ func TestRequestServerPipelinedOpenRead(t *testing.T) {
 	go io.Copy(io.Discard, cliConn)
 
 	require.NoError(t, sendPacket(cliConn, &sshFxInitPacket{Version: sftpProtocolVersion}))
-	for i := uint32(1); i <= 100; i++ {
-		var err error
+	for i := range uint32(100) {
 		if i%2 == 0 {
-			err = sendPacket(cliConn, &sshFxpOpendirPacket{ID: 2 * i, Path: "/"})
+			require.NoError(t, sendPacket(cliConn, &sshFxpOpendirPacket{ID: 2 * i, Path: "/"}))
 		} else {
-			err = sendPacket(cliConn, &sshFxpOpenPacket{ID: 2 * i, Path: "/foo", Pflags: sshFxfRead | sshFxfWrite | sshFxfCreat})
+			require.NoError(t, sendPacket(cliConn, &sshFxpOpenPacket{ID: 2 * i, Path: "/foo", Pflags: sshFxfRead | sshFxfWrite | sshFxfCreat}))
 		}
-		require.NoError(t, err)
-		require.NoError(t, sendPacket(cliConn, &sshFxpReadPacket{ID: 2*i + 1, Handle: strconv.Itoa(int(i)), Len: 16}))
+		// handles start at "1", so the i-th OPEN/OPENDIR gets handle i+1
+		require.NoError(t, sendPacket(cliConn, &sshFxpReadPacket{ID: 2*i + 1, Handle: strconv.Itoa(int(i) + 1), Len: 16}))
 	}
 
 	cliConn.Close()
