@@ -22,6 +22,7 @@ const (
 	ModeOtherWrite FileMode = 0o0002 // S_IWOTH
 	ModeOtherExec  FileMode = 0o0001 // S_IXOTH
 
+	ModeChmod  FileMode = 0o7777 // S_IRWXU | S_IRWXG | S_IRWXO | S_ISSUID | S_ISGID | S_ISVTX
 	ModeSetUID FileMode = 0o4000 // S_ISUID
 	ModeSetGID FileMode = 0o2000 // S_ISGID
 	ModeSticky FileMode = 0o1000 // S_ISVTX
@@ -51,6 +52,11 @@ func (m FileMode) IsRegular() bool {
 // Perm returns the POSIX permission bits in m (m & ModePerm).
 func (m FileMode) Perm() FileMode {
 	return (m & ModePerm)
+}
+
+// ChmodPerm returns the POSIX permission bits suitable for chmod in m (m & ModeChmod).
+func (m FileMode) ChmodPerm() FileMode {
+	return (m & ModeChmod)
 }
 
 // Type returns the type bits in m (m & ModeType).

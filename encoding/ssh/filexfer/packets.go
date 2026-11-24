@@ -32,6 +32,8 @@ func (p *RawPacket) Type() PacketType {
 }
 
 // MarshalSize returns the number of bytes that the packet would marshal into.
+//
+// Unlike other packets, this shall return the full number of bytes of the packet, including length and packet type.
 func (p *RawPacket) MarshalSize() int {
 	// uint32(length) + uint8(type) + uint32(request-id) + raw(buffer)
 	return 4 + 1 + 4 + p.Data.MarshalSize()
@@ -69,7 +71,7 @@ func (p *RawPacket) MarshalBinary() ([]byte, error) {
 // UnmarshalFrom decodes a RawPacket from the given Buffer into p.
 //
 // The Data field will alias the passed in Buffer,
-// so the buffer passed in should not be reused before RawPacket.Reset().
+// so the buffer passed in should not be reused before Reset.
 func (p *RawPacket) UnmarshalFrom(buf *Buffer) error {
 	*p = RawPacket{
 		PacketType: PacketType(buf.ConsumeUint8()),
@@ -196,7 +198,7 @@ func readPacket(r io.Reader, b []byte, maxPacketLength uint32) ([]byte, error) {
 // while still allowing reception of occasional large packets.
 //
 // The Data field may alias the passed in byte slice,
-// so the byte slice passed in should not be reused before RawPacket.Reset().
+// so the byte slice passed in should not be reused before Reset.
 func (p *RawPacket) ReadSSHFXPFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
 	b, err := readPacket(r, b, maxPacketLength)
 	if err != nil {
@@ -251,7 +253,7 @@ func (p *RequestPacket) Reset() {
 // The internal p.RequestID is overridden by the reqid argument.
 func (p *RequestPacket) MarshalPacket(reqid uint32, b []byte) (header, payload []byte, err error) {
 	if p.Request == nil {
-		return nil, nil, errors.New("empty request packet")
+		return nil, nil, errors.New("sshfx: empty request packet")
 	}
 
 	return p.Request.MarshalPacket(reqid, b)
@@ -268,7 +270,7 @@ func (p *RequestPacket) MarshalBinary() ([]byte, error) {
 // UnmarshalFrom decodes a RequestPacket from the given Buffer into p.
 //
 // The Request field may alias the passed in Buffer, (e.g. SSH_FXP_WRITE),
-// so the buffer passed in should not be reused before RequestPacket.Reset().
+// so the buffer passed in should not be reused before RequestPacket.Reset.
 func (p *RequestPacket) UnmarshalFrom(buf *Buffer) error {
 	typ := PacketType(buf.ConsumeUint8())
 	if buf.Err != nil {
@@ -319,7 +321,7 @@ func (p *RequestPacket) UnmarshalBinary(data []byte) error {
 // while still allowing reception of occasional large packets.
 //
 // The Request field may alias the passed in byte slice,
-// so the byte slice passed in should not be reused before RequestPacket.Reset().
+// so the byte slice passed in should not be reused before RequestPacket.Reset.
 func (p *RequestPacket) ReadSSHFXPFrom(r io.Reader, b []byte, maxPacketLength uint32) error {
 	b, err := readPacket(r, b, maxPacketLength)
 	if err != nil {

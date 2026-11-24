@@ -16,8 +16,10 @@ func (h *ServerHandler) openfile(path string, flag int, mod fs.FileMode) (*File,
 	}
 
 	return &File{
+		File: f,
+		srv:  h,
+
 		filename: path,
 		handle:   fmt.Sprint(h.handles.Add(1)),
-		File:     f,
 	}, nil
 }

@@ -41,7 +41,7 @@ func toLocalPath(p string) (string, error) {
 		return `\\` + lp, nil
 	}
 
-	if strings.HasPrefix(p, `\??\`) {
+	if strings.HasPrefix(lp, `\??\`) {
 		// This is a native NT path
 		return "", fs.ErrInvalid
 	}
@@ -209,8 +209,10 @@ func (h *ServerHandler) openfile(path string, flag int, mode fs.FileMode) (fileD
 	}
 
 	return &File{
+		File: f,
+		srv:  h,
+
 		filename: path,
 		handle:   fmt.Sprint(h.handles.Add(1)),
-		File:     f,
 	}, nil
 }

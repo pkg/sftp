@@ -146,7 +146,7 @@ func (p *ExtendedPacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 	return p.Data.UnmarshalBinary(buf.Bytes())
 }
 
-// ExtendedReplyPacket defines the SSH_FXP_CLOSE packet.
+// ExtendedReplyPacket defines the SSH_FXP_EXTENDED_REPLY packet.
 type ExtendedReplyPacket struct {
 	Data ExtendedData
 }

@@ -1,6 +1,7 @@
 package localfs
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -45,14 +46,18 @@ func (h *ServerHandler) toLocalPath(p string) (string, error) {
 
 // Mkdir implements [sftp.ServerHandler].
 func (h *ServerHandler) Mkdir(_ context.Context, req *sshfx.MkdirPacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	lpath, err := h.toLocalPath(req.Path)
 	if err != nil {
 		return err
 	}
 
-	var perms sshfx.FileMode = 0755
+	var perms sshfx.FileMode = 0777
 	if req.Attrs.HasPermissions() {
-		perms = req.Attrs.GetPermissions().Perm()
+		perms = req.Attrs.GetPermissions().ChmodPerm()
 	}
 
 	return os.Mkdir(lpath, fs.FileMode(perms))
@@ -60,12 +65,16 @@ func (h *ServerHandler) Mkdir(_ context.Context, req *sshfx.MkdirPacket) error {
 
 // Remove implements [sftp.ServerHandler].
 func (h *ServerHandler) Remove(_ context.Context, req *sshfx.RemovePacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	lpath, err := h.toLocalPath(req.Path)
 	if err != nil {
 		return err
 	}
 
-	fi, err := os.Stat(lpath)
+	fi, err := os.Lstat(lpath)
 	if err != nil {
 		return err
 	}
@@ -83,6 +92,10 @@ func (h *ServerHandler) Remove(_ context.Context, req *sshfx.RemovePacket) error
 
 // Rename implements [sftp.ServerHandler].
 func (h *ServerHandler) Rename(_ context.Context, req *sshfx.RenamePacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	from, err := h.toLocalPath(req.OldPath)
 	if err != nil {
 		return err
@@ -93,7 +106,7 @@ func (h *ServerHandler) Rename(_ context.Context, req *sshfx.RenamePacket) error
 		return err
 	}
 
-	if _, err := os.Stat(to); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(to); !errors.Is(err, fs.ErrNotExist) {
 		if err == nil {
 			return fs.ErrExist
 		}
@@ -106,6 +119,10 @@ func (h *ServerHandler) Rename(_ context.Context, req *sshfx.RenamePacket) error
 
 // POSIXRename implements [sftp.POSIXRenameServerHandler].
 func (h *ServerHandler) POSIXRename(_ context.Context, req *openssh.POSIXRenameExtendedPacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	from, err := h.toLocalPath(req.OldPath)
 	if err != nil {
 		return err
@@ -121,12 +138,16 @@ func (h *ServerHandler) POSIXRename(_ context.Context, req *openssh.POSIXRenameE
 
 // Rmdir implements [sftp.ServerHandler].
 func (h *ServerHandler) Rmdir(_ context.Context, req *sshfx.RmdirPacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	lpath, err := h.toLocalPath(req.Path)
 	if err != nil {
 		return err
 	}
 
-	fi, err := os.Stat(lpath)
+	fi, err := os.Lstat(lpath)
 	if err != nil {
 		return err
 	}
@@ -143,7 +164,11 @@ func (h *ServerHandler) Rmdir(_ context.Context, req *sshfx.RmdirPacket) error {
 }
 
 // SetStat implements [sftp.ServerHandler].
-func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) error {
+func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) (err error) {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	lpath, err := h.toLocalPath(req.Path)
 	if err != nil {
 		return err
@@ -151,37 +176,40 @@ func (h *ServerHandler) SetStat(_ context.Context, req *sshfx.SetStatPacket) err
 
 	if req.Attrs.HasSize() {
 		sz := req.Attrs.GetSize()
-		if err := os.Truncate(lpath, int64(sz)); err != nil {
-			return err
-		}
+		err = cmp.Or(os.Truncate(lpath, int64(sz)), err)
 	}
 
 	if req.Attrs.HasPermissions() {
 		perms := req.Attrs.GetPermissions()
-		if err := os.Chmod(lpath, fs.FileMode(perms.Perm())); err != nil {
-			return err
-		}
+		err = cmp.Or(os.Chmod(lpath, fs.FileMode(perms.ChmodPerm())), err)
 	}
 
 	if req.Attrs.HasACModTime() {
 		atime, mtime := req.Attrs.GetACModTime()
-		if err := os.Chtimes(lpath, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)); err != nil {
-			return err
-		}
+		err = cmp.Or(os.Chtimes(lpath, time.Unix(int64(atime), 0), time.Unix(int64(mtime), 0)), err)
 	}
 
 	if req.Attrs.HasUserGroup() {
 		uid, gid := req.Attrs.GetUserGroup()
-		if err := os.Chown(lpath, int(uid), int(gid)); err != nil {
-			return err
+		err = cmp.Or(os.Chown(lpath, int(uid), int(gid)), err)
+	}
+
+	if len(req.Attrs.GetExtended()) > 0 && err == nil {
+		return &sshfx.StatusPacket{
+			StatusCode:   sshfx.StatusOpUnsupported,
+			ErrorMessage: "unsupported setstat: extended attributes",
 		}
 	}
 
-	return nil
+	return err
 }
 
 // Symlink implements [sftp.ServerHandler].
 func (h *ServerHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
 	target, err := h.toLocalPath(req.TargetPath)
 	if err != nil {
 		return err
@@ -196,18 +224,22 @@ func (h *ServerHandler) Symlink(_ context.Context, req *sshfx.SymlinkPacket) err
 }
 
 // Hardlink implements [sftp.HardlinkServerHandler].
-func (h *ServerHandler) Hardlink(_ context.Context, req *sshfx.SymlinkPacket) error {
-	target, err := h.toLocalPath(req.TargetPath)
+func (h *ServerHandler) Hardlink(_ context.Context, req *openssh.HardlinkExtendedPacket) error {
+	if h.ReadOnly {
+		return sshfx.StatusPermissionDenied
+	}
+
+	from, err := h.toLocalPath(req.OldPath)
 	if err != nil {
 		return err
 	}
 
-	link, err := h.toLocalPath(req.LinkPath)
+	to, err := h.toLocalPath(req.NewPath)
 	if err != nil {
 		return err
 	}
 
-	return os.Link(target, link)
+	return os.Link(from, to)
 }
 
 func fileInfoToAttrs(fi fs.FileInfo) *sshfx.Attributes {
@@ -280,6 +312,12 @@ func (h *ServerHandler) RealPath(_ context.Context, req *sshfx.RealPathPacket) (
 
 // Open implements [sftp.ServerHandler].
 func (h *ServerHandler) Open(_ context.Context, req *sshfx.OpenPacket) (sftp.FileHandler, error) {
+	if h.ReadOnly {
+		if req.PFlags&(sshfx.FlagWrite|sshfx.FlagCreate|sshfx.FlagTruncate) != 0 {
+			return nil, sshfx.StatusPermissionDenied
+		}
+	}
+
 	lpath, err := h.toLocalPath(req.Filename)
 	if err != nil {
 		return nil, err
@@ -289,16 +327,13 @@ func (h *ServerHandler) Open(_ context.Context, req *sshfx.OpenPacket) (sftp.Fil
 
 	switch {
 	case req.PFlags&sshfx.FlagRead != 0:
-		if req.PFlags&sshfx.FlagWrite != 0 && !h.ReadOnly {
+		if req.PFlags&sshfx.FlagWrite != 0 {
 			osFlags |= os.O_RDWR
 		} else {
 			osFlags |= os.O_RDONLY
 		}
 
 	case req.PFlags&sshfx.FlagWrite != 0:
-		if h.ReadOnly {
-			return nil, sshfx.StatusPermissionDenied
-		}
 		osFlags |= os.O_WRONLY
 
 	default:
@@ -323,7 +358,7 @@ func (h *ServerHandler) Open(_ context.Context, req *sshfx.OpenPacket) (sftp.Fil
 
 	var perms sshfx.FileMode = 0666
 	if req.Attrs.HasPermissions() {
-		perms = req.Attrs.GetPermissions().Perm()
+		perms = req.Attrs.GetPermissions().ChmodPerm()
 	}
 
 	return h.openfile(lpath, osFlags, fs.FileMode(perms))
@@ -336,5 +371,20 @@ func (h *ServerHandler) OpenDir(_ context.Context, req *sshfx.OpenDirPacket) (sf
 		return nil, err
 	}
 
-	return h.openfile(lpath, os.O_RDONLY, 0)
+	d, err := h.openfile(lpath, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	attr, err := d.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if !attr.GetPermissions().IsDir() {
+		d.Close()
+		return nil, fmt.Errorf("not a directory")
+	}
+
+	return d, nil
 }

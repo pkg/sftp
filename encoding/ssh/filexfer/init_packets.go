@@ -51,7 +51,7 @@ func (p *InitPacket) UnmarshalBinary(data []byte) error {
 // UnmarshalFrom decodes a RawPacket from the given Buffer into p.
 //
 // The Data field will alias the passed in Buffer,
-// so the buffer passed in should not be reused before RawPacket.Reset().
+// so the buffer passed in should not be reused before Reset.
 func (p *InitPacket) UnmarshalFrom(buf *Buffer) error {
 	*p = InitPacket{
 		Version: buf.ConsumeUint32(),
@@ -148,7 +148,7 @@ func (p *VersionPacket) UnmarshalBinary(data []byte) (err error) {
 // UnmarshalFrom decodes a RawPacket from the given Buffer into p.
 //
 // The Data field will alias the passed in Buffer,
-// so the buffer passed in should not be reused before RawPacket.Reset().
+// so the buffer passed in should not be reused before Reset.
 func (p *VersionPacket) UnmarshalFrom(buf *Buffer) error {
 	*p = VersionPacket{
 		Version: buf.ConsumeUint32(),

@@ -206,15 +206,24 @@ type commonHandle interface {
 }
 
 // A Server defines parameters for running an SFTP server.
-// The zero value for Server is a valid configuration.
+// The zero value for Server is a valid configuration,
+// but Handler must be non-nil.
 type Server struct {
 	_ pragma.DoNotCopy // be explicit about no copy.
 
 	Handler ServerHandler
 
+	// MaxPacketLength sets the maximum length of packet that a server will allow.
+	// Setting this to a large value can allow clients to send packets that have large allocation sizes.
+	// Use with care.
 	MaxPacketLength int
-	MaxDataLength   int
-	Extensions      map[string]string
+
+	// MaxDataLength sets the maximum length of data that a SSH_FX_READ may request.
+	// Setting this to a large value can allow clients to send packets that have large allocation sizes.
+	// Use with care.
+	MaxDataLength int
+
+	Extensions map[string]string
 
 	Debug io.Writer
 
@@ -369,13 +378,21 @@ func Hijack[REQ sshfx.Packet](srv *Server, fn func(context.Context, REQ) error) 
 // and any returned response packet will be ignored.
 // Otherwise, the returned response packet will be sent to the client.
 // This is really only useful for supporting newer versions of the SFTP standard.
-func HijackWithResponse[REQ, RESP sshfx.Packet](srv *Server, fn func(context.Context, REQ) (RESP, error)) error {
+func HijackWithResponse[REQ sshfx.Packet, RESP interface {
+	*T
+	sshfx.Packet
+}, T any](srv *Server, fn func(context.Context, REQ) (RESP, error)) error {
 	wrap := wrapHandler(func(ctx context.Context, req sshfx.Packet) (sshfx.Packet, error) {
 		resp, err := fn(ctx, req.(REQ))
 		if err != nil {
 			// We have to convert maybe typed-zero to untyped-nil.
 			return nil, err
 		}
+
+		if resp == nil {
+			return nil, fmt.Errorf("sftp: hijack returned nil %T, and nil error", resp)
+		}
+
 		return resp, nil
 	})
 
@@ -404,6 +421,20 @@ func (srv *Server) register(typ sshfx.PacketType, wrap wrapHandler) error {
 	return nil
 }
 
+func (srv *Server) safeMarshalPacket(reqID uint32, resp sshfx.Packet, outHint []byte) (hdr, payload []byte, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = cmp.Or(err, fmt.Errorf("sftp: failed to marshal response: %v", p))
+		}
+	}()
+
+	hdr, payload, err = resp.MarshalPacket(reqID, outHint)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sftp: marshal response packet: %w", err)
+	}
+	return hdr, payload, nil
+}
+
 // Serve accepts incoming connections on the socket conn.
 // The server reads SFTP requests and then calls the registered handlers to reply to them.
 // Serve returns when a read returns any error other than sshfx.ErrBadMessage,
@@ -412,19 +443,27 @@ func (srv *Server) register(typ sshfx.PacketType, wrap wrapHandler) error {
 // Serve will return a non-nil error unless GracefulStop is called,
 // or an EOF is encountered at the end of a complete packet.
 func (srv *Server) Serve(conn io.ReadWriteCloser) error {
+	if srv.Handler == nil {
+		conn.Close()
+		return fmt.Errorf("sftp: server has no handler")
+	}
+
 	srv.mu.Lock()
 	if srv.shutdown != nil {
 		srv.mu.Unlock()
+		conn.Close()
 		return fmt.Errorf("sftp: already serving")
 	}
 	srv.shutdown = make(chan struct{})
 	srv.mu.Unlock()
 
 	if srv.MaxDataLength < 0 {
+		conn.Close()
 		return fmt.Errorf("sftp: max data length cannot be negative: %d", srv.MaxDataLength)
 	}
 
 	if uint(srv.MaxDataLength) > math.MaxUint32 {
+		conn.Close()
 		return fmt.Errorf("sftp: max data length too large: %d", srv.MaxDataLength)
 	}
 
@@ -434,10 +473,12 @@ func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 	}
 
 	if srv.MaxPacketLength < 0 {
+		conn.Close()
 		return fmt.Errorf("sftp: max packet length cannot be negative: %d", srv.MaxDataLength)
 	}
 
 	if uint(srv.MaxPacketLength) > math.MaxUint32 {
+		conn.Close()
 		return fmt.Errorf("sftp: max packet length too large: %d", srv.MaxPacketLength)
 	}
 
@@ -447,10 +488,12 @@ func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 	}
 
 	if maxPktLen < maxDataLen {
+		conn.Close()
 		return fmt.Errorf("sftp: max packet length shorter than max data length: %d < %d", maxPktLen, maxDataLen)
 	}
 
 	if err := srv.handshake(conn, maxPktLen); err != nil {
+		conn.Close()
 		return fmt.Errorf("sftp: handshake failure: %w", err)
 	}
 
@@ -458,6 +501,10 @@ func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 	defer func() {
 		conn.Close()
 		srv.wg.Done()
+
+		for _, f := range srv.handles.Range {
+			f.Close()
+		}
 	}()
 
 	var reqPkt sshfx.RequestPacket
@@ -505,9 +552,9 @@ func (srv *Server) Serve(conn io.ReadWriteCloser) error {
 			resp = errorToStatus(err)
 		}
 
-		hdr, payload, err := resp.MarshalPacket(reqPkt.RequestID, outHint)
+		hdr, payload, err := srv.safeMarshalPacket(reqPkt.RequestID, resp, outHint)
 		if err != nil {
-			return fmt.Errorf("sftp: marshal response packet: %w", err)
+			return err
 		}
 
 		if _, err := conn.Write(hdr); err != nil {
@@ -547,8 +594,14 @@ func get[REQ, RES any](srv *Server, req REQ, fn func(context.Context, REQ) (RES,
 	return fn(ctx, req)
 }
 
-func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (sshfx.Packet, error) {
+func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (pkt sshfx.Packet, err error) {
 	defer sshfx.PoolReturn(req)
+
+	defer func() {
+		if p := recover(); p != nil {
+			pkt, err = nil, cmp.Or(err, fmt.Errorf("sftp: panic handling request: %v", p))
+		}
+	}()
 
 	if len(srv.hijacks) > 0 {
 		if fn := srv.hijacks[req.Type()]; fn != nil {
@@ -706,7 +759,9 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 
 		handle := file.Handle()
 
-		srv.handles.Store(handle, file)
+		if _, loaded := srv.handles.LoadOrStore(handle, file); loaded {
+			return nil, sshfx.StatusFailure
+		}
 
 		return &sshfx.HandlePacket{
 			Handle: handle,
@@ -745,6 +800,10 @@ func (srv *Server) handle(req sshfx.Packet, hint []byte, maxDataLen uint32) (ssh
 			if !errors.Is(err, io.EOF) || len(entries) == 0 {
 				return nil, err
 			}
+		}
+
+		if len(entries) == 0 {
+			return nil, io.ErrNoProgress
 		}
 
 		return &sshfx.NamePacket{Entries: entries}, nil
@@ -846,8 +905,8 @@ func errorToStatus(err error) sshfx.Packet {
 		return statusEOF
 	}
 
-	var status *sshfx.StatusPacket
-	if errors.As(err, &status) {
+	status, ok := errors.AsType[*sshfx.StatusPacket](err)
+	if ok {
 		return status
 	}
 
@@ -859,6 +918,10 @@ func errorToStatus(err error) sshfx.Packet {
 	switch {
 	case errors.As(err, &status.StatusCode):
 		// Nothing to do, errors.As already assigned the value to statusPacket.
+	case errors.Is(err, fs.ErrPermission):
+		status.StatusCode = sshfx.StatusPermissionDenied
+	case errors.Is(err, errors.ErrUnsupported):
+		status.StatusCode = sshfx.StatusOpUnsupported
 	case errors.Is(err, fs.ErrNotExist):
 		status.StatusCode = sshfx.StatusNoSuchFile
 	case syscallErrorAsStatus(err, status):

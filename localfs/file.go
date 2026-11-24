@@ -2,6 +2,7 @@ package localfs
 
 import (
 	"cmp"
+	"fmt"
 	"io/fs"
 	"iter"
 	"os"
@@ -15,12 +16,13 @@ import (
 
 // File wraps an [os.File] to provide the additional operations necessary to implement [sftp.FileHandler].
 type File struct {
-	// We intentionally embed *os.File as a demonstration that FileHandler can have a wider API.
+	// We intentionally embed *os.File as a demonstration that FileHandler can lean on a wider API.
 	*os.File
 
 	filename string
 	handle   string
 	idLookup sftp.NameLookup
+	srv      *ServerHandler
 
 	mu      sync.Mutex
 	lastErr error
@@ -91,7 +93,15 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	var size int
+
 	if f.lastEnt != nil {
+		size += f.lastEnt.MarshalSize()
+
+		if size > int(maxDataLen) {
+			return nil, fmt.Errorf("readdir: name entry is larger than max transferable data length")
+		}
+
 		// Last ReadDir left an entry for us to include in this call.
 		entries = append(entries, f.lastEnt)
 		f.lastEnt = nil
@@ -101,7 +111,6 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 		entries = slices.Grow(entries, more)
 	}
 
-	var size int
 	for fi, err := range f.rangedir(grow) {
 		if err != nil {
 			if len(entries) != 0 {
@@ -122,6 +131,10 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 		size += entry.MarshalSize()
 
 		if size > int(maxDataLen) {
+			if len(entries) == 0 {
+				return nil, fmt.Errorf("readdir: name entry is larger than max transferable data length")
+			}
+
 			// This would exceed the packet data length,
 			// so save this one for the next call,
 			// and return.
@@ -137,11 +150,8 @@ func (f *File) ReadDir(maxDataLen uint32) (entries []*sshfx.NameEntry, err error
 
 // SetStat implements [sftp.SetStatFileHandler].
 func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
-	if len(attrs.GetExtended()) > 0 {
-		err = &sshfx.StatusPacket{
-			StatusCode:   sshfx.StatusOpUnsupported,
-			ErrorMessage: "unsupported fsetstat: extended attributes",
-		}
+	if f.srv.ReadOnly {
+		return sshfx.StatusPermissionDenied
 	}
 
 	if attrs.HasSize() {
@@ -151,7 +161,7 @@ func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
 
 	if attrs.HasPermissions() {
 		perm := attrs.GetPermissions()
-		err = cmp.Or(f.Chmod(fs.FileMode(perm.Perm())), err)
+		err = cmp.Or(f.Chmod(fs.FileMode(perm.ChmodPerm())), err)
 	}
 
 	if attrs.HasACModTime() {
@@ -162,6 +172,13 @@ func (f *File) SetStat(attrs *sshfx.Attributes) (err error) {
 	if attrs.HasUserGroup() {
 		uid, gid := attrs.GetUserGroup()
 		err = cmp.Or(f.Chown(int(uid), int(gid)), err)
+	}
+
+	if len(attrs.GetExtended()) > 0 && err == nil {
+		return &sshfx.StatusPacket{
+			StatusCode:   sshfx.StatusOpUnsupported,
+			ErrorMessage: "unsupported fsetstat: extended attributes",
+		}
 	}
 
 	return err

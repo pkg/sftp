@@ -56,12 +56,23 @@ func (c *clientConn) handshake(ctx context.Context, maxPacket uint32) (map[strin
 		return nil, err
 	}
 
-	if _, err := c.wr.Write(data); err != nil {
-		return nil, err
+	errch := make(chan error, 1)
+	go func() {
+		_, err := c.wr.Write(data)
+		errch <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+
+	case err := <-errch:
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var verPkt sshfx.VersionPacket
-	errch := make(chan error, 1)
 
 	go func() {
 		defer close(errch)
@@ -712,7 +723,13 @@ func NewClient[CL SSHClient[SESS], SESS SSHSession](ctx context.Context, conn CL
 		return nil, err
 	}
 
-	return newClientPipe(ctx, pr, perr, pw, s.Wait, opts)
+	cl, err := newClientPipe(ctx, pr, perr, pw, s.Wait, opts)
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
+
+	return cl, nil
 }
 
 // NewClientPipe creates a new SFTP client given a Reader and WriteCloser.
@@ -870,6 +887,13 @@ func (cl *Client) MkdirAll(name string, perm fs.FileMode) error {
 
 	// Slow path: make sure parent exists and then call Mkdir for name.
 
+	switch name {
+	case "/", ".":
+		// These paths should never fail a `Stat`,
+		// but if they do fail, we need to prevent `stdpath.Dir(path) == path` from infinite recursion.
+		return wrapPathError("mkdir", name, fs.ErrNotExist)
+	}
+
 	if parent := stdpath.Dir(name); parent != "" {
 		err = cl.MkdirAll(parent, perm)
 		if err != nil {
@@ -972,6 +996,10 @@ func (cl *Client) RemoveAll(pathname string) error {
 				return err
 			}
 		}
+	}
+
+	if fi.IsDir() {
+		return cl.Remove(pathname)
 	}
 
 	return nil
@@ -1342,7 +1370,7 @@ func (h *handle) close(cl *Client) error {
 	err := cl.sendPacket(context.Background(), nil, &sshfx.ClosePacket{
 		Handle: *handle,
 	})
-	if cl.forceSerialization && err == nil {
+	if cl.forceSerialization {
 		cl.removeHandle(*handle)
 	}
 	return err
@@ -1461,6 +1489,12 @@ func (d *Dir) rangedir(ctx context.Context, grow func(int)) iter.Seq2[*sshfx.Nam
 			if err != nil {
 				// No need to loop, SFTP can only return either an error or a result, never both.
 				yield(nil, err)
+				return
+			}
+
+			if len(entries) == 0 {
+				// No need to loop, SFTP can only return either an error or a result, never both.
+				yield(nil, io.ErrNoProgress)
 				return
 			}
 
@@ -2224,7 +2258,6 @@ func (f *File) readatSeq(ctx context.Context, b []byte, off int64) (read int, er
 		resp.Data = slices.Clip(b[:n])
 
 		m, err := f.cl.sendRead(ctx, closed, req, &resp)
-
 		if m > n {
 			// OH NO! We received more data than we expected!
 			// Because of the slices.Clip above, this MUST have reallocated.
@@ -2238,6 +2271,10 @@ func (f *File) readatSeq(ctx context.Context, b []byte, off int64) (read int, er
 
 		if err != nil {
 			return read, f.wrapErr("readat", err)
+		}
+
+		if m == 0 {
+			return read, io.ErrNoProgress
 		}
 	}
 
@@ -2636,7 +2673,7 @@ func (cl *Client) ReadFile(name string) ([]byte, error) {
 	// Don't trust the file size for pre-allocation unless it is a regular file.
 	if fi, err := f.Stat(); err == nil && fi.Mode().IsRegular() {
 		size := fi.Size()
-		if int64(int(size)) == size {
+		if size > 0 && int64(int(size)) == size {
 			buf.Grow(int(size))
 		}
 	}
@@ -2687,7 +2724,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 		return 0, f.wrapErr("seek", fmt.Errorf("%w: invalid whence: %d", fs.ErrInvalid, whence))
 	}
 
-	if offset < 0 {
+	if abs < 0 {
 		return 0, f.wrapErr("seek", fmt.Errorf("%w: negative offset: %d", fs.ErrInvalid, whence))
 	}
 

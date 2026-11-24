@@ -17,5 +17,9 @@ func (f *File) StatVFS() (*openssh.StatVFSExtendedReplyPacket, error) {
 
 // StatVFS implements ssh.StatVFSServerHandler.
 func (s *ServerHandler) StatVFS(_ context.Context, req *openssh.StatVFSExtendedPacket) (*openssh.StatVFSExtendedReplyPacket, error) {
-	return statvfs.StatVFS(req.Path)
+	path, err := s.toLocalPath(req.Path)
+	if err != nil {
+		return nil, err
+	}
+	return statvfs.StatVFS(path)
 }

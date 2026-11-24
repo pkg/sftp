@@ -107,15 +107,15 @@ func (b *Buffer) Packet(payload []byte) (header, payloadPassThru []byte, err err
 	return b.b, payload, nil
 }
 
-func (b *Buffer) checkCount(length, count int) bool {
+func (b *Buffer) checkCount(elemLength, count int) bool {
 	if b.Err != nil {
 		return false
 	}
 
 	// The strconv.IntSize <= 32 short-circuits to false on 64-bit,
-	// which elides the check for a negative length on architectures,
+	// which elides the check for a negative elemLength on architectures,
 	// where uint32 cannot overflow to a negative int value.
-	if (strconv.IntSize <= 32 && length < 0) || b.Len()/count < length {
+	if (strconv.IntSize <= 32 && elemLength < 0) || b.Len()/elemLength < count {
 		b.off = len(b.b)
 		b.Err = ErrShortPacket
 		return false
@@ -212,7 +212,7 @@ func (b *Buffer) ConsumeCount(minElemSize int) (int, error) {
 		return 0, b.Err
 	}
 
-	if !b.checkLen(minElemSize * count) {
+	if !b.checkCount(minElemSize, count) {
 		return 0, b.Err
 	}
 

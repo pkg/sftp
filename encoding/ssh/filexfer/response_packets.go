@@ -26,6 +26,10 @@ func (p *StatusPacket) Error() string {
 // If target is a *StatusPacket, then we return true if all fields are equal.
 // Otherwise, we return true if [Status.Is] of the status code returns true for the same target.
 func (p *StatusPacket) Is(target error) bool {
+	if p == nil {
+		return target == nil
+	}
+
 	var status *StatusPacket
 	if errors.As(target, &status) {
 		return *p == *status
@@ -209,7 +213,7 @@ func (p *NamePacket) UnmarshalPacketBody(buf *Buffer) (err error) {
 		return err
 	}
 
-	if !buf.checkCount(count, smallestNameEntry) {
+	if !buf.checkCount(smallestNameEntry, count) {
 		return buf.Err
 	}
 

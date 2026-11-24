@@ -139,6 +139,9 @@ func (a *Attributes) ClearPermissions() {
 // GetACModTime returns the atime and mtime fields.
 // It returns zeros if the fields are not set.
 func (a *Attributes) GetACModTime() (atime, mtime uint32) {
+	if a == nil {
+		return 0, 0
+	}
 	return a.atime, a.mtime
 }
 
@@ -216,6 +219,10 @@ func (a *Attributes) MarshalSize() int {
 	// uint32(flags)
 	size := 4
 
+	if a == nil {
+		return size
+	}
+
 	if a.HasSize() {
 		size += 8 // uint64(size)
 	}
@@ -275,6 +282,8 @@ func (a *Attributes) MarshalBinary() ([]byte, error) {
 
 // UnmarshalFrom unmarshals the attributes from the buffer.
 func (a *Attributes) UnmarshalFrom(buf *Buffer) (err error) {
+	*a = Attributes{}
+
 	a.flags = buf.ConsumeUint32()
 
 	// Short-circuit dummy attributes.
@@ -354,7 +363,7 @@ func (a *ExtendedAttributes) UnmarshalFrom(buf *Buffer) (err error) {
 		return err
 	}
 
-	if !buf.checkCount(count, smallestExtendedAttribute) {
+	if !buf.checkCount(smallestExtendedAttribute, count) {
 		return buf.Err
 	}
 
