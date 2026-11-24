@@ -291,6 +291,35 @@ func TestOpenWithPermissions(t *testing.T) {
 	checkServerAllocator(t, server)
 }
 
+func TestMkdirWithPermissions(t *testing.T) {
+	skipIfWindows(t)
+
+	client, server := clientServerPair(t)
+	defer client.Close()
+	defer server.Close()
+
+	dir := path.Join(t.TempDir(), "private")
+
+	id := client.nextID()
+	typ, data, err := client.sendPacket(context.Background(), nil, &sshFxpMkdirPacket{
+		ID:    id,
+		Path:  dir,
+		Flags: sshFileXferAttrPermissions,
+		Attrs: &FileStat{
+			Mode: 0o700,
+		},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, sshFxpStatus, typ)
+	require.NoError(t, normaliseError(unmarshalStatus(id, data)))
+
+	stat, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), stat.Mode()&os.ModePerm)
+
+	checkServerAllocator(t, server)
+}
+
 // Ensure that a read-only server rejects requests that modify the filesystem
 // even when they do not ask for write access.
 func TestReadOnlyServerRejectsWrites(t *testing.T) {

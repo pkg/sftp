@@ -260,10 +260,6 @@ func handlePacket(s *Server, p orderedRequest) error {
 		if err != nil {
 			rpkt = statusFromError(p.ID, err)
 		}
-	case *sshFxpMkdirPacket:
-		// TODO FIXME: ignore flags field
-		err := os.Mkdir(s.toLocalPath(p.Path), 0o755)
-		rpkt = statusFromError(p.ID, err)
 	case *sshFxpRmdirPacket:
 		err := os.Remove(s.toLocalPath(p.Path))
 		rpkt = statusFromError(p.ID, err)
@@ -513,7 +509,7 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 		osFlags |= os.O_EXCL
 	}
 
-	mode := os.FileMode(0o644)
+	mode := os.FileMode(0o666)
 	// Like OpenSSH, we only handle permissions here, and only when the file is being created.
 	// Otherwise, the permissions are ignored.
 	if p.Flags&sshFileXferAttrPermissions != 0 {
@@ -531,6 +527,21 @@ func (p *sshFxpOpenPacket) respond(svr *Server) responsePacket {
 
 	handle := svr.nextHandle(f)
 	return &sshFxpHandlePacket{ID: p.ID, Handle: handle}
+}
+
+func (p *sshFxpMkdirPacket) respond(svr *Server) responsePacket {
+	mode := os.FileMode(0o777)
+	// Like OpenSSH, honor the permissions requested by the client.
+	if p.Flags&sshFileXferAttrPermissions != 0 {
+		fs, err := p.unmarshalFileStat(p.Flags)
+		if err != nil {
+			return statusFromError(p.ID, err)
+		}
+		mode = fs.FileMode() & os.ModePerm
+	}
+
+	err := os.Mkdir(svr.toLocalPath(p.Path), mode)
+	return statusFromError(p.ID, err)
 }
 
 func (p *sshFxpReaddirPacket) respond(svr *Server) responsePacket {
