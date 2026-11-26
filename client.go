@@ -1260,35 +1260,45 @@ func (f *File) Read(b []byte) (int, error) {
 // readChunkAt attempts to read the whole entire length of the buffer from the file starting at the offset.
 // It will continue progressively reading into the buffer until it fills the whole buffer, or an error occurs.
 func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err error) {
-	for err == nil && n < len(b) {
-		id := f.c.nextID()
-		typ, data, err := f.c.sendPacket(context.Background(), ch, &sshFxpReadPacket{
-			ID:     id,
-			Handle: f.handle,
-			Offset: uint64(off) + uint64(n),
-			Len:    uint32(len(b) - n),
-		})
-		if err != nil {
-			return n, err
-		}
-
-		switch typ {
-		case sshFxpStatus:
-			return n, normaliseError(unmarshalStatus(id, data))
-
-		case sshFxpData:
-			data, err = unmarshalDataReply(id, data)
-			if err != nil {
-				return n, err
-			}
-			n += copy(b[n:], data)
-
-		default:
-			return n, unimplementedPacketErr(typ)
+	for n < len(b) {
+		read, readErr := f.readOnceAt(ch, b[n:], off+int64(n))
+		n += read
+		if readErr != nil {
+			return n, readErr
 		}
 	}
 
-	return
+	return n, nil
+}
+
+// readOnceAt requests data once at the specified offset. Unlike readChunkAt,
+// it does not retry when the server returns fewer bytes than requested.
+func (f *File) readOnceAt(ch chan result, b []byte, off int64) (n int, err error) {
+	id := f.c.nextID()
+	typ, data, err := f.c.sendPacket(context.Background(), ch, &sshFxpReadPacket{
+		ID:     id,
+		Handle: f.handle,
+		Offset: uint64(off),
+		Len:    uint32(len(b)),
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	switch typ {
+	case sshFxpStatus:
+		return 0, normaliseError(unmarshalStatus(id, data))
+
+	case sshFxpData:
+		data, err = unmarshalDataReply(id, data)
+		if err != nil {
+			return 0, err
+		}
+		return copy(b, data), nil
+
+	default:
+		return 0, unimplementedPacketErr(typ)
+	}
 }
 
 func (f *File) readAtSequential(b []byte, off int64) (read int, err error) {
@@ -1321,6 +1331,20 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	return f.readAt(b, off)
 }
 
+// readFirstChunkAt reads once to find the chunk size for subsequent concurrent reads.
+// It returns the remaining buffer and its starting offset.
+func (f *File) readFirstChunkAt(b []byte, off int64, tryChunkSize int) (bNext []byte, offNext int64, chunkSize int, err error) {
+	first := b
+	if len(first) > tryChunkSize {
+		first = first[:tryChunkSize]
+	}
+	n, err := f.readOnceAt(nil, first, off)
+	if n == 0 && err == nil {
+		return b, off, 0, io.ErrNoProgress
+	}
+	return b[n:], off + int64(n), n, err
+}
+
 // readAt must be called while holding either the Read or Write mutex in File.
 // This code is concurrent safe with itself, but not with Close.
 func (f *File) readAt(b []byte, off int64) (int, error) {
@@ -1338,13 +1362,19 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 		return f.readAtSequential(b, off)
 	}
 
-	// Split the read into multiple maxPacket-sized concurrent reads bounded by maxConcurrentRequests.
-	// This allows writes with a suitably large buffer to transfer data at a much faster rate
+	b, off, chunkSize, err := f.readFirstChunkAt(b, off, f.c.maxPacket)
+	n := chunkSize
+	if err != nil {
+		return n, err
+	}
+
+	// Split the remaining read into concurrent chunks bounded by maxConcurrentRequests.
+	// This allows reads with a suitably large buffer to transfer data at a much faster rate
 	// by overlapping round trip times.
 
 	cancel := make(chan struct{})
 
-	concurrency := len(b)/f.c.maxPacket + 1
+	concurrency := len(b)/chunkSize + 1
 	if concurrency > f.c.maxConcurrentRequests || concurrency < 1 {
 		concurrency = f.c.maxConcurrentRequests
 	}
@@ -1366,7 +1396,6 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 
 		b := b
 		offset := off
-		chunkSize := f.c.maxPacket
 
 		for len(b) > 0 {
 			rb := b
@@ -1426,11 +1455,10 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 						if err == nil {
 							n = copy(packet.b, data)
 
-							// For normal disk files, it is guaranteed that this will read
-							// the specified number of bytes, or up to end of file.
-							// This implies, if we have a short read, that means EOF.
 							if n < len(packet.b) {
-								err = io.EOF
+								read, readErr := f.readAtSequential(packet.b[n:], packet.off+int64(n))
+								n += read
+								err = readErr
 							}
 						}
 
@@ -1473,11 +1501,11 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 
 	if firstErr.err != nil {
 		// firstErr.err != nil if and only if firstErr.off > our starting offset.
-		return int(firstErr.off - off), firstErr.err
+		return n + int(firstErr.off-off), firstErr.err
 	}
 
 	// As per spec for io.ReaderAt, we return nil error if and only if we read everything.
-	return len(b), nil
+	return n + len(b), nil
 }
 
 // writeToSequential implements WriteTo, but works sequentially with no parallelism.
