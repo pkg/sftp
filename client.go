@@ -1512,6 +1512,122 @@ func (f *File) writeToSequential(w io.Writer) (written int64, err error) {
 	}
 }
 
+// WriteToLimited asks the server to copy n bytes from f, starting at f's current offset,
+// to dst, starting at dst's current offset, using the "copy-data" extension,
+// so the data does not pass through the client.
+// On success, the offsets of both f and dst are advanced by n.
+//
+// The server only reports success or failure, not how many bytes it copied.
+// If f is shorter than expected (for example: because it is truncated while the copy runs),
+// the server may stop at EOF and still report success.
+// Callers that need to be sure should check the size of dst afterwards.
+//
+// f and dst must be [File] structs opened by the same [Client].
+// They may be the same [File]; whether copying within one handle is allowed is up to the server.
+//
+// If the server does not advertise "copy-data", WriteToLimited returns
+// a *StatusError with the code SSH_FX_OP_UNSUPPORTED, and no request is sent.
+func (f *File) WriteToLimited(dst *File, n int64) error {
+	if dst == nil || n < 0 {
+		return os.ErrInvalid
+	}
+	if dst.c != f.c {
+		return errors.New("sftp: WriteToLimited: source and destination belong to different clients")
+	}
+	if n == 0 {
+		// Copying zero bytes is a no-op.
+		// (copy-data reads a length of zero as "until EOF", so it must never be sent.)
+		return nil
+	}
+	if data, ok := f.c.HasExtension("copy-data"); !ok || data != "1" {
+		return &StatusError{
+			Code: sshFxOPUnsupported,
+			msg:  "copy-data not supported",
+		}
+	}
+
+	if dst == f {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		if f.handle == "" {
+			return os.ErrClosed
+		}
+
+		return f.copyData(f, n)
+	}
+
+	// Take the two locks in a fixed order (by handle) so that two concurrent calls
+	// going in opposite directions between the same files cannot deadlock.
+	f.mu.RLock()
+	srcHandle := f.handle
+	f.mu.RUnlock()
+
+	dst.mu.RLock()
+	dstHandle := dst.handle
+	dst.mu.RUnlock()
+
+	if srcHandle == "" || dstHandle == "" {
+		return os.ErrClosed
+	}
+
+	first, second := f, dst
+	if dstHandle < srcHandle {
+		first, second = second, first
+	}
+	first.mu.Lock()
+	defer first.mu.Unlock()
+	second.mu.Lock()
+	defer second.mu.Unlock()
+
+	// Either file may have been closed, or closed and reopened, while we were not holding its lock.
+	if f.handle == "" || dst.handle == "" {
+		return os.ErrClosed
+	}
+	if f.handle != srcHandle || dst.handle != dstHandle {
+		return errors.New("sftp: WriteToLimited: file handle changed while acquiring locks")
+	}
+
+	return f.copyData(dst, n)
+}
+
+// copyData sends a copy-data request from f to dst at their current offsets,
+// and advances both offsets by n on success.
+// The caller must hold the locks of f and dst.
+func (f *File) copyData(dst *File, n int64) error {
+	id := f.c.nextID()
+	typ, data, err := f.c.sendPacket(context.Background(), nil, &sshFxpCopyDataPacket{
+		ID:             id,
+		ReadFromHandle: f.handle,
+		ReadFromOffset: uint64(f.offset),
+		ReadDataLength: uint64(n),
+		WriteToHandle:  dst.handle,
+		WriteToOffset:  uint64(dst.offset),
+	})
+	if err != nil {
+		return err
+	}
+
+	switch typ {
+	case sshFxpStatus:
+		if err := normaliseError(unmarshalStatus(id, data)); err != nil {
+			return err
+		}
+	default:
+		return unimplementedPacketErr(typ)
+	}
+
+	if dst == f {
+		f.offset += n
+		return nil
+	}
+
+	f.offset += n
+	dst.offset += n
+
+	return nil
+}
+
 // WriteTo writes the file to the given Writer.
 // The return value is the number of bytes written.
 // Any error encountered during the write is also returned.

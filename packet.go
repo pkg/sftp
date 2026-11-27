@@ -975,6 +975,39 @@ func (p *sshFxpPosixRenamePacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
+type sshFxpCopyDataPacket struct {
+	ID             uint32
+	ReadFromHandle string
+	ReadFromOffset uint64
+	ReadDataLength uint64
+	WriteToHandle  string
+	WriteToOffset  uint64
+}
+
+func (p *sshFxpCopyDataPacket) id() uint32 { return p.ID }
+
+func (p *sshFxpCopyDataPacket) MarshalBinary() ([]byte, error) {
+	const ext = "copy-data"
+	l := 4 + 1 + 4 + // uint32(length) + byte(type) + uint32(id)
+		4 + len(ext) +
+		4 + len(p.ReadFromHandle) +
+		8 + 8 + // uint64(read-from-offset) + uint64(read-data-length)
+		4 + len(p.WriteToHandle) +
+		8 // uint64(write-to-offset)
+
+	b := make([]byte, 4, l)
+	b = append(b, sshFxpExtended)
+	b = marshalUint32(b, p.ID)
+	b = marshalString(b, ext)
+	b = marshalString(b, p.ReadFromHandle)
+	b = marshalUint64(b, p.ReadFromOffset)
+	b = marshalUint64(b, p.ReadDataLength)
+	b = marshalString(b, p.WriteToHandle)
+	b = marshalUint64(b, p.WriteToOffset)
+
+	return b, nil
+}
+
 type sshFxpWritePacket struct {
 	ID     uint32
 	Length uint32

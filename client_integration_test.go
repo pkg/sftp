@@ -931,6 +931,197 @@ func TestClientLink(t *testing.T) {
 	}
 }
 
+func TestClientWriteToLimited(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	if _, ok := sftp.HasExtension("copy-data"); !ok {
+		t.Skip("server does not support copy-data")
+	}
+
+	dir, err := ioutil.TempDir("", "sftptest-writetolimited")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	data := make([]byte, 1<<20+123)
+	_, err = rand.Read(data)
+	require.NoError(t, err)
+	srcPath := filepath.Join(dir, "src")
+	require.NoError(t, ioutil.WriteFile(srcPath, data, 0o600))
+
+	t.Run("whole file", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+
+		dstPath := filepath.Join(dir, "whole")
+		dst, err := sftp.Create(dstPath)
+		require.NoError(t, err)
+
+		require.NoError(t, src.WriteToLimited(dst, int64(len(data))))
+		require.NoError(t, dst.Close())
+
+		got, err := ioutil.ReadFile(dstPath)
+		require.NoError(t, err)
+		assert.True(t, bytes.Equal(data, got), "copied data does not match source")
+	})
+
+	t.Run("offsets", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+
+		dstPath := filepath.Join(dir, "offsets")
+		dst, err := sftp.Create(dstPath)
+		require.NoError(t, err)
+
+		const srcOffset, length, dstOffset = 1000, 70000, 10
+		_, err = src.Seek(srcOffset, io.SeekStart)
+		require.NoError(t, err)
+		_, err = dst.Seek(dstOffset, io.SeekStart)
+		require.NoError(t, err)
+
+		require.NoError(t, src.WriteToLimited(dst, length))
+
+		pos, err := src.Seek(0, io.SeekCurrent)
+		require.NoError(t, err)
+		assert.Equal(t, int64(srcOffset+length), pos)
+		pos, err = dst.Seek(0, io.SeekCurrent)
+		require.NoError(t, err)
+		assert.Equal(t, int64(dstOffset+length), pos)
+		require.NoError(t, dst.Close())
+
+		got, err := ioutil.ReadFile(dstPath)
+		require.NoError(t, err)
+		require.Len(t, got, dstOffset+length)
+		assert.True(t, bytes.Equal(data[srcOffset:srcOffset+length], got[dstOffset:]), "copied range does not match source")
+	})
+
+	t.Run("zero length", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+
+		dstPath := filepath.Join(dir, "zero")
+		dst, err := sftp.Create(dstPath)
+		require.NoError(t, err)
+
+		require.NoError(t, src.WriteToLimited(dst, 0))
+		require.NoError(t, dst.Close())
+
+		st, err := os.Stat(dstPath)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), st.Size(), "zero length must not copy until EOF")
+	})
+
+	t.Run("invalid arguments", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+		dst, err := sftp.Create(filepath.Join(dir, "invalid"))
+		require.NoError(t, err)
+		defer dst.Close()
+
+		assert.ErrorIs(t, src.WriteToLimited(dst, -1), os.ErrInvalid)
+		assert.ErrorIs(t, src.WriteToLimited(nil, 1), os.ErrInvalid)
+	})
+
+	t.Run("same file", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+
+		// OpenSSH refuses a copy within one handle; the point is that the client
+		// passes the request to the server and does not deadlock on its own lock.
+		done := make(chan error, 1)
+		go func() { done <- src.WriteToLimited(src, 1) }()
+		select {
+		case err := <-done:
+			assert.Error(t, err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("WriteToLimited deadlocked on the same file")
+		}
+	})
+
+	t.Run("closed destination", func(t *testing.T) {
+		src, err := sftp.Open(srcPath)
+		require.NoError(t, err)
+		defer src.Close()
+
+		dst, err := sftp.Create(filepath.Join(dir, "closed"))
+		require.NoError(t, err)
+		require.NoError(t, dst.Close())
+
+		assert.ErrorIs(t, src.WriteToLimited(dst, 1), os.ErrClosed)
+	})
+
+	t.Run("opposite directions concurrently", func(t *testing.T) {
+		a, err := sftp.OpenFile(filepath.Join(dir, "a"), os.O_RDWR|os.O_CREATE)
+		require.NoError(t, err)
+		defer a.Close()
+		b, err := sftp.OpenFile(filepath.Join(dir, "b"), os.O_RDWR|os.O_CREATE)
+		require.NoError(t, err)
+		defer b.Close()
+		_, err = a.Write(data[:4096])
+		require.NoError(t, err)
+		_, err = b.Write(data[:4096])
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		for range 50 {
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				_ = a.WriteToLimited(b, 1)
+			}()
+			go func() {
+				defer wg.Done()
+				_ = b.WriteToLimited(a, 1)
+			}()
+		}
+
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("WriteToLimited deadlocked")
+		}
+	})
+}
+
+func TestClientWriteToLimitedUnsupported(t *testing.T) {
+	sftp, cmd := testClient(t, READWRITE, NODELAY)
+	defer cmd.Wait()
+	defer sftp.Close()
+
+	// This only checks the client side when a server does not advertise copy-data.
+	// It is skipped against any server that does, including the Go server if it adds support.
+	if _, ok := sftp.HasExtension("copy-data"); ok {
+		t.Skip("server supports copy-data")
+	}
+
+	dir, err := ioutil.TempDir("", "sftptest-writetolimited-unsupported")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	src, err := sftp.Create(filepath.Join(dir, "src"))
+	require.NoError(t, err)
+	defer src.Close()
+	dst, err := sftp.Create(filepath.Join(dir, "dst"))
+	require.NoError(t, err)
+	defer dst.Close()
+
+	err = src.WriteToLimited(dst, 1)
+	var statusErr *StatusError
+	require.ErrorAs(t, err, &statusErr)
+	assert.Equal(t, ErrSSHFxOpUnsupported, statusErr.FxCode())
+}
+
 func TestClientSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" && *testServerImpl {
 		// os.Symlink requires privilege escalation.
